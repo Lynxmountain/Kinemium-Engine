@@ -1,0 +1,675 @@
+--!strict
+--!optimize 2
+--!native
+
+local raylib = require("./external/raylib")
+--local raygui = require("@raygui")
+
+local signal = require("@kinetica.signal")
+local mb = require("./renderer/mesh")
+local texture = require("./renderer/texture")
+local Vector2 = require("@Vector2")
+local mainSignal = signal.new()
+local activeShader = "kinetica"
+
+local CFrame = require("@CFrame")
+local Instance = require("@Instance")
+local Vector3 = require("@Vector3")
+local camera_addon = require("@Camera")
+
+local kinetica_camera = Instance.new("CurrentCamera")
+camera_addon.callback(kinetica_camera)
+kinetica_camera.Name = "CurrentCamera"
+
+local loadedMaterials = {}
+local meshlib = {}
+local fontRegistry = {}
+local rendering_3d_hooks = {}
+local global_registry = {}
+
+local lib = raylib.lib
+local const = raylib.const
+local structs = raylib.structs
+local task = zune.task
+local ffi = zune.ffi
+
+local sky_cubemap = "./src/assets/sky/default/cubemap.png"
+
+local Material = ffi.struct({
+	{ shader = structs.Shader },
+	{ maps = ffi.types.pointer },
+	{ params = ffi.types.float:array(4) },
+})
+
+local screenWidth = lib.GetMonitorWidth(0)
+local screenHeight = lib.GetMonitorHeight(0)
+
+local txtureMethods = texture(lib)
+local materialList = txtureMethods.GetMaterials()
+
+local MOVE_SPEED = 10.0
+local MOUSE_SENSITIVITY = 0.003
+
+local cameraPos = vector.create(0.0, 5.0, 10.0)
+local yaw = 0.0
+local pitch = 0.0
+
+local activeShaders = {}
+local shaderUniforms = {}
+local lighting = nil
+
+local function float_ptr(value: number): FFIPointer
+	local ptr = ffi.create(ffi.types.float)
+	ptr:writef32(0, value)
+	return ptr
+end
+
+local function vec3_ptr(x: number, y: number, z: number): FFIPointer
+	local ptr = ffi.create(ffi.types.float:array(3))
+	ptr:writef32(0, x)
+	ptr:writef32(4, y)
+	ptr:writef32(8, z)
+	return ptr
+end
+
+local function Vector3RotateByAxisAngle(v: raylib.Vector3, axis: raylib.Vector3, angle: number): raylib.Vector3
+	local length = vector.magnitude(axis)
+	if length == 0.0 then
+		length = 1.0
+	end
+	local ilength = 1.0 / length
+	axis *= vector.create(ilength, ilength, ilength)
+
+	angle /= 2.0
+	local a = math.sin(angle)
+	local w = vector.create(axis.x * a, axis.y * a, axis.z * a)
+	a = math.cos(angle)
+
+	local wv = vector.create(w.y * v.z - w.z * v.y, w.z * v.x - w.x * v.z, w.x * v.y - w.y * v.x)
+	local wwv = vector.create(w.y * wv.z - w.z * wv.y, w.z * wv.x - w.x * wv.z, w.x * wv.y - w.y * wv.x)
+
+	a *= 2.0
+	wv *= a
+	wwv *= 2.0
+
+	return v + wv + wwv
+end
+
+local function loadMaterialOnModel(model, texture, const)
+	local materials = zune.ffi.ptrFromAddress(zune.mem.slice(model, structs.Model:offset("materials"), 8))
+
+	-- Set texture
+	local maps = materials:readptr(structs.Material:offset("maps"))
+	maps:write(const or 0, texture, 0, structs.Texture:size())
+
+	-- Force assign the shader to the material
+	if activeShaders[activeShader] then
+		-- Write the shader struct data directly
+		materials:write(structs.Material:offset("shader"), activeShaders[activeShader], 0, structs.Shader:size())
+	end
+end
+
+local function UpdateFreecam(camera: raylib.Camera3D, delta: number)
+	local mouseDelta = lib.GetMouseDelta()
+	yaw -= mouseDelta.x * MOUSE_SENSITIVITY
+	pitch += mouseDelta.y * MOUSE_SENSITIVITY
+
+	pitch = math.clamp(pitch, -math.pi / 2 + 0.01, math.pi / 2 - 0.01)
+
+	local forward = vector.create(math.sin(yaw) * math.cos(pitch), -math.sin(pitch), math.cos(yaw) * math.cos(pitch))
+	forward = vector.normalize(forward)
+
+	local up = vector.create(0.0, 1.0, 0.0)
+	local right = vector.cross(forward, up)
+	right = vector.normalize(right)
+
+	local moveSpeed = MOVE_SPEED * delta
+	local sideway = lib.IsKeyDown(const.KeyboardKey.KEY_D) - lib.IsKeyDown(const.KeyboardKey.KEY_A)
+	local forwardInput = lib.IsKeyDown(const.KeyboardKey.KEY_W) - lib.IsKeyDown(const.KeyboardKey.KEY_S)
+	local vertical = lib.IsKeyDown(const.KeyboardKey.KEY_SPACE) - lib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT)
+
+	cameraPos += forward * (forwardInput * moveSpeed)
+	cameraPos += right * (sideway * moveSpeed)
+	cameraPos += up * (vertical * moveSpeed)
+
+	local target = cameraPos + forward
+	zune.mem.writeVector3(camera, 0, cameraPos)
+	zune.mem.writeVector3(camera, 12, target)
+
+	local lookAt =
+		CFrame.lookAt(Vector3.new(cameraPos.x, cameraPos.y, cameraPos.z), Vector3.new(target.x, target.y, target.z))
+
+	kinetica_camera.CFrame = lookAt
+	kinetica_camera.Position = Vector3.new(cameraPos.x, cameraPos.y, cameraPos.z)
+	kinetica_camera.FieldOfView = 70
+end
+
+local partRegistry = {}
+local guiRegistry = {}
+
+lib.InitWindow(screenWidth, screenHeight, "Kinetica Engine")
+lib.SetTargetFPS(0)
+lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_MAXIMIZED)
+
+local engineIcon = lib.LoadImage("./src/assets/icon/icon.png")
+lib.SetWindowIcon(engineIcon)
+--lib.DisableCursor()
+
+meshlib = mb(lib)
+
+local material_index = 0
+for material_name, material_path in pairs(materialList) do
+	local texture = lib.LoadTexture(material_path)
+	local default = lib.LoadMaterialDefault()
+	lib.SetMaterialTexture(default, 0, texture)
+
+	loadedMaterials[material_name] = {
+		index = material_index,
+		material = default,
+		texture = texture,
+	}
+	material_index += 1
+	print(`Loaded custom material: {material_name}`)
+end
+
+local audioDevice = lib.InitAudioDevice()
+
+local preloadedMeshes = meshlib.PreloadStandardMeshes()
+
+local camera = structs.Camera3D:new({
+	position = cameraPos,
+	target = vector.create(0.0, 0.0, 0.0),
+	up = vector.create(0.0, 1.0, 0.0),
+	fovy = 70.0,
+	projection = const.CameraProjection.CAMERA_PERSPECTIVE,
+})
+
+local function cacheCommonLocations(shaderName)
+	local names = {
+		"time",
+		"lightPos",
+		"viewPos",
+		"lightColor",
+		"texture0",
+		"mvp",
+		"matModel",
+		"matNormal",
+		"colDiffuse",
+		"constant",
+		"linear",
+		"quadratic",
+		"globalAmbient",
+		"brightness",
+		"dirLightDir",
+		"dirLightColor",
+		"pointLightCount",
+	}
+	for _, n in ipairs(names) do
+		shaderUniforms[shaderName][n] = lib.GetShaderLocation(activeShaders[shaderName], n)
+		print(`Shader uniform "{n}" location: {shaderUniforms[shaderName][n]}`) -- DEBUG
+	end
+end
+
+local function Color3ToRaylib(c, transparency)
+	local r, g, b = c:ToRGB()
+	return structs.Color:new({
+		r = r,
+		g = g,
+		b = b,
+		a = math.floor(255 * (1 - transparency)),
+	})
+end
+
+local function LoadShader(shaderName: string, vertexPath: string?, fragmentPath: string?)
+	local vertexCode = vertexPath and zune.fs.readFile(vertexPath) or ffi.null
+	local fragmentCode = fragmentPath and zune.fs.readFile(fragmentPath) or ffi.null
+
+	local shader = lib.LoadShaderFromMemory(vertexCode, fragmentCode)
+	activeShaders[shaderName] = shader
+	shaderUniforms[shaderName] = {}
+
+	if lib.IsShaderValid(shader) == 0 then
+		print(`Loaded shader {shaderName} is INVALID`)
+	end
+
+	cacheCommonLocations(shaderName)
+
+	print(`Loaded shader: {shaderName}`)
+	return shader
+end
+
+local function LoadShaderCode(shaderName: string, vertex: string?, fragment: string?)
+	local vertexCode = vertex or ffi.null
+	local fragmentCode = fragment or ffi.null
+
+	local shader = lib.LoadShaderFromMemory(vertexCode, fragmentCode)
+	activeShaders[shaderName] = shader
+	shaderUniforms[shaderName] = {}
+
+	if lib.IsShaderValid(shader) == 0 then
+		print(`Loaded shader {shaderName} is INVALID`)
+	end
+
+	cacheCommonLocations(shaderName)
+
+	print(`Loaded shader: {shaderName}`)
+	return shader
+end
+
+local function GetShaderUniformLocation(shaderName: string, uniformName: string): number
+	local shader = activeShaders[shaderName]
+	if not shader then
+		return -1
+	end
+
+	local location = lib.GetShaderLocation(shader, uniformName)
+	shaderUniforms[shaderName][uniformName] = location
+	return location
+end
+
+local function SetShaderUniform(shaderName: string, uniformName: string, value: any, uniformType: number)
+	local shader = activeShaders[shaderName]
+	if not shader then
+		return
+	end
+
+	local location = shaderUniforms[shaderName][uniformName] or GetShaderUniformLocation(shaderName, uniformName)
+
+	--[[
+	if location == -1 then
+		return
+	end
+	--]]
+
+	local valuePtr
+	if type(value) == "number" then
+		valuePtr = float_ptr(value)
+	elseif type(value) == "table" and #value == 3 then
+		valuePtr = vec3_ptr(value[1], value[2], value[3])
+	else
+		valuePtr = value
+	end
+
+	lib.SetShaderValue(shader, location, valuePtr, uniformType)
+end
+
+local function UnloadShader(shaderName: string)
+	local shader = activeShaders[shaderName]
+	if shader then
+		lib.UnloadShader(shader)
+		activeShaders[shaderName] = nil
+		shaderUniforms[shaderName] = nil
+		print(`Unloaded shader: {shaderName}`)
+	end
+end
+
+local function EulerToAxisAngleRad(euler: Vector3): (Vector3, number)
+	local cx, sx = math.cos(euler.X / 2), math.sin(euler.X / 2)
+	local cy, sy = math.cos(euler.Y / 2), math.sin(euler.Y / 2)
+	local cz, sz = math.cos(euler.Z / 2), math.sin(euler.Z / 2)
+
+	-- Quaternion multiplication: q = qz * qy * qx
+	local qw = cz * cy * cx + sz * sy * sx
+	local qx = cz * cy * sx - sz * sy * cx
+	local qy = cz * sy * cx + sz * cy * sx
+	local qz = sz * cy * cx - cz * sy * sx
+
+	local angle = 2 * math.acos(math.clamp(qw, -1, 1))
+	local s = math.sqrt(1 - qw * qw)
+	if s < 0.0001 then
+		-- If s is near zero, axis direction is arbitrary
+		return vector.create(1, 0, 0), 0
+	else
+		return vector.create(qx / s, qy / s, qz / s), angle
+	end
+end
+
+local function drawModel(model, part)
+	local axis, angle = EulerToAxisAngleRad(part.Orientation or part.Rotation)
+
+	-- Apply material texture
+	if loadedMaterials[part.Material.Value] then
+		local data = loadedMaterials[part.Material.Value]
+		loadMaterialOnModel(model, data.texture)
+	end
+
+	lib.DrawModelEx(
+		model,
+		vector.create(part.Position.X, part.Position.Y, part.Position.Z),
+		axis,
+		angle,
+		vector.create(part.Size.X, part.Size.Y, part.Size.Z),
+		Color3ToRaylib(part.Color, part.Transparency)
+	)
+end
+
+local function drawPart(part)
+	if part.ClassName == "MeshPart" then
+		local model = meshlib.GetModelRegistry()[part.MeshId]
+		if model then
+			drawModel(model, part)
+		end
+	else
+		drawModel(preloadedMeshes[part.Shape.Value], part)
+	end
+
+	mainSignal:Fire("Rendered", part)
+end
+
+local function run()
+	local time = 0.0
+
+	while lib.WindowShouldClose() == 0 do
+		local activeLights = {}
+		local delta = lib.GetFrameTime()
+
+		--local skybox = meshlib.GetModelRegistry().block
+		--local skybox_image = lib.LoadImage(sky_cubemap)
+		--local skyCubemap = lib.LoadTextureCubemap(skybox_image, const.CubemapLayout.CUBEMAP_LAYOUT_AUTO_DETECT)
+
+		mainSignal:Fire("RenderStepped", delta)
+		mainSignal:Fire("MouseData", {
+			position = Vector2.new(lib.GetMouseX(), lib.GetMouseY()),
+			delta = lib.GetMouseDelta(),
+			mouse_wheel_move = lib.GetMouseWheelMove(),
+			mouse_wheel_delta = lib.GetMouseWheelMoveV(),
+			Button1Down = lib.IsMouseButtonDown(0) == 1,
+			Button1Pressed = lib.IsMouseButtonPressed(0) == 1,
+			Button1Released = lib.IsMouseButtonReleased(0) == 1,
+			Button2Down = lib.IsMouseButtonDown(1) == 1,
+			Button2Pressed = lib.IsMouseButtonPressed(1) == 1,
+			Button2Released = lib.IsMouseButtonReleased(1) == 1,
+			Button3Down = lib.IsMouseButtonDown(2) == 1,
+			Button3Pressed = lib.IsMouseButtonPressed(2) == 1,
+			Button3Released = lib.IsMouseButtonReleased(2) == 1,
+
+			-- cursor states
+			is_cursor_hidden = lib.IsCursorHidden(),
+			is_cursor_inbounds = lib.IsCursorOnScreen(),
+		})
+
+		time += delta
+
+		UpdateFreecam(camera, delta)
+
+		for name, keycode in pairs(const.KeyboardKey) do
+			if lib.IsKeyPressed(keycode) == 1 then
+				mainSignal:Fire("Pressed", keycode)
+			end
+			if lib.IsKeyDown(keycode) == 1 then
+				mainSignal:Fire("IsKeyDown", keycode)
+			end
+			if lib.IsKeyReleased(keycode) == 1 then
+				mainSignal:Fire("IsKeyReleased", keycode)
+			end
+			if lib.IsKeyUp(keycode) == 1 then
+				mainSignal:Fire("IsKeyUp", keycode)
+			end
+
+			local mouseDelta = lib.GetMouseDelta()
+			if mouseDelta.x ~= 0 or mouseDelta.y ~= 0 then
+				mainSignal:Fire("MouseMoved", mouseDelta)
+			end
+
+			local wheel = lib.GetMouseWheelMove()
+			if wheel ~= 0 then
+				mainSignal:Fire("MouseWheel", wheel)
+			end
+		end
+
+		lib.BeginDrawing()
+		lib.ClearBackground(const.SKYBLUE)
+
+		lib.BeginMode3D(camera)
+
+		--print(skyCubemap)
+		--loadMaterialOnModel(skybox, skyCubemap, const.MaterialMapIndex.MATERIAL_MAP_CUBEMAP)
+
+		for _, part in pairs(partRegistry) do
+			local partData = part()
+			if partData.BaseClass == "kinetica.light" then
+				table.insert(activeLights, {
+					pos = { partData.Position.X, partData.Position.Y, partData.Position.Z },
+					intensity = partData.Range,
+					color = { partData.Color.R / 255, partData.Color.G / 255, partData.Color.B / 255 },
+				})
+			end
+		end
+
+		if activeShaders[activeShader] then
+			lib.BeginShaderMode(activeShaders[activeShader])
+
+			if lighting then
+				if shaderUniforms[activeShader]["globalAmbient"] then
+					local ambient = lighting.Ambient
+					SetShaderUniform(
+						activeShader,
+						"globalAmbient",
+						{ ambient.R / 255, ambient.G / 255, ambient.B / 255 },
+						const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+					)
+				end
+				if shaderUniforms[activeShader]["brightness"] then
+					SetShaderUniform(
+						activeShader,
+						"brightness",
+						lighting.Brightness,
+						const.ShaderUniformDataType.SHADER_UNIFORM_INT
+					)
+				end
+				if shaderUniforms[activeShader]["dirLightDir"] then
+					local sunDir = lighting:GetSunDirection()
+					SetShaderUniform(
+						activeShader,
+						"dirLightDir",
+						{ -sunDir.X, -sunDir.Y, -sunDir.Z },
+						const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+					)
+				end
+				if shaderUniforms[activeShader]["dirLightColor"] then
+					SetShaderUniform(
+						activeShader,
+						"dirLightColor",
+						{ 1.0, 0.95, 0.8 },
+						const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+					)
+				end
+			end
+			if shaderUniforms[activeShader]["time"] then
+				SetShaderUniform(activeShader, "time", time, const.ShaderUniformDataType.SHADER_UNIFORM_INT)
+			end
+			if shaderUniforms[activeShader]["viewPos"] then
+				SetShaderUniform(
+					activeShader,
+					"viewPos",
+					{ cameraPos.x, cameraPos.y, cameraPos.z },
+					const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+				)
+			end
+			if shaderUniforms[activeShader]["lightColor"] then
+				SetShaderUniform(
+					activeShader,
+					"lightColor",
+					{ 1, 1, 1 },
+					const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+				)
+			end
+			if shaderUniforms[activeShader]["constant"] then
+				SetShaderUniform(activeShader, "constant", 1.0, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+			end
+			if shaderUniforms[activeShader]["linear"] then
+				SetShaderUniform(activeShader, "linear", 0.09, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+			end
+			if shaderUniforms[activeShader]["quadratic"] then
+				SetShaderUniform(activeShader, "quadratic", 0.032, const.ShaderUniformDataType.SHADER_UNIFORM_FLOAT)
+			end
+
+			if shaderUniforms[activeShader]["pointLightCount"] then
+				SetShaderUniform(
+					activeShader,
+					"pointLightCount",
+					#activeLights,
+					const.ShaderUniformDataType.SHADER_UNIFORM_INT
+				)
+			end
+
+			for i, light in ipairs(activeLights) do
+				SetShaderUniform(
+					activeShader,
+					("pointLights[%d].position"):format(i - 1),
+					light.pos,
+					const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+				)
+				SetShaderUniform(
+					activeShader,
+					("pointLights[%d].color"):format(i - 1),
+					light.color,
+					const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+				)
+				SetShaderUniform(
+					activeShader,
+					("pointLights[%d].intensity"):format(i - 1),
+					light.intensity,
+					const.ShaderUniformDataType.SHADER_UNIFORM_INT
+				)
+			end
+		end
+
+		for _, v in pairs(rendering_3d_hooks) do
+			v({
+				lib = lib,
+				drawModel = drawModel,
+				drawPart = drawPart,
+				loadMaterialOnModel = loadMaterialOnModel,
+				LoadShader = LoadShader,
+				structs = structs,
+				const = const,
+				time = time,
+				GetFont = function(name)
+					if fontRegistry[name] then
+						return fontRegistry[name]
+					end
+				end,
+			})
+		end
+
+		for _, part in pairs(partRegistry) do
+			local partData = part()
+			if partData.BaseClass ~= "kinetica.light" then
+				drawPart(partData)
+			end
+		end
+
+		if activeShaders[activeShader] then
+			lib.EndShaderMode()
+		end
+		lib.EndMode3D()
+
+		for _, gui in pairs(guiRegistry) do
+			-- {render = function(), object = function()}
+			gui.render(lib, gui.object(), time, structs, {
+				GetFont = function(name)
+					if fontRegistry[name] then
+						return fontRegistry[name]
+					end
+				end,
+
+				gbSet = function(property, value)
+					global_registry[property] = value
+				end,
+
+				gbGet = function(property)
+					return global_registry[property]
+				end,
+			})
+		end
+
+		table.clear(activeLights)
+
+		lib.DrawFPS(10, 10)
+
+		lib.EndDrawing()
+		mainSignal:Fire("Heartbeat", delta)
+
+		task.wait(0)
+	end
+
+	for shaderName, _ in pairs(activeShaders) do
+		UnloadShader(shaderName)
+	end
+end
+
+return {
+	Signal = mainSignal,
+	AddToRegistry = function(data)
+		table.insert(partRegistry, data)
+		mainSignal:Fire("AddedPartToRenderPool", data())
+	end,
+	AddToGuiRenderingPool = function(object, renderFn)
+		print(`RENDER | Rendering gui base {object().ClassName}`)
+		table.insert(guiRegistry, {
+			render = renderFn,
+			object = object,
+		})
+		mainSignal:Fire("AddedGuiToRenderPool", object())
+	end,
+	Run = run,
+	lib = lib,
+	camera = camera,
+	const = const,
+	structs = structs,
+
+	-- camera Instance
+	kinetica_camera = kinetica_camera,
+
+	-- Shader API
+	LoadShader = LoadShader,
+	UnloadShader = UnloadShader,
+	SetShaderUniform = SetShaderUniform,
+	GetShaderUniformLocation = GetShaderUniformLocation,
+	GetActiveShaders = function()
+		return activeShaders
+	end,
+	LoadShaderCode = LoadShaderCode,
+
+	-- Mesh API
+	mesh = meshlib,
+
+	-- 3DHook
+	Add3DHook = function(v)
+		table.insert(rendering_3d_hooks, v)
+	end,
+
+	-- Font
+	LoadFont = function(name, fontPath)
+		local buf = lib.LoadFontEx(fontPath, 128, nil, 255)
+		fontRegistry[name] = buf
+		return buf
+	end,
+
+	GetFont = function(name)
+		if fontRegistry[name] then
+			return fontRegistry[name]
+		end
+	end,
+
+	UnloadFont = function(name)
+		if fontRegistry[name] then
+			lib.UnloadFont(fontRegistry[name])
+		end
+	end,
+
+	-- Global Registry
+	gbSet = function(property, value)
+		global_registry[property] = value
+	end,
+
+	gbGet = function(property)
+		return global_registry[property]
+	end,
+
+	-- Lighting
+	SetLightingService = function(service)
+		lighting = service
+	end,
+}
