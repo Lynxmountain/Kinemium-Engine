@@ -13,7 +13,6 @@ local Kinemium = {}
 local luacss = "./src/rblx/luacss/init.luau"
 
 local renderer = require("@Kinemium.3d")
-
 Kinemium_env = Kinemium_env(renderer)
 
 --local raygui = require("@raygui")
@@ -54,6 +53,9 @@ end)
 --]]
 
 local function execute(path, entry)
+	if threads[path] then
+		return
+	end -- Prevent double execution
 	local code = filesystem.read(path)
 	local thread = task.spawn(function()
 		sandboxer.run(code, entry.name)

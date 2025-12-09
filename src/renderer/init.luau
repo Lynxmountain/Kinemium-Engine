@@ -50,6 +50,9 @@ local materialList = txtureMethods.GetMaterials()
 
 local MOVE_SPEED = 10.0
 local MOUSE_SENSITIVITY = 0.003
+local FOV = 70
+
+Kinemium_camera.FieldOfView = FOV
 
 local cameraPos = vector.create(0.0, 5.0, 10.0)
 local yaw = 0.0
@@ -115,11 +118,22 @@ local function loadMaterialOnModel(model, texture, const)
 end
 
 local function UpdateFreecam(camera: raylib.Camera3D, delta: number)
-	local mouseDelta = lib.GetMouseDelta()
-	yaw -= mouseDelta.x * MOUSE_SENSITIVITY
-	pitch += mouseDelta.y * MOUSE_SENSITIVITY
+	-- Only update camera rotation when right mouse button is held
+	if lib.IsMouseButtonPressed(const.MouseButton.MOUSE_BUTTON_RIGHT) == 1 then
+		lib.DisableCursor()
+	end
 
-	pitch = math.clamp(pitch, -math.pi / 2 + 0.01, math.pi / 2 - 0.01)
+	if lib.IsMouseButtonReleased(const.MouseButton.MOUSE_BUTTON_RIGHT) == 1 then
+		lib.EnableCursor()
+	end
+
+	if lib.IsMouseButtonDown(const.MouseButton.MOUSE_BUTTON_RIGHT) == 1 then
+		local mouseDelta = lib.GetMouseDelta()
+		yaw -= mouseDelta.x * MOUSE_SENSITIVITY
+		pitch += mouseDelta.y * MOUSE_SENSITIVITY
+
+		pitch = math.clamp(pitch, -math.pi / 2 + 0.01, math.pi / 2 - 0.01)
+	end
 
 	local forward = vector.create(math.sin(yaw) * math.cos(pitch), -math.sin(pitch), math.cos(yaw) * math.cos(pitch))
 	forward = vector.normalize(forward)
@@ -137,16 +151,21 @@ local function UpdateFreecam(camera: raylib.Camera3D, delta: number)
 	cameraPos += right * (sideway * moveSpeed)
 	cameraPos += up * (vertical * moveSpeed)
 
+	local wheelMove = lib.GetMouseWheelMove()
+	if wheelMove ~= 0 then
+		cameraPos += forward * (wheelMove * 5.0) -- 5 units per scroll step
+	end
+
 	local target = cameraPos + forward
 	zune.mem.writeVector3(camera, 0, cameraPos)
 	zune.mem.writeVector3(camera, 12, target)
+	buffer.writef32(camera, structs.Camera3D:offset("fovy"), Kinemium_camera.FieldOfView)
 
 	local lookAt =
 		CFrame.lookAt(Vector3.new(cameraPos.x, cameraPos.y, cameraPos.z), Vector3.new(target.x, target.y, target.z))
 
 	Kinemium_camera.CFrame = lookAt
 	Kinemium_camera.Position = Vector3.new(cameraPos.x, cameraPos.y, cameraPos.z)
-	Kinemium_camera.FieldOfView = 70
 end
 
 local partRegistry = {}
@@ -566,7 +585,7 @@ return {
 
 	-- Font
 	LoadFont = function(name, fontPath)
-		local buf = lib.LoadFontEx(fontPath, 128, nil, 255)
+		local buf = lib.LoadFontEx(fontPath, 35, nil, 0)
 		fontRegistry[name] = buf
 		return buf
 	end,

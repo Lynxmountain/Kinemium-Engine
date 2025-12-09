@@ -1,3 +1,4 @@
+local Players = game:GetService("Players")
 --[[
 local RunService = game:GetService("RunService")
 local model = Instance.new("Model")
@@ -44,3 +45,21 @@ RunService.RenderStepped:Connect(function(delta: number)
 	)
 end)
 --]]
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "IconTest"
+screenGui.Parent = Players.LocalPlayer.PlayerGui
+
+local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
+
+--[[
+local ImageLabel = Instance.new("ImageLabel")
+ImageLabel.Size = UDim2.new(1, 0, 1, 0)
+ImageLabel.Image = KinemiumIconLoader.Get("Workspace.png") -- returns the workspace icon's path
+-- yes you can set imagelabel's image to paths
+ImageLabel.Parent = screenGui
+--]]
+
+local TextBox = Instance.new("TextBox")
+TextBox.AnchorPoint = Vector2.new(0.5, 0.5)
+TextBox.Position = UDim2.new(0.5, 0, 0.5, 0)
+TextBox.Parent = screenGui

@@ -26,45 +26,48 @@ return function(renderer)
 	data.game = mainDatamodel
 	data.workspace = mainDatamodel:GetService("Workspace")
 	data.shared = shared
+	data._VERSION = "Kilang 1.0.1"
 	data.wait = zune.task.wait
-	data.Kinemium = {
+	data.kinemium = {
 		version = 1.0,
 		window = require("@Kinemium.window")(renderer.lib),
+		import = function(Instance)
+			local sandboxer = require("@sandboxer")
+
+			if type(Instance) == "table" then
+				if Instance.ClassName == "ModuleScript" then
+					local source = Instance.Source
+					local returned = sandboxer.run(source, Instance.Name, data)
+					if returned then
+						return returned
+					end
+				end
+			elseif type(Instance) == "string" then
+				error("Cannot require string")
+				return
+			else
+				error("krequire: cannot require this table; expected ModuleScript")
+			end
+		end,
+		kinetype = function(v)
+			if type(v) == "table" then
+				if v.type then
+					return v.type
+				else
+					return "table"
+				end
+			else
+				return type(v)
+			end
+		end,
 		--jolt = require("@Kinemium.jolt"),
 	}
-	data.krequire = function(Instance)
-		local sandboxer = require("@sandboxer")
 
-		if type(Instance) == "table" then
-			if Instance.ClassName == "ModuleScript" then
-				local source = Instance.Source
-				local returned = sandboxer.run(source, Instance.Name, data)
-				if returned then
-					return returned
-				end
-			end
-		elseif type(Instance) == "string" then
-			error("Cannot require string")
-			return
-		else
-			error("krequire: cannot require this table; expected ModuleScript")
-		end
-	end
-	data.ktypeof = function(v)
-		if type(v) == "table" then
-			if v.type then
-				return v.type
-			else
-				return "table"
-			end
-		else
-			return type(v)
-		end
-	end
 	local players = mainDatamodel:GetService("Players")
 	players.LocalPlayer.PlayerGui = PlayerGui.InitRenderer(renderer, renderer.Signal)
 	players.LocalPlayer.Parent = players
 
 	renderer.SetLightingService(mainDatamodel:GetService("Lighting"))
+	renderer.Kinemium_camera.Parent = mainDatamodel:GetService("Workspace")
 	return data
 end

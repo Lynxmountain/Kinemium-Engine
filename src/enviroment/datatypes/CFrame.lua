@@ -138,6 +138,162 @@ function CFrame.lookAt(pos, target, up)
 	return cf
 end
 
+-- Get rotation components (XVector, YVector, ZVector)
+function CFrame:GetComponents()
+	return self.Position.X,
+		self.Position.Y,
+		self.Position.Z,
+		self.Rotation[1][1],
+		self.Rotation[1][2],
+		self.Rotation[1][3],
+		self.Rotation[2][1],
+		self.Rotation[2][2],
+		self.Rotation[2][3],
+		self.Rotation[3][1],
+		self.Rotation[3][2],
+		self.Rotation[3][3]
+end
+
+function CFrame:GetRightVector()
+	return Vector3.new(self.Rotation[1][1], self.Rotation[2][1], self.Rotation[3][1])
+end
+
+function CFrame:GetUpVector()
+	return Vector3.new(self.Rotation[1][2], self.Rotation[2][2], self.Rotation[3][2])
+end
+
+function CFrame:GetLookVector()
+	return Vector3.new(-self.Rotation[1][3], -self.Rotation[2][3], -self.Rotation[3][3])
+end
+
+function CFrame:PointToObjectSpace(point)
+	local rel = point - self.Position
+	return Vector3.new(
+		self.Rotation[1][1] * rel.X + self.Rotation[2][1] * rel.Y + self.Rotation[3][1] * rel.Z,
+		self.Rotation[1][2] * rel.X + self.Rotation[2][2] * rel.Y + self.Rotation[3][2] * rel.Z,
+		self.Rotation[1][3] * rel.X + self.Rotation[2][3] * rel.Y + self.Rotation[3][3] * rel.Z
+	)
+end
+
+function CFrame:ToObjectSpace(cf)
+	return self:Inverse() * cf
+end
+
+function CFrame:VectorToWorldSpace(vec)
+	return Vector3.new(
+		self.Rotation[1][1] * vec.X + self.Rotation[1][2] * vec.Y + self.Rotation[1][3] * vec.Z,
+		self.Rotation[2][1] * vec.X + self.Rotation[2][2] * vec.Y + self.Rotation[2][3] * vec.Z,
+		self.Rotation[3][1] * vec.X + self.Rotation[3][2] * vec.Y + self.Rotation[3][3] * vec.Z
+	)
+end
+
+function CFrame:VectorToObjectSpace(vec)
+	return Vector3.new(
+		self.Rotation[1][1] * vec.X + self.Rotation[2][1] * vec.Y + self.Rotation[3][1] * vec.Z,
+		self.Rotation[1][2] * vec.X + self.Rotation[2][2] * vec.Y + self.Rotation[3][2] * vec.Z,
+		self.Rotation[1][3] * vec.X + self.Rotation[2][3] * vec.Y + self.Rotation[3][3] * vec.Z
+	)
+end
+
+function CFrame.fromEulerAnglesXYZ(x, y, z)
+	return CFrame.Angles(x, y, z)
+end
+
+function CFrame.fromEulerAnglesYXZ(y, x, z)
+	local cx, sx = math.cos(x), math.sin(x)
+	local cy, sy = math.cos(y), math.sin(y)
+	local cz, sz = math.cos(z), math.sin(z)
+
+	local rot = {
+		{ cy * cz + sy * sx * sz, -cy * sz + sy * sx * cz, sy * cx },
+		{ cx * sz, cx * cz, -sx },
+		{ -sy * cz + cy * sx * sz, sy * sz + cy * sx * cz, cy * cx },
+	}
+
+	local cf = CFrame.new(Vector3.new(0, 0, 0))
+	cf.Rotation = rot
+	return cf
+end
+
+function CFrame.fromAxisAngle(axis, angle)
+	local c, s = math.cos(angle), math.sin(angle)
+	local t = 1 - c
+	local x, y, z = axis.X, axis.Y, axis.Z
+	local mag = math.sqrt(x * x + y * y + z * z)
+	x, y, z = x / mag, y / mag, z / mag
+
+	local rot = {
+		{ t * x * x + c, t * x * y - s * z, t * x * z + s * y },
+		{ t * x * y + s * z, t * y * y + c, t * y * z - s * x },
+		{ t * x * z - s * y, t * y * z + s * x, t * z * z + c },
+	}
+
+	local cf = CFrame.new(Vector3.new(0, 0, 0))
+	cf.Rotation = rot
+	return cf
+end
+
+function CFrame.__add(a, b)
+	if type(b) == "table" and b.X then -- Vector3
+		return CFrame.new(a.Position + b)
+	end
+	error("Cannot add CFrame with " .. type(b))
+end
+
+function CFrame.__sub(a, b)
+	if type(b) == "table" and b.X then -- Vector3
+		return CFrame.new(a.Position - b)
+	end
+	error("Cannot subtract " .. type(b) .. " from CFrame")
+end
+
+function CFrame.__eq(a, b)
+	if a.Position ~= b.Position then
+		return false
+	end
+	for i = 1, 3 do
+		for j = 1, 3 do
+			if math.abs(a.Rotation[i][j] - b.Rotation[i][j]) > 1e-6 then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+function CFrame.fromMatrix(pos, x, y, z)
+	local cf = CFrame.new(pos)
+	cf.Rotation = {
+		{ x.X, y.X, z.X },
+		{ x.Y, y.Y, z.Y },
+		{ x.Z, y.Z, z.Z },
+	}
+	return cf
+end
+
+function CFrame:ToEulerAnglesXYZ()
+	local r = self.Rotation
+	local x, y, z
+
+	if r[3][1] < 1 then
+		if r[3][1] > -1 then
+			y = math.asin(r[3][1])
+			x = math.atan2(-r[3][2], r[3][3])
+			z = math.atan2(-r[2][1], r[1][1])
+		else
+			y = -math.pi / 2
+			x = -math.atan2(r[2][3], r[2][2])
+			z = 0
+		end
+	else
+		y = math.pi / 2
+		x = math.atan2(r[2][3], r[2][2])
+		z = 0
+	end
+
+	return x, y, z
+end
+
 function CFrame.Angles(x, y, z)
 	local cx, sx = math.cos(x), math.sin(x)
 	local cy, sy = math.cos(y), math.sin(y)

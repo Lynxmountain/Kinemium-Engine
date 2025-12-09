@@ -179,6 +179,7 @@ local function createLights()
 	moonLight.Parent = workspace
 end
 
+--[[
 print("Building island scene...")
 createWater()
 createTerrain()
@@ -190,3 +191,4 @@ createDock()
 createLights()
 
 print("Island scene complete! Move around to test the shader lighting.")
+--]]
