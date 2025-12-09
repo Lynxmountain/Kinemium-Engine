@@ -73,15 +73,14 @@ UserInputService.InitRenderer = function(renderer, renderer_signal)
 		if route == "IsKeyDown" then
 			key = findSuitable(data)
 			if key then
-				InputBegan:FireOncePerPress(
-					"Key:" .. tostring(key.Value),
-					true, -- pressed
-					{
-						KeyCode = key,
-						UserInputType = Enum.UserInputType.Keyboard,
-						UserInputState = Enum.UserInputState.Begin,
-					}
-				)
+				if active_keys[key] == true then
+					return
+				end
+				InputBegan:Fire({
+					KeyCode = key,
+					UserInputType = Enum.UserInputType.Keyboard,
+					UserInputState = Enum.UserInputState.Begin,
+				})
 				active_keys[key] = true
 			end
 		elseif route == "IsKeyReleased" then

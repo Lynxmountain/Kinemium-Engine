@@ -325,7 +325,7 @@ enumTable.TextTruncate = {
 	Line = 3,
 }
 
-enumTable.KinemiumGameDimension = {
+enumTable.Dimension = {
 	["2D"] = 1,
 	["3D"] = 2,
 }

@@ -1,6 +1,14 @@
 local CustomPhysicalProperties = {}
 CustomPhysicalProperties.__index = CustomPhysicalProperties
 
+export type CustomPhysicalProperties = {
+	density: number?,
+	friction: number?,
+	elasticity: number?,
+	frictionWeight: number?,
+	elasticityWeight: number?,
+}
+
 function CustomPhysicalProperties.new(
 	density: number?,
 	friction: number?,

@@ -51,10 +51,6 @@ function sandboxer.rblxrequire(path: string, callbackScript)
 				path,
 				merge(sandboxer.enviroment, {
 					script = object,
-					kinemium = {
-						import = sandboxer.enviroment.krequire,
-						typeof = sandboxer.enviroment.ktypeof,
-					},
 				})
 			)
 		end

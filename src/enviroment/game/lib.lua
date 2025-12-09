@@ -1,4 +1,5 @@
 local Instance = require("@Instance")
+local Enum = require("@EnumMap")
 
 local DataModel = {}
 DataModel.__index = DataModel
@@ -8,8 +9,9 @@ local fs = zune.fs
 function DataModel.new(RENDERER, ...)
 	local self = setmetatable({}, DataModel)
 
-	self.Root = Instance.new("DataModel")
-	self.Root.Name = "game"
+	self = Instance.new("DataModel")
+	self.Name = "game"
+	self.Dimension = Enum.Dimension["3D"]
 
 	self.Services = {}
 
@@ -26,7 +28,7 @@ function DataModel.new(RENDERER, ...)
 
 	for name, service in pairs(self.Services) do
 		service.Name = name
-		service.Parent = self.Root
+		service.Parent = self
 	end
 
 	function self:GetService(v)
