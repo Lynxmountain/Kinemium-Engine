@@ -172,6 +172,9 @@ local partRegistry = {}
 local guiRegistry = {}
 
 lib.InitWindow(screenWidth, screenHeight, "Kinemium Engine")
+lib.SetWindowState(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
+lib.SetWindowState(const.ConfigFlags.FLAG_MSAA_4X_HINT)
+
 lib.SetTargetFPS(0)
 --lib.GuiLoadStyle("./src/themes/Kinemium2.rgs")
 
@@ -585,7 +588,7 @@ return {
 
 	-- Font
 	LoadFont = function(name, fontPath)
-		local buf = lib.LoadFontEx(fontPath, 35, nil, 0)
+		local buf = lib.LoadFontEx(fontPath, 100, nil, 0)
 		fontRegistry[name] = buf
 		return buf
 	end,

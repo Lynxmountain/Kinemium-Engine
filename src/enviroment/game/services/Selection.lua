@@ -24,6 +24,18 @@ Selection.InitRenderer = function(renderer, renderer_signal)
 			end
 		end,
 
+		Clear = function()
+			table.clear(selected)
+		end,
+
+		IsSelected = function(object)
+			if table.find(selected, object) then
+				return true
+			else
+				return false
+			end
+		end,
+
 		Set = function(data)
 			selected = {} -- clear
 			for _, v in ipairs(data) do

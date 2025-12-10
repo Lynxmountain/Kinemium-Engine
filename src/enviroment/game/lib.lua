@@ -12,6 +12,7 @@ function DataModel.new(RENDERER, ...)
 	self = Instance.new("DataModel")
 	self.Name = "game"
 	self.Dimension = Enum.Dimension["3D"]
+	self.Context = Enum.GameContext.Editor
 
 	self.Services = {}
 
@@ -21,7 +22,7 @@ function DataModel.new(RENDERER, ...)
 		local returnedData = require("./services/" .. name)
 		self.Services[name] = returnedData
 		if returnedData.InitRenderer then
-			returnedData.InitRenderer(RENDERER, RENDERER.Signal, ...)
+			returnedData.InitRenderer(RENDERER, RENDERER.Signal, self)
 		end
 		print("Added service " .. name)
 	end

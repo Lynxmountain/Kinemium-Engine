@@ -24,6 +24,10 @@ function registry.createclass(data)
 	print("Created class for " .. data.class)
 end
 
+function registry.getClasses()
+	return listOfClasses
+end
+
 function registry.new(class, renderer)
 	local found
 

@@ -16,7 +16,9 @@ local engine_fonts = "./src/assets/fonts"
 local fontCount = 0
 
 KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
-	local default_font = "./src/assets/fonts/Vend.ttf"
+	local default_font = "./src/assets/fonts/Montserrat-Medium.ttf"
+	local font = renderer.LoadFont("DefaultEngineFont", default_font)
+
 	KinemiumFontService:SetProperties({
 		LoadFont = function(self, name, fontPath)
 			local fontInstance = {}
@@ -31,6 +33,10 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 			return fontInstance
 		end,
 
+		GetDefaultFont = function()
+			return font
+		end,
+
 		LoadAllEngineFonts = function()
 			for _, font in pairs(fs.entries(engine_fonts)) do
 				local path = engine_fonts .. "/" .. font.name
@@ -43,7 +49,6 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 		FontAdded = FontAdded,
 		FontRemoved = FontRemoved,
 	})
-	renderer.LoadFont("Vend", default_font)
 
 	print("Adding engine fonts.....")
 end

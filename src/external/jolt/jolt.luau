@@ -1,3 +1,4 @@
+--[[
 -- Generated with Zune Bindmaker (v2, devcell)
 local ffi = zune.ffi
 local fs = zune.fs
@@ -2694,3 +2695,5 @@ return {
 	structs = structs,
 	const = const,
 }
+	--]]
+return {}

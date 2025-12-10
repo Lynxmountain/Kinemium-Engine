@@ -6,11 +6,21 @@ local task = zune.task
 local instance_mt = {}
 
 function instance_mt.__index(self, key)
+	-- 1. properties
 	local props = rawget(self, "_props")
 	if props and props[key] ~= nil then
 		return props[key]
 	end
-	return Instance[key] -- fallback to class methods
+
+	-- 2. children by name (Roblox behavior)
+	for _, child in ipairs(self.Children) do
+		if child.Name == key then
+			return child
+		end
+	end
+
+	-- 3. class methods
+	return Instance[key]
 end
 
 function instance_mt.__newindex(self, key, value)

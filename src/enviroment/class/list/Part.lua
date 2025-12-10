@@ -4,12 +4,12 @@ local CFrame = require("@CFrame")
 local Enum = require("@EnumMap")
 
 local propTable = {
-	Position = Vector3.new(0, 0, 0),
+	Position = Vector3.new(0, 10, 0),
 	Size = Vector3.new(1, 1, 1),
 	Color = Color3.new(1, 1, 1),
 	Material = Enum.Material.debug,
 	Transparency = 0,
-	Anchored = false,
+	Anchored = true,
 	CanCollide = true,
 	Velocity = Vector3.new(0, 0, 0),
 	Mass = 1,

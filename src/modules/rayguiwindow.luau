@@ -123,10 +123,10 @@ return function(raylib, structs)
 			if result ~= 0 then
 				print(result)
 			end
-			raylib.BeginScissorMode(window.x, window.y, window.width, window.height)
+			--raylib.BeginScissorMode(window.x, window.y, window.width, window.height)
 
 			module.stepped(window)
-			raylib.EndScissorMode()
+			--raylib.EndScissorMode()
 
 			if window["stepped"] then
 				window.stepped()

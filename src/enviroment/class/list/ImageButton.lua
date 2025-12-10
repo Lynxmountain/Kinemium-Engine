@@ -10,6 +10,7 @@ local propTable = {
 	AutoButtonColor = true,
 	ChangeCursorOnHover = true,
 	Visible = true,
+	Name = "ImageButton",
 }
 
 ImageLabel.inherit(propTable)

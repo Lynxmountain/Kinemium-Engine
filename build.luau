@@ -13,9 +13,17 @@ local function build()
 		"src/modules/**/*.lua*",
 		"src/renderer/**/*.lua*",
 		"src/sandboxed/**/*.lua*",
+		"src/shaders/**/*.lua*",
+		"src/external/**/*.lua*",
+		"src/assets/**",
+		"src/rblx/**",
+		"src/template/**",
+
 		"src/external/signal.lua",
-		"--out=./game-binary",
+
+		"--out=./KinemiumRuntime.exe",
 	})
+	print("Building")
 
 	if not res.ok then
 		error(`\n- {res.stderr}`)

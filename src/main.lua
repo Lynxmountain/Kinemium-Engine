@@ -19,6 +19,42 @@ Kinemium_env = Kinemium_env(renderer)
 
 sandboxer.enviroment = Kinemium_env
 
+local function execute(path, entry, env)
+	if threads[path] then
+		return
+	end -- Prevent double execution
+	local code = filesystem.read(path)
+	local thread = task.spawn(function()
+		sandboxer.run(code, entry.name, env)
+	end)
+	threads[path] = thread
+end
+
+local function callback(entry, base, env)
+	local base = base or "src/sandboxed"
+	local path = base .. "/" .. entry.name
+
+	if entry.kind == "directory" then
+		filesystem.entryloop(path, function(e)
+			callback(e, path)
+		end)
+	else
+		execute(path, entry, env)
+	end
+end
+
+filesystem.entryloop("src/sandboxed/internals", function(e)
+	sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.Internals
+	callback(e, "src/sandboxed/internals")
+end)
+
+function Kinemium:playtest()
+	filesystem.entryloop("src/sandboxed", function(e)
+		sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.UserScript
+		callback(e, "src/sandboxed")
+	end)
+end
+
 --[[
 sandboxer.rblxrequire(luacss, function(code, path)
 	local scriptInstance = Instance.new("ModuleScript")
@@ -35,13 +71,11 @@ sandboxer.rblxrequire(luacss, function(code, path)
 				processDirectory(dirPath .. "/" .. entry.name, folder) -- recursive call
 			elseif entry.kind == "file" and entry.name:match("%.lu[au]$") then
 				local childModule = Instance.new("ModuleScript")
+				ModuleScript.callback(childModule)
+
 				childModule.Name = entry.name:gsub("%.lu[au]$", "")
 				childModule.Source = zune.fs.readFile(dirPath .. "/" .. entry.name)
 				childModule.Parent = parentInstance
-				if not scriptInstance[parentInstance.Name] then
-					scriptInstance[parentInstance.Name] = parentInstance
-				end
-				scriptInstance[parentInstance.Name][childModule.Name] = childModule
 			end
 		end
 	end
@@ -51,40 +85,6 @@ sandboxer.rblxrequire(luacss, function(code, path)
 	return scriptInstance
 end)
 --]]
-
-local function execute(path, entry)
-	if threads[path] then
-		return
-	end -- Prevent double execution
-	local code = filesystem.read(path)
-	local thread = task.spawn(function()
-		sandboxer.run(code, entry.name)
-	end)
-	threads[path] = thread
-end
-
-local function callback(entry, base)
-	local base = base or "src/sandboxed"
-	local path = base .. "/" .. entry.name
-
-	if entry.kind == "directory" then
-		filesystem.entryloop(path, function(e)
-			callback(e, path)
-		end)
-	else
-		execute(path, entry)
-	end
-end
-
-filesystem.entryloop("src/sandboxed/internals", function(e)
-	callback(e, "src/sandboxed/internals")
-end)
-
-function Kinemium:playtest()
-	filesystem.entryloop("src/sandboxed", function(e)
-		callback(e, "src/sandboxed")
-	end)
-end
 
 renderer.Kinemium_camera.Parent = sandboxer.enviroment.workspace
 

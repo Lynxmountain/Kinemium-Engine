@@ -2,12 +2,28 @@
 
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
+local KinemiumFontService = game:GetService("KinemiumFontService")
+
+local Selection = game:GetService("Selection")
+
+local Smooth = import("@RayguiLerp")
+local Raylib = import("@raylib")
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local renderer = KinemiumRaylib.renderer
-local rl = KinemiumRaylib.lib
+local rl: typeof(Raylib.lib) = KinemiumRaylib.lib
 local structs = KinemiumRaylib.structs
+local const = KinemiumRaylib.const
+local KinemiumExplorer = {}
+local vend = KinemiumFontService.GetDefaultFont()
+local classes = Instance.getClasses()
+
+print("This is explorer.")
+
+if game.Context ~= Enum.GameContext.Editor then
+	return
+end
 
 local serviceOrder = {
 	"Workspace",
@@ -24,6 +40,18 @@ local serviceOrder = {
 	"Teams",
 	"SoundService",
 }
+
+local instanceTypes = {}
+
+for class, _ in pairs(classes) do
+	table.insert(instanceTypes, class)
+end
+
+local addMenuOpen = {}
+local addMenuWidth = 150
+local addMenuItemHeight = 22
+
+local lastClicked = nil
 
 local function getServicesInOrder()
 	local services = {}
@@ -56,12 +84,11 @@ rl.GuiLoadStyle("./src/assets/studiothemes/style_dark.rgs")
 KinemiumIconLoader.new("Add", "./src/assets/images/icons/vanilla3/ui/16x/200/Add.png")
 
 local png = KinemiumIconLoader.Get("Add")
-print(png)
 local addIcon = KinemiumIconLoader.ToTexture(png)
 
 local windowRegistry = {}
 
-local window = require("@Kinemium.rayguiwindow")(rl, structs)
+local window = import("@Kinemium.rayguiwindow")(rl, structs)
 
 local function create_window(title, frame)
 	repeat
@@ -94,10 +121,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "Explorer"
 screenGui.Parent = LocalPlayer.PlayerGui
 
-local propback = create_window_back(screenGui, "Properties", Vector2.new(1, 1), UDim2.new(0, 400, 0.3, 0))
 local explorerback = create_window_back(screenGui, "Explorer", Vector2.new(1, 0), UDim2.new(0, 400, 0.7, 0))
-local outputback = create_window_back(screenGui, "Output", Vector2.new(0.5, 1), UDim2.new(1, 0, 0.08, 0))
-local toolbar = create_window_back(screenGui, "toolbar", Vector2.new(0.5, 0), UDim2.new(1, 0, 0.1, 0))
 
 local expanded = {}
 local yOffset = 0
@@ -126,13 +150,141 @@ local function isMouseInRect(rect, mousePos)
 		and mousePos.y <= rect.y + rect.height
 end
 
-local vend = renderer.GetFont("Vend")
+local function handleSelection(instance, rectData, mousePos)
+	if isMouseInRect(rectData, mousePos) then
+		if rl.IsMouseButtonPressed(0) == 1 then
+			local ctrl = rl.IsKeyDown(341) == 1 or rl.IsKeyDown(345) == 1
+			local shift = rl.IsKeyDown(340) == 1 or rl.IsKeyDown(344) == 1
+
+			if shift and lastClicked then
+				-- range select
+				local parent = instance.Parent
+				if parent then
+					local siblings = parent:GetChildren()
+
+					local startIndex, endIndex
+					for i, obj in ipairs(siblings) do
+						if obj == lastClicked then
+							startIndex = i
+						end
+						if obj == instance then
+							endIndex = i
+						end
+					end
+
+					if startIndex and endIndex then
+						if startIndex > endIndex then
+							startIndex, endIndex = endIndex, startIndex
+						end
+
+						for i = startIndex, endIndex do
+							if not Selection.IsSelected(siblings[i]) then
+								Selection.Add(siblings[i])
+							end
+						end
+					end
+				end
+			elseif ctrl then
+				-- ctrl
+				if not Selection.IsSelected(instance) then
+					Selection.Add(instance)
+				else
+					Selection.Remove(instance)
+				end
+			else
+				-- normal selection
+				Selection.Clear()
+
+				Selection.Add(instance)
+
+				lastClicked = instance
+			end
+		end
+	end
+end
+
+local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
+	local columns = 5
+	local itemW = addMenuItemHeight * 5
+	local itemH = addMenuItemHeight
+
+	if addMenuOpen[instance] then
+		local rows = math.ceil(#instanceTypes / columns)
+		local menuWidth = columns * itemW
+		local menuHeight = rows * itemH
+
+		local menuX = toggleX - menuWidth + 20
+		local menuY = btnY + 25 + 4
+
+		rl.DrawRectangleRounded(
+			structs.Rectangle:new({
+				x = menuX - (menuWidth - itemW),
+				y = menuY,
+				width = menuWidth,
+				height = menuHeight,
+			}),
+			0.2,
+			6,
+			Color3ToRaylib(Color3.new(0.12, 0.12, 0.12), 0)
+		)
+
+		for i, class in ipairs(instanceTypes) do
+			local col = (i - 1) % columns
+			local row = math.floor((i - 1) / columns)
+
+			local itemX = menuX - (col * itemW)
+			local itemY = menuY + row * itemH
+			local itemRect = { x = itemX, y = itemY, width = itemW, height = itemH }
+
+			if not loadedIcon[class] then
+				local png = KinemiumIconLoader.Get(class .. ".png")
+				if png then
+					loadedIcon[class] = KinemiumIconLoader.ToTexture(png)
+				end
+			end
+
+			local iconTex = loadedIcon[class]
+			if iconTex then
+				local iconSize = itemH - 6
+				rl.DrawTexturePro(
+					iconTex.texture,
+					structs.Rectangle:new({ x = 0, y = 0, width = iconTex.x, height = iconTex.y }),
+					structs.Rectangle:new({
+						x = itemX + 4,
+						y = itemY + 3,
+						width = iconSize,
+						height = iconSize,
+					}),
+					vector.create(0, 0),
+					0,
+					KinemiumRaylib.const.WHITE
+				)
+			end
+
+			if isMouseInRect(itemRect, mousePos) then
+				rl.DrawRectangle(itemX, itemY, itemW, itemH, Color3ToRaylib(Color3.new(0.2, 0.2, 0.2), 0))
+
+				if rl.IsMouseButtonPressed(0) == 1 then
+					local newObj = Instance.new(class)
+					newObj.Parent = instance
+					addMenuOpen[instance] = false
+				end
+			end
+
+			rl.DrawTextEx(vend, class, vector.create(itemX + 8 + 18, itemY + 3), 17, 1, KinemiumRaylib.const.WHITE)
+		end
+	end
+end
 
 local function DrawTree(instance, indent, winX, winY, winWidth)
 	indent = indent or 0
 	winX = winX or 0
 	winY = winY or 0
 	winWidth = winWidth or 350 -- fallback if not provided
+
+	if instance.Destroyed == true then
+		return
+	end
 
 	local children = instance:GetChildren()
 	local hasChildren = #children > 0
@@ -148,7 +300,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	end
 	local icon = loadedIcon[instance.ClassName]
 
-	-- Node button (aligned to the right side)
 	local btnX = winX + winWidth - nodeWidth - padding - (indent * -12)
 	local btnY = winY + 10 + yOffset
 	local rectData = {
@@ -167,12 +318,21 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 
 	local DisplayAddIcon = false
 
+	drawAdditionMenu(instance, mousePos, btnY, toggleX)
+
 	if isMouseInRect(rectData, mousePos) then
-		transparency = 0.5
+		Smooth:To(instance, 0.5)
 		DisplayAddIcon = true
 	else
-		transparency = 1
+		Smooth:To(instance, 1)
 		DisplayAddIcon = false
+	end
+
+	transparency = Smooth:Get(instance) or 1
+
+	if Selection.IsSelected(instance) then
+		color = Color3.new(0, 0.533333, 1)
+		transparency = 0
 	end
 
 	rl.DrawRectangleRounded(rect, 0.5, 8, Color3ToRaylib(color, transparency))
@@ -189,28 +349,13 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 			0,
 			KinemiumRaylib.const.WHITE
 		)
-		if isMouseInRect(data, mousePos) then
-			print("is diddy blud going to add")
+		if isMouseInRect(data, mousePos) and rl.IsMouseButtonPressed(0) == 1 then
+			addMenuOpen[instance] = not addMenuOpen[instance]
 		end
 	end
 
-	--[[
-
-	local btn = rl.GuiButton(
-		structs.Rectangle:new({
-			x = btnX,
-			y = btnY,
-			width = nodeWidth,
-			height = nodeHeight,
-		}),
-		instance.Name
-	)
-
-	if btn == 1 then
-		selected = instance
-		print("Selected:", instance.Name)
-	end
-	--]]
+	-- selection
+	handleSelection(instance, rectData, mousePos)
 
 	if icon then
 		local iconSize = nodeHeight - 4 -- scale icon to fit the button height
@@ -222,6 +367,15 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 			0,
 			KinemiumRaylib.const.WHITE
 		)
+	end
+
+	-- 261 is delete key (yes i dont care)
+	if rl.IsKeyDown(261) == 1 then
+		if Selection.Get()[1] then
+			for _, v in pairs(Selection.Get()) do
+				v:Destroy()
+			end
+		end
 	end
 
 	if hasChildren then
@@ -241,7 +395,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 
 	yOffset = yOffset + nodeHeight + 2
 
-	-- Recurse into children if expanded
 	if isExpanded then
 		for _, child in ipairs(children) do
 			DrawTree(child, indent + 1, winX, winY, winWidth)
@@ -249,7 +402,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	end
 end
 
--- Update window.stepped for Explorer tree
 window.stepped = function(windowData)
 	if windowData.title == "Explorer" then
 		yOffset = 0
@@ -261,6 +413,7 @@ window.stepped = function(windowData)
 end
 
 renderer.Add2DStack(function(data)
+	Smooth.Step()
 	window.update()
 
 	window.draw()

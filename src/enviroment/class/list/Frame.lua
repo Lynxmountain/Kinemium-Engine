@@ -4,14 +4,22 @@ local CFrame = require("@CFrame")
 local GuiObject = require("@GuiObject")
 local Enum = require("@EnumMap")
 
-local propTable = {}
+local propTable = {
+	Name = "Frame",
+	AbsoluteSize = nil,
+	AbsolutePosition = nil,
+}
 
 GuiObject.inherit(propTable)
-propTable.Name = "Frame"
 
 return {
 	class = "Frame",
-	render = GuiObject.render,
+	render = function(lib, object, dt, structs, renderer)
+		local pos, size = GuiObject.render(lib, object, dt, structs, renderer)
+		object.AbsolutePosition = pos
+		object.AbsoluteSize = size
+		return pos, size
+	end,
 	callback = function(instance, renderer)
 		return GuiObject.callback(instance, renderer)
 	end,

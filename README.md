@@ -7,24 +7,56 @@ Kinemium Engine is an engine (duh) that imitates roblox's API Surface, this mean
 It was originally to test zune's capabilities on raylib, but now, it has expanded to a full on independent engine.
 
 # Features
-Here are all its services:
+## Datatypes
+- Axes
+- BoundingBox
+- BrickColor
+- CFrame
+- Color3
+- Color4
+- ColorSequence
+- ColorSequenceKeypoint
+- CustomPhysicalProperties
+- NumberSequence
+- NumberSequenceKeypoint
+- Random
+- Ray
+- Region
+- Spring
+- UDim
+- UDim2
+- Vector2
+- Vector3
+- Enum
+- Faces / NormalId
+- Rect / Region3
+
+## Core Services
 - Debris
+- GuiSelectionService
 - HttpService
 - Lighting
+- LogService
 - Players
 - ReplicatedStorage
 - RunService
+- Selection
+- ServerScriptService
+- ServerStorage
 - StarterGui
 - TweenService
 - UserInputService
 - Workspace
 
-# Kinemium's Services
-- FontService
-- PhysicsService
-- ShaderService
-- ModService<br>
-*All custom services start with Kinemium.*
+## Kinemium Custom Services
+*(All custom services start with Kinemium.)*
+- KinemiumFFI
+- KinemiumFontService
+- KinemiumIconLoader
+- KinemiumModService
+- KinemiumPhysicsService
+- KinemiumRaylib
+- KinemiumShaderService
 
 # That's cool.. But how do I use this?
 Fortunately theres a tutorial:

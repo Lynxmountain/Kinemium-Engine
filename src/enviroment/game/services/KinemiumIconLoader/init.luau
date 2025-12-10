@@ -28,8 +28,6 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 		for _, file in pairs(fs.entries(kinemiumIcons)) do
 			registry[file.name] = kinemiumIcons .. "/" .. file.name
 		end
-
-		print(registry)
 	end
 
 	KinemiumIconLoader:SetProperties({

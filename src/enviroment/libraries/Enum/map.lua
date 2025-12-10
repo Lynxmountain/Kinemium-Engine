@@ -257,6 +257,7 @@ enumTable.Font = {
 	Garamond = "Garamond",
 	Cartoon = "Cartoon",
 	Code = "Code",
+	DefaultEngineFont = "DefaultEngineFont",
 	Highway = "Highway",
 	SciFi = "SciFi",
 	Arcade = "Arcade",
@@ -352,12 +353,22 @@ enumTable.VerticalAlignment = {
 	Bottom = 2,
 }
 
+enumTable.GameContext = {
+	Game = 1,
+	Editor = 2,
+}
+
 enumTable.RunContext = {
 	Legacy = 0,
 	Server = 1,
 	Client = 2,
 	Plugin = 3,
 	Editor = 4,
+}
+
+enumTable.SecurityCapabilities = {
+	UserScript = 1,
+	Internals = 2,
 }
 
 return enumtransformer.new(enumTable)

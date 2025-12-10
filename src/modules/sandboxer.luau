@@ -30,6 +30,8 @@ function sandboxer.run(code, chunk, env)
 	local bytecode = luau.compile(code)
 	local thread = luau.load(bytecode, options)
 
+	setfenv(thread, setmetatable(env or sandboxer.enviroment, { __index = getfenv(1) }))
+
 	return thread()
 end
 
@@ -45,14 +47,9 @@ function sandboxer.rblxrequire(path: string, callbackScript)
 			-- require implementation already added in enviroment, skip
 			local object = callbackScript(code, path)
 
-			print(sandboxer.enviroment.krequire)
-			result = sandboxer.run(
-				code,
-				path,
-				merge(sandboxer.enviroment, {
-					script = object,
-				})
-			)
+			local enviroment = table.clone(sandboxer.enviroment)
+			enviroment.script = object
+			result = sandboxer.run(code, path, enviroment)
 		end
 	end
 	if result then

@@ -20,6 +20,7 @@
         "ImageLabel": "./src/enviroment/class/list/ImageLabel",
         "TextLabel": "./src/enviroment/class/list/TextLabel",
         "AnchorUtils": "./src/modules/anchor",
+        "RayguiLerp": "./src/modules/raysmooth",
         "Instance": "./src/enviroment/class/Instance",
         "Mouse": "./src/enviroment/class/list/Mouse",
         "ModuleScript": "./src/enviroment/class/list/ModuleScript",
