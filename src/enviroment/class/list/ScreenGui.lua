@@ -9,12 +9,16 @@ local Vector2 = require("@Vector2")
 
 return {
 	class = "ScreenGui",
+
 	callback = function(instance, renderer)
 		local lib = renderer.lib
 		instance:SetProperties({
 			Name = "ScreenGui",
 			Enabled = true,
 			ZIndexBehavior = "Sibling",
+			render = function(lib, object)
+				object.Size = UDim2.new(0, lib.GetScreenWidth(), 0, lib.GetScreenHeight())
+			end,
 			ResetOnSpawn = true,
 			Position = UDim2.new(0, 0, 0, 0),
 			Size = UDim2.new(0, lib.GetScreenWidth(), 0, lib.GetScreenHeight()),

@@ -55,7 +55,7 @@ local function create_window_back(screenGui, title, AnchorPoint, size)
 	frame.BackgroundTransparency = 1
 	frame.Parent = screenGui
 
-	return create_window(title, frame)
+	return create_window(title, frame), frame
 end
 
 -- create explorer ingame
@@ -63,7 +63,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "Properties"
 screenGui.Parent = LocalPlayer.PlayerGui
 
-local propback = create_window_back(screenGui, "Properties", Vector2.new(1, 1), UDim2.new(0, 400, 0.3, 0))
+local propback, frame = create_window_back(screenGui, "Properties", Vector2.new(1, 1), UDim2.new(0, 400, 0.3, 0))
 
 local function Color3ToRaylib(c, transparency)
 	local r, g, b = c:ToRGB()
@@ -83,6 +83,11 @@ window.stepped = function(windowData)
 		local cellHeight = 25
 		local padding = 5
 		local mousePos = rl.GetMousePosition()
+
+		windowData.x = frame.AbsolutePosition.X
+		windowData.y = frame.AbsolutePosition.Y
+		windowData.width = frame.AbsoluteSize.X
+		windowData.height = frame.AbsoluteSize.Y
 
 		local selected = Selection.Get()[1]
 

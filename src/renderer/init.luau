@@ -42,6 +42,9 @@ local structs = raylib.structs
 local task = zune.task
 local ffi = zune.ffi
 
+--local screenWidth = raylib.lib.GetScreenWidth()
+--local screenHeight = raylib.lib.GetScreenHeight()
+
 local screenWidth = 1800
 local screenHeight = 900
 
@@ -384,6 +387,9 @@ local function drawPart(part)
 end
 
 local function step(time)
+	local screenWidth = raylib.lib.GetScreenWidth()
+	local screenHeight = raylib.lib.GetScreenHeight()
+
 	--lib.SetWindowState(const.ConfigFlags.FLAG_BORDERLESS_WINDOWED_MODE)
 	local activeLights = {}
 	local delta = lib.GetFrameTime()

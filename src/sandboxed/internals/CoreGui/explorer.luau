@@ -113,10 +113,10 @@ local function create_window_back(screenGui, title, AnchorPoint, size)
 	frame.AnchorPoint = AnchorPoint
 	frame.Size = size or UDim2.new(0, 400, 0.5, 0)
 	frame.BackgroundColor3 = Color3.new(1, 1, 1)
-	frame.BackgroundTransparency = 1
+	frame.BackgroundTransparency = 0
 	frame.Parent = screenGui
 
-	return create_window(title, frame)
+	return create_window(title, frame), frame
 end
 
 -- create explorer ingame
@@ -124,7 +124,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "Explorer"
 screenGui.Parent = LocalPlayer.PlayerGui
 
-local explorerback = create_window_back(screenGui, "Explorer", Vector2.new(1, 0), UDim2.new(0, 400, 0.7, 0))
+local explorerback, frame = create_window_back(screenGui, "Explorer", Vector2.new(1, 0), UDim2.new(0, 400, 0.7, 0))
 
 local expanded = {}
 local yOffset = 0
@@ -420,6 +420,12 @@ end
 window.stepped = function(windowData)
 	if windowData.title == "Explorer" then
 		yOffset = 0
+
+		windowData.x = frame.AbsolutePosition.X
+		windowData.y = frame.AbsolutePosition.Y
+		windowData.width = frame.AbsoluteSize.X
+		windowData.height = frame.AbsoluteSize.Y
+
 		local services = getServicesInOrder()
 		for _, child in ipairs(services) do
 			DrawTree(child, 0, windowData.x, windowData.y + 20)

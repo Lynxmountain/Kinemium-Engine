@@ -57,14 +57,14 @@ local function create_window_back(screenGui, title, AnchorPoint, size)
 	frame.BackgroundTransparency = 1
 	frame.Parent = screenGui
 
-	return create_window(title, frame)
+	return create_window(title, frame), frame
 end
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "Toolbar"
 screenGui.Parent = LocalPlayer.PlayerGui
 
-local propback = create_window_back(screenGui, "Toolbar", Vector2.new(0, 0), UDim2.new(0.78, 0, 0.1, 0))
+local propback, frame = create_window_back(screenGui, "Toolbar", Vector2.new(0, 0), UDim2.new(0.78, 0, 0.1, 0))
 
 local function Color3ToRaylib(c, transparency)
 	local r, g, b = c:ToRGB()
@@ -84,6 +84,11 @@ window.stepped = function(windowData)
 		local cellHeight = 50
 		local paddingLeft = 15
 		local padding = 5
+
+		windowData.x = frame.AbsolutePosition.X
+		windowData.y = frame.AbsolutePosition.Y
+		windowData.width = frame.AbsoluteSize.X
+		windowData.height = frame.AbsoluteSize.Y
 
 		for i = 0, 9 do
 			local rectX = winX + paddingLeft + i * (cellWidth + padding)

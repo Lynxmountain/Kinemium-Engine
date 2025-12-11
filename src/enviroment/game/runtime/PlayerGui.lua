@@ -10,6 +10,9 @@ PlayerGui.InitRenderer = function(renderer, renderer_signal)
 
 	PlayerGui.ChildAdded:Connect(function(child)
 		if child:IsA("ScreenGui") then
+			renderer.AddToGuiRenderingPool(function()
+				return child
+			end, child.render)
 			for _, screengui_child in pairs(child:GetDescendants()) do
 				if screengui_child.BaseClass == "Kinemium.uimodifier" then
 					continue
