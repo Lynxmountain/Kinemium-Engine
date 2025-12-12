@@ -242,8 +242,6 @@ local propTable = {
 		object.AbsolutePosition = drawPos
 		object.AbsoluteSize = size
 
-		print(object.Parent.Size)
-
 		return drawPos, size
 	end,
 }

@@ -13,13 +13,13 @@ local LogService = game:GetService("LogService")
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
 
-export type ButtonTitle = string
+export type elementTitle = string
 
 export type RibbonBarCategory = {
 	title: string,
-	buttons: {
-		[ButtonTitle]: {
-			type: "ImageButton" | "TextButton" | "TextLabel" | "Custom",
+	elements: {
+		[elementTitle]: {
+			type: "Imageelement" | "Textelement" | "TextLabel" | "Custom",
 			callback: () -> (),
 			render: () -> (),
 
@@ -40,8 +40,10 @@ local PlayIcon = KinemiumIconLoader.ToTexture(png)
 
 local categoryRegistry = {
 	Category = {
-		buttons = {
-			["skibidi"] = {
+		elements = {
+			{
+				type = "ImageButton",
+				text = "Playtest",
 				callback = function()
 					print("hello world")
 				end,
@@ -50,6 +52,16 @@ local categoryRegistry = {
 				roundness = 0.2,
 				texture = PlayIcon,
 			},
+			{
+				type = "ImageButton",
+
+				callback = function()
+					print("Stopping the simulation")
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(1, 0, 0),
+				roundness = 0.2,
+			},
 		},
 	},
 }
@@ -57,7 +69,7 @@ local categoryRegistry = {
 local aereon = import("@Kinemium.Aereon")
 local window = aereon.window(game, nil, 1)
 local aRect = aereon.rect()
-local buttons = {}
+local elements = {}
 
 local blacklisted = {
 	"Children",
@@ -105,13 +117,13 @@ local function Color3ToRaylib(c, transparency)
 	})
 end
 
-local function renderSubButton(i, button, windowData)
+local function renderButton(i, name, element, windowData)
 	local winX, winY = windowData.x, windowData.y + 30
 	local winWidth = windowData.width
-	local cellWidth = button.width or 50
-	local cellHeight = button.height or 50
+	local cellWidth = element.width or 50
+	local cellHeight = element.height or 50
 	local paddingLeft = 15
-	local padding = button.padding or 5
+	local padding = element.padding or 20
 	local rectX = winX + paddingLeft + i * (cellWidth + padding)
 	local rectY = winY
 	local rectData = aRect.new(rectX, rectY, cellWidth, cellHeight)
@@ -121,31 +133,49 @@ local function renderSubButton(i, button, windowData)
 	local color = Color3.new(0.5, 0.5, 0.5)
 
 	if aRect.MouseIsInRect(rectData) then
-		color = button.hoverColor
-		transparency = button.hoverTransparency
+		color = element.hoverColor
+		transparency = element.hoverTransparency
 	end
 
 	aRect.Button(rectData, function()
-		button.callback(rectData)
+		element.callback(element, rectData)
 	end)
 
 	local bgColor = Color3ToRaylib(color, transparency)
-	rl.DrawRectangleRounded(aRect:translate(rectData), button.roundness, 8, bgColor)
+	rl.DrawRectangleRounded(aRect:translate(rectData), element.roundness, 8, bgColor)
 
-	if button.texture then
+	if element.texture then
 		rl.DrawTexturePro(
-			button.texture.texture, -- wow
-			structs.Rectangle:new({ x = 0, y = 0, width = button.texture.x, height = button.texture.y }), -- source rect
+			element.texture.texture, -- wow
+			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }), -- source rect
 			aRect:translate(rectData), -- destination
 			vector.create(0, 0),
-			button.rotation or 0,
+			element.rotation or 0,
 			KinemiumRaylib.const.WHITE
 		)
 	end
 
-	if button.render then
-		button.render(aRect)
+	-- text
+	if name then
+		local textX = rectData.x + cellWidth / 2 - (#name * 9) / 2 -- center text horizontally
+		local textY = rectData.y + cellHeight + 5 -- below the element with 5px padding
+		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, KinemiumRaylib.const.WHITE)
 	end
+
+	if element.render then
+		element.render(aRect)
+	end
+end
+
+local function renderSeperator(i, windowData, element)
+	local winX, winY = windowData.x, windowData.y + 30
+	local paddingLeft = 15
+	local padding = element.padding or 20
+	local rectX = winX + paddingLeft + i * (50 + padding)
+	local rectY = winY
+
+	local sepColor = Color3ToRaylib(element.color or Color3.new(0.7, 0.7, 0.7), 0)
+	rl.DrawRectangle(rectX, rectY, element.width or 2, element.height or 50, sepColor)
 end
 
 window.stepped = function(windowData)
@@ -157,9 +187,15 @@ window.stepped = function(windowData)
 
 		local i = 0
 		for _, category in pairs(categoryRegistry) do
-			local buttons = category.buttons
-			for _, button in pairs(buttons) do
-				renderSubButton(i, button, windowData)
+			local elements = category.elements
+			for _, element in pairs(elements) do
+				if element.type == "ImageButton" then
+					game.EngineSignal:Fire("ToolbarUpdateElement", element)
+
+					renderButton(i, element.text, element, windowData)
+				elseif element.type == "Separator" then
+					renderSeperator(i, windowData, element)
+				end
 				i += 1
 			end
 		end

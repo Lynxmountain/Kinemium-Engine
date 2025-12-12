@@ -1,5 +1,4 @@
 return function(raylib, structs, game, theme)
-	local window_theme_config = theme.window
 	local windowRegistry = {}
 	local module = {}
 	local draggedWindow = nil
@@ -57,6 +56,8 @@ return function(raylib, structs, game, theme)
 	end
 
 	function module.update()
+		local window_theme_config = theme().window
+
 		local mousePos = raylib.GetMousePosition()
 		local mousePressed = raylib.IsMouseButtonPressed(0) -- Left mouse button
 		local mouseDown = raylib.IsMouseButtonDown(0)
@@ -111,6 +112,8 @@ return function(raylib, structs, game, theme)
 	end
 
 	function module.draw()
+		local window_theme_config = theme().window
+
 		for _, window in pairs(windowRegistry) do
 			if window.Closed then
 				continue

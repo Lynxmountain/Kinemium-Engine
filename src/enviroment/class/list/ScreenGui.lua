@@ -17,11 +17,11 @@ return {
 			Enabled = true,
 			ZIndexBehavior = "Sibling",
 			render = function(lib, object)
-				object.Size = UDim2.new(0, lib.GetScreenWidth(), 0, lib.GetScreenHeight())
+				object.Size = UDim2.new(0, lib.GetRenderWidth(), 0, lib.GetRenderHeight())
 			end,
 			ResetOnSpawn = true,
 			Position = UDim2.new(0, 0, 0, 0),
-			Size = UDim2.new(0, lib.GetScreenWidth(), 0, lib.GetScreenHeight()),
+			Size = UDim2.new(0, lib.GetRenderWidth(), 0, lib.GetRenderHeight()),
 			BackgroundColor3 = Color3.new(1, 1, 1),
 			BackgroundTransparency = 1,
 		})

@@ -52,7 +52,9 @@ function Aereon.rect()
 end
 
 function Aereon.window(game, theme, priority)
-	local lib = window(raylib.lib, raylib.structs, game, themes[theme] or themes.default)
+	local lib = window(raylib.lib, raylib.structs, game, function()
+		return themes[theme] or themes.default
+	end)
 	priority = priority or 0
 
 	table.insert(stepcallbacks, { callback = lib.update, priority = priority })

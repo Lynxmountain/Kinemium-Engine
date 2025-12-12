@@ -22,6 +22,8 @@ local camera_addon = require("@Camera")
 -- please speed i need this
 --local r3d = require("@r3d")
 
+local renderSceneCallback = nil
+
 local Kinemium_camera = Instance.new("Camera")
 camera_addon.callback(Kinemium_camera)
 Kinemium_camera.Name = "CurrentCamera"
@@ -120,6 +122,8 @@ local function loadMaterialOnModel(model, texture, const)
 	end)
 end
 
+local smoothPos = cameraPos
+
 local function UpdateFreecam(camera: raylib.Camera3D, delta: number)
 	-- Only update camera rotation when right mouse button is held
 	if lib.IsMouseButtonPressed(const.MouseButton.MOUSE_BUTTON_RIGHT) == 1 then
@@ -146,8 +150,12 @@ local function UpdateFreecam(camera: raylib.Camera3D, delta: number)
 	right = vector.normalize(right)
 
 	local moveSpeed = MOVE_SPEED * delta
-	local sideway = lib.IsKeyDown(const.KeyboardKey.KEY_D) - lib.IsKeyDown(const.KeyboardKey.KEY_A)
-	local forwardInput = lib.IsKeyDown(const.KeyboardKey.KEY_W) - lib.IsKeyDown(const.KeyboardKey.KEY_S)
+	local sideway = (lib.IsKeyDown(const.KeyboardKey.KEY_D) - lib.IsKeyDown(const.KeyboardKey.KEY_A))
+		+ (lib.IsKeyDown(const.KeyboardKey.KEY_RIGHT) - lib.IsKeyDown(const.KeyboardKey.KEY_LEFT))
+
+	local forwardInput = (lib.IsKeyDown(const.KeyboardKey.KEY_W) - lib.IsKeyDown(const.KeyboardKey.KEY_S))
+		+ (lib.IsKeyDown(const.KeyboardKey.KEY_UP) - lib.IsKeyDown(const.KeyboardKey.KEY_DOWN))
+
 	local vertical = lib.IsKeyDown(const.KeyboardKey.KEY_SPACE) - lib.IsKeyDown(const.KeyboardKey.KEY_LEFT_SHIFT)
 
 	cameraPos += forward * (forwardInput * moveSpeed)
@@ -386,6 +394,13 @@ local function drawPart(part)
 	mainSignal:Fire("Rendered", part)
 end
 
+local function getRenderTextureObject(rnder)
+	local texture = zune.mem.slice(rnder, structs.RenderTexture:offset("texture"), structs.Texture:size())
+	return texture
+end
+
+local viewport = lib.LoadRenderTexture(screenWidth, screenHeight)
+
 local function step(time)
 	local screenWidth = raylib.lib.GetScreenWidth()
 	local screenHeight = raylib.lib.GetScreenHeight()
@@ -468,6 +483,7 @@ local function step(time)
 		end
 	end
 
+	lib.BeginTextureMode(viewport)
 	lib.BeginDrawing()
 	lib.BeginMode3D(camera)
 	lib.ClearBackground(const.BLUE)
@@ -504,6 +520,14 @@ local function step(time)
 	lib.rlDisableDepthTest()
 
 	lib.EndMode3D()
+	lib.EndTextureMode()
+
+	local Render3DSceneTexture = getRenderTextureObject(viewport)
+	local size = vector.create(buffer.readi32(Render3DSceneTexture, 4), buffer.readi32(Render3DSceneTexture, 8))
+
+	if renderSceneCallback then
+		renderSceneCallback(Render3DSceneTexture, lib, size)
+	end
 
 	for _, gui in pairs(guiRegistry) do
 		-- {render = function(), object = function()}
@@ -622,5 +646,11 @@ return {
 	-- Lighting
 	SetLightingService = function(service)
 		lighting = service
+	end,
+
+	Viewport = viewport,
+	getRenderTextureObject = getRenderTextureObject,
+	renderSceneCallbackSet = function(c)
+		renderSceneCallback = c
 	end,
 }
