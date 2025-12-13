@@ -8,8 +8,10 @@ local signal = require("@Kinemium.signal")
 local mb = require("./renderer/mesh")
 local texture = require("./renderer/texture")
 local Vector2 = require("@Vector2")
+local kmffi = require("@Kinemium.FFILayer")
 local shader3d = require("./renderer/shader")
 local skybox = require("./renderer/skybox")
+local Enum = require("@EnumMap")
 local mainSignal = signal.new()
 
 local CFrame = require("@CFrame")
@@ -48,7 +50,7 @@ local ffi = zune.ffi
 --local screenHeight = raylib.lib.GetScreenHeight()
 
 local screenWidth = 1800
-local screenHeight = 900
+local screenHeight = 100
 
 local txtureMethods = texture(lib)
 local materialList = txtureMethods.GetMaterials()
@@ -63,8 +65,10 @@ local cameraPos = vector.create(0.0, 5.0, 10.0)
 local yaw = 0.0
 local pitch = 0.0
 
+local mouseProperties = {}
 local activeShaders = {}
 local shaderUniforms = {}
+local MouseTarget
 local lighting = nil
 
 local function float_ptr(value: number): FFIPointer
@@ -182,10 +186,9 @@ end
 local partRegistry = {}
 local guiRegistry = {}
 
-lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_HIGHDPI)
+lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
+lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 lib.InitWindow(screenWidth, screenHeight, "Kinemium Engine")
-lib.SetWindowState(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
-lib.SetWindowState(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 
 lib.SetTargetFPS(0)
 
@@ -193,7 +196,7 @@ local engineIcon = lib.LoadImage("./src/assets/icon/icon.png")
 lib.SetWindowIcon(engineIcon)
 --lib.DisableCursor()
 
-skybox.Load()
+skybox.load(lib)
 meshlib = mb(lib)
 
 local material_index = 0
@@ -382,60 +385,203 @@ local function drawModel(model, part)
 	)
 end
 
+local function readRayCollision(collisionBuffer)
+	-- RayCollision struct layout:
+	-- { hit = u8 }        - offset 0, size 1
+	-- { distance = float } - offset 4, size 4 (padded to 4-byte alignment)
+	-- { point = Vector3 }  - offset 8, size 12
+	-- { normal = Vector3 } - offset 20, size 12
+
+	local hit = buffer.readu8(collisionBuffer, 0)
+	local distance = buffer.readf32(collisionBuffer, 4)
+
+	-- Read point Vector3 (x, y, z)
+	local pointX = buffer.readf32(collisionBuffer, 8)
+	local pointY = buffer.readf32(collisionBuffer, 12)
+	local pointZ = buffer.readf32(collisionBuffer, 16)
+
+	-- Read normal Vector3 (x, y, z)
+	local normalX = buffer.readf32(collisionBuffer, 20)
+	local normalY = buffer.readf32(collisionBuffer, 24)
+	local normalZ = buffer.readf32(collisionBuffer, 28)
+
+	return {
+		hit = hit,
+		distance = distance,
+		point = vector.create(pointX, pointY, pointZ),
+		normal = vector.create(normalX, normalY, normalZ),
+	}
+end
+
+local function getNormalFace(normal)
+	local absX = math.abs(normal.x)
+	local absY = math.abs(normal.y)
+	local absZ = math.abs(normal.z)
+
+	if absX > absY and absX > absZ then
+		if normal.x > 0 then
+			return Enum.NormalId.Right
+		else
+			return Enum.NormalId.Left
+		end
+	elseif absY > absX and absY > absZ then
+		if normal.y > 0 then
+			return Enum.NormalId.Top
+		else
+			return Enum.NormalId.Bottom
+		end
+	else
+		if normal.z > 0 then
+			return Enum.NormalId.Front
+		else
+			return Enum.NormalId.Back
+		end
+	end
+end
+
+local mouseConfig = { TargetFilter = { Kinemium_camera } }
+
+local function getMouseRay()
+	local mousePos = raylib.lib.GetMousePosition()
+	local ray = raylib.lib.GetScreenToWorldRay(mousePos, camera)
+
+	local closestCollision = nil
+	local closestDistance = math.huge
+	local closestPart = nil
+
+	for _, part in pairs(partRegistry) do
+		part = part()
+
+		if not part or not part._mesh then
+			continue
+		end
+
+		local shouldSkip = false
+		for _, filtered in ipairs(mouseConfig.TargetFilter) do
+			if part == filtered then
+				shouldSkip = true
+				break
+			end
+			if part.Parent == filtered then
+				shouldSkip = true
+				break
+			end
+			local ancestor = part.Parent
+			while ancestor do
+				if ancestor == filtered then
+					shouldSkip = true
+					break
+				end
+				ancestor = ancestor.Parent
+			end
+			if shouldSkip then
+				break
+			end
+		end
+
+		if shouldSkip then
+			part.MouseOverObject = false
+			continue
+		end
+
+		local pos = vector.create(part.Position.X, part.Position.Y, part.Position.Z)
+		local scale = vector.create(part.Size.X, part.Size.Y, part.Size.Z)
+		local axis, angle = EulerToAxisAngleRad(part.Orientation or part.Rotation)
+		local scaleMatrix = raylib.lib.MatrixScale(scale.x, scale.y, scale.z)
+		local rotateMatrix = raylib.lib.MatrixRotate(axis, angle)
+		local translateMatrix = raylib.lib.MatrixTranslate(pos.x, pos.y, pos.z)
+		local transform = raylib.lib.MatrixMultiply(scaleMatrix, rotateMatrix)
+		transform = raylib.lib.MatrixMultiply(transform, translateMatrix)
+
+		local collision = raylib.lib.GetRayCollisionMesh(ray, part._mesh, transform)
+		collision = readRayCollision(collision)
+
+		if collision.hit == 1 and collision.distance < closestDistance then
+			closestDistance = collision.distance
+			closestCollision = collision
+			closestPart = part
+		end
+
+		part.MouseOverObject = false
+	end
+
+	if closestPart and closestCollision then
+		closestPart.MouseOverObject = true
+		mouseProperties = {
+			target = closestPart,
+			Target = closestPart,
+			TargetSurface = getNormalFace(closestCollision.normal),
+			Hit = CFrame.new(closestCollision.point.x, closestCollision.point.y, closestCollision.point.z),
+			hit = CFrame.new(closestCollision.point.x, closestCollision.point.y, closestCollision.point.z),
+		}
+	end
+end
+
+local viewport = lib.LoadRenderTexture(screenWidth, screenHeight)
+
+local runtimelib
+
 local function drawPart(part)
 	if part.ClassName == "MeshPart" then
 		local model = meshlib.GetModelRegistry()[part.MeshId]
 		if model then
+			if part.render then
+				part.render(part, camera, runtimelib)
+			end
+			part._mesh = model
+
 			drawModel(model, part)
 		end
 	else
-		drawModel(preloadedMeshes[part.Shape.Value], part)
+		if part.render then
+			part.render(part, camera, runtimelib)
+		end
+
+		local mesh = preloadedMeshes[part.Shape.Value]
+		drawModel(mesh[1], part)
+
+		part._mesh = mesh[2]
 	end
 
 	mainSignal:Fire("Rendered", part)
 end
 
-local function getRenderTextureObject(rnder)
-	local texture = zune.mem.slice(rnder, structs.RenderTexture:offset("texture"), structs.Texture:size())
-	return texture
-end
+runtimelib = {
+	lib = lib,
+	drawModel = drawModel,
+	drawPart = drawPart,
+	loadMaterialOnModel = loadMaterialOnModel,
+	LoadShader = LoadShader,
+	structs = structs,
+	const = const,
+	time = time,
+	GetFont = function(name)
+		if fontRegistry[name] then
+			return fontRegistry[name]
+		end
+	end,
+	SetMouseProperties = function(data)
+		mouseProperties = data
+	end,
+	gbSet = function(property, value)
+		global_registry[property] = value
+	end,
 
-local viewport = lib.LoadRenderTexture(screenWidth, screenHeight)
+	gbGet = function(property)
+		return global_registry[property]
+	end,
+}
 
 local function step(time)
-	local screenWidth = raylib.lib.GetScreenWidth()
-	local screenHeight = raylib.lib.GetScreenHeight()
-
 	--lib.SetWindowState(const.ConfigFlags.FLAG_BORDERLESS_WINDOWED_MODE)
 	local activeLights = {}
 	local delta = lib.GetFrameTime()
 	mainSignal:Fire("PreRender", delta)
-
-	local runtimelib = {
-		lib = lib,
-		drawModel = drawModel,
-		drawPart = drawPart,
-		loadMaterialOnModel = loadMaterialOnModel,
-		LoadShader = LoadShader,
-		structs = structs,
-		const = const,
-		time = time,
-		GetFont = function(name)
-			if fontRegistry[name] then
-				return fontRegistry[name]
-			end
-		end,
-		gbSet = function(property, value)
-			global_registry[property] = value
-		end,
-
-		gbGet = function(property)
-			return global_registry[property]
-		end,
-	}
-
 	mainSignal:Fire("RenderStepped", delta)
-	mainSignal:Fire("MouseData", {
+
+	getMouseRay()
+
+	local runtimeMouse = {
 		position = Vector2.new(lib.GetMouseX(), lib.GetMouseY()),
 		delta = lib.GetMouseDelta(),
 		mouse_wheel_move = lib.GetMouseWheelMove(),
@@ -453,7 +599,11 @@ local function step(time)
 		-- cursor states
 		is_cursor_hidden = lib.IsCursorHidden(),
 		is_cursor_inbounds = lib.IsCursorOnScreen(),
-	})
+	}
+	for prop, value in pairs(mouseProperties) do
+		runtimeMouse[prop] = value
+	end
+	mainSignal:Fire("MouseData", runtimeMouse)
 
 	time += delta
 
@@ -484,51 +634,41 @@ local function step(time)
 		end
 	end
 
-	lib.BeginTextureMode(viewport)
+	--lib.BeginTextureMode(viewport)
 	lib.BeginDrawing()
 	lib.BeginMode3D(camera)
 	lib.ClearBackground(const.BLUE)
-	lib.rlEnableBackfaceCulling()
-	lib.rlEnableDepthTest()
-	skybox.Draw(vector.create(0, 0, 0))
+
+	--lib.rlEnableBackfaceCulling()
 
 	for _, part in pairs(partRegistry) do
 		local partData = part()
+		if not partData then
+			continue
+		end
 		if partData.BaseClass == "Kinemium.light" then
 			table.insert(activeLights, {
 				pos = { partData.Position.X, partData.Position.Y, partData.Position.Z },
 				intensity = partData.Range,
 				color = { partData.Color.R / 255, partData.Color.G / 255, partData.Color.B / 255 },
 			})
+		else
+			drawPart(partData)
 		end
 	end
+
+	skybox.draw(lib, cameraPos)
 
 	shader3d(lib, loopshader, lighting, const, cameraPos, activeLights, SetShaderUniform, time)
 
 	for _, v in pairs(renderPool3d) do
 		v(runtimelib)
 	end
-
-	for _, part in pairs(partRegistry) do
-		local partData = part()
-		if partData.BaseClass ~= "Kinemium.light" then
-			drawPart(partData)
-		end
-	end
-
 	lib.EndShaderMode()
-	lib.rlDisableBackfaceCulling()
-	lib.rlDisableDepthTest()
+	--lib.rlDisableBackfaceCulling()
 
 	lib.EndMode3D()
-	lib.EndTextureMode()
-
-	local Render3DSceneTexture = getRenderTextureObject(viewport)
-	local size = vector.create(buffer.readi32(Render3DSceneTexture, 4), buffer.readi32(Render3DSceneTexture, 8))
-
-	if renderSceneCallback then
-		renderSceneCallback(Render3DSceneTexture, lib, size)
-	end
+	--lib.EndTextureMode()
 
 	for _, gui in pairs(guiRegistry) do
 		-- {render = function(), object = function()}
@@ -654,4 +794,7 @@ return {
 	renderSceneCallbackSet = function(c)
 		renderSceneCallback = c
 	end,
+
+	-- Mouse
+	SetMouseTargetFilter = function() end,
 }

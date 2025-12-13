@@ -245,6 +245,15 @@ enumTable.KinemiumMouseCursor = {
 	MOUSE_CURSOR_NOT_ALLOWED = 10, -- The operation-not-allowed shape
 }
 
+enumTable.NormalId = {
+	Top = 1,
+	Bottom = 2,
+	Back = 3,
+	Front = 4,
+	Right = 5,
+	Left = 6,
+}
+
 enumTable.Font = {
 	Legacy = "Legacy",
 	Arial = "Arial",

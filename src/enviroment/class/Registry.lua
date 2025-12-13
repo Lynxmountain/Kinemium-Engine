@@ -5,6 +5,7 @@ local datatypes = require("../datatypes/getDatatypes")
 
 local registry = {}
 local listOfClasses = {}
+local created = {}
 
 sandboxer.enviroment = datatypes
 
@@ -48,6 +49,7 @@ function registry.new(class, renderer)
 
 	local instance = Instance.new(class)
 	found.callback(instance, renderer)
+	table.insert(created, instance)
 	return instance
 end
 

@@ -13,13 +13,25 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local rl = KinemiumRaylib.lib
 local structs = KinemiumRaylib.structs
+local EngineSignal = game.EngineSignal
 local vend = KinemiumFontService.GetDefaultFont()
 local classes = Instance.getClasses()
+
+local lastClickTime = {}
+local doubleClickThreshold = 0.3
 
 print("This is explorer.")
 
 if game.Context ~= Enum.GameContext.Editor then
 	return
+end
+
+local function DoubleClicked(instance)
+	if instance:IsA("Script") then
+		EngineSignal:Fire("idestate", true)
+	else
+		EngineSignal:Fire("idestate", false)
+	end
 end
 
 local serviceOrder = {
@@ -92,6 +104,7 @@ local windowRegistry = {}
 
 local aereon = import("@Kinemium.Aereon")
 local window = aereon.window(game)
+local arect = aereon.rect()
 
 local function create_window(title, frame)
 	repeat
@@ -156,11 +169,20 @@ end
 local function handleSelection(instance, rectData, mousePos)
 	if isMouseInRect(rectData, mousePos) then
 		if rl.IsMouseButtonPressed(0) == 1 then
+			local currentTime = os.clock()
 			local ctrl = rl.IsKeyDown(341) == 1 or rl.IsKeyDown(345) == 1
 			local shift = rl.IsKeyDown(340) == 1 or rl.IsKeyDown(344) == 1
 
+			if lastClickTime[instance] and (currentTime - lastClickTime[instance]) < doubleClickThreshold then
+				DoubleClicked(instance)
+				expanded[instance] = not expanded[instance]
+				lastClickTime[instance] = nil
+				return
+			end
+
+			lastClickTime[instance] = currentTime
+
 			if shift and lastClicked then
-				-- range select
 				local parent = instance.Parent
 				if parent then
 					local siblings = parent:GetChildren()
@@ -206,24 +228,31 @@ local function handleSelection(instance, rectData, mousePos)
 	end
 end
 
+local addMenuScroll = {}
+
 local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
-	local columns = 5
-	local itemW = addMenuItemHeight * 5
-	local itemH = addMenuItemHeight
+	local itemW = 200
+	local itemH = 22
+	local maxVisibleItems = 15
+	local menuPadding = 4
 
 	if addMenuOpen[instance] then
-		local rows = math.ceil(#instanceTypes / columns)
-		local menuWidth = columns * itemW
-		local menuHeight = rows * itemH
+		if not addMenuScroll[instance] then
+			addMenuScroll[instance] = 0
+		end
 
-		local menuX = toggleX - menuWidth + 20
-		local menuY = btnY + 25 + 4
+		local totalItems = #instanceTypes
+		local menuHeight = math.min(totalItems, maxVisibleItems) * itemH + menuPadding * 2
+		local contentHeight = totalItems * itemH
+
+		local menuX = toggleX - itemW - 10
+		local menuY = btnY + 4
 
 		rl.DrawRectangleRounded(
 			structs.Rectangle:new({
-				x = menuX - (menuWidth - itemW),
+				x = menuX,
 				y = menuY,
-				width = menuWidth,
+				width = itemW,
 				height = menuHeight,
 			}),
 			0.2,
@@ -231,50 +260,120 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 			Color3ToRaylib(Color3.new(0.12, 0.12, 0.12), 0)
 		)
 
-		for i, class in ipairs(instanceTypes) do
-			local col = (i - 1) % columns
-			local row = math.floor((i - 1) / columns)
+		local menuRect = { x = menuX, y = menuY, width = itemW, height = menuHeight }
+		if isMouseInRect(menuRect, mousePos) then
+			local mouseWheel = rl.GetMouseWheelMove()
+			if mouseWheel ~= 0 then
+				addMenuScroll[instance] = addMenuScroll[instance] - (mouseWheel * itemH * 2)
+				local maxScroll = math.max(0, contentHeight - (maxVisibleItems * itemH))
+				addMenuScroll[instance] = math.max(0, math.min(addMenuScroll[instance], maxScroll))
+			end
+		end
 
-			local itemX = menuX - (col * itemW)
-			local itemY = menuY + row * itemH
+		rl.BeginScissorMode(
+			math.floor(menuX),
+			math.floor(menuY + menuPadding),
+			math.floor(itemW),
+			math.floor(menuHeight - menuPadding * 2)
+		)
+
+		for i, class in ipairs(instanceTypes) do
+			local itemX = menuX
+			local itemY = menuY + menuPadding + ((i - 1) * itemH) - addMenuScroll[instance]
 			local itemRect = { x = itemX, y = itemY, width = itemW, height = itemH }
 
-			if not loadedIcon[class] then
-				local png = KinemiumIconLoader.Get(class .. ".png")
-				if png then
-					loadedIcon[class] = KinemiumIconLoader.ToTexture(png)
+			if itemY + itemH >= menuY and itemY <= menuY + menuHeight then
+				if not loadedIcon[class] then
+					local png = KinemiumIconLoader.Get(class .. ".png")
+					if png then
+						loadedIcon[class] = KinemiumIconLoader.ToTexture(png)
+					end
 				end
-			end
 
-			local iconTex = loadedIcon[class]
-			if iconTex then
-				local iconSize = itemH - 6
-				rl.DrawTexturePro(
-					iconTex.texture,
-					structs.Rectangle:new({ x = 0, y = 0, width = iconTex.x, height = iconTex.y }),
-					structs.Rectangle:new({
-						x = itemX + 4,
-						y = itemY + 3,
-						width = iconSize,
-						height = iconSize,
-					}),
-					vector.create(0, 0),
-					0,
+				local isHovered = isMouseInRect(itemRect, mousePos)
+					and mousePos.y >= menuY + menuPadding
+					and mousePos.y <= menuY + menuHeight - menuPadding
+
+				if isHovered then
+					rl.DrawRectangle(itemX, itemY, itemW, itemH, Color3ToRaylib(Color3.new(0.2, 0.2, 0.2), 0))
+
+					if rl.IsMouseButtonPressed(0) == 1 then
+						local success, newObj = pcall(Instance.new, class)
+						if success then
+							newObj.Parent = instance
+						end
+						addMenuOpen[instance] = false
+						addMenuScroll[instance] = 0
+					end
+				end
+
+				local iconTex = loadedIcon[class]
+				if iconTex then
+					local iconSize = itemH - 6
+					rl.DrawTexturePro(
+						iconTex.texture,
+						structs.Rectangle:new({ x = 0, y = 0, width = iconTex.x, height = iconTex.y }),
+						structs.Rectangle:new({
+							x = itemX + 4,
+							y = itemY + 3,
+							width = iconSize,
+							height = iconSize,
+						}),
+						vector.create(0, 0),
+						0,
+						KinemiumRaylib.const.WHITE
+					)
+				end
+
+				rl.DrawTextEx(
+					vend,
+					class,
+					vector.create(itemX + itemH + 4, itemY + 3),
+					17,
+					1,
 					KinemiumRaylib.const.WHITE
 				)
 			end
+		end
 
-			if isMouseInRect(itemRect, mousePos) then
-				rl.DrawRectangle(itemX, itemY, itemW, itemH, Color3ToRaylib(Color3.new(0.2, 0.2, 0.2), 0))
+		rl.EndScissorMode()
 
-				if rl.IsMouseButtonPressed(0) == 1 then
-					local newObj = Instance.new(class)
-					newObj.Parent = instance
-					addMenuOpen[instance] = false
-				end
-			end
+		if contentHeight > maxVisibleItems * itemH then
+			local scrollbarWidth = 6
+			local scrollbarX = menuX + itemW - scrollbarWidth - 2
+			local scrollbarHeight = menuHeight - menuPadding * 2
+			local scrollbarTrackHeight = scrollbarHeight - 4
 
-			rl.DrawTextEx(vend, class, vector.create(itemX + 8 + 18, itemY + 3), 17, 1, KinemiumRaylib.const.WHITE)
+			local thumbHeight = math.max(20, (scrollbarTrackHeight * (maxVisibleItems * itemH)) / contentHeight)
+			local maxScroll = contentHeight - (maxVisibleItems * itemH)
+			local thumbY = menuY
+				+ menuPadding
+				+ 2
+				+ (addMenuScroll[instance] / maxScroll) * (scrollbarTrackHeight - thumbHeight)
+
+			rl.DrawRectangleRounded(
+				structs.Rectangle:new({
+					x = scrollbarX,
+					y = menuY + menuPadding + 2,
+					width = scrollbarWidth,
+					height = scrollbarTrackHeight,
+				}),
+				0.5,
+				4,
+				Color3ToRaylib(Color3.new(0.08, 0.08, 0.08), 0)
+			)
+
+			rl.DrawRectangleRounded(
+				structs.Rectangle:new({
+					x = scrollbarX,
+					y = thumbY,
+					width = scrollbarWidth,
+					height = thumbHeight,
+				}),
+				0.5,
+				4,
+				Color3ToRaylib(Color3.new(0.3, 0.3, 0.3), 0)
+			)
 		end
 	end
 end
@@ -325,8 +424,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 
 	local DisplayAddIcon = false
 
-	drawAdditionMenu(instance, mousePos, btnY, toggleX)
-
 	if isMouseInRect(rectData, mousePos) then
 		Smooth:To(instance, 0.5)
 		DisplayAddIcon = true
@@ -357,6 +454,11 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 			KinemiumRaylib.const.WHITE
 		)
 		if isMouseInRect(data, mousePos) and rl.IsMouseButtonReleased(0) == 1 then
+			if not addMenuOpen[instance] then
+				for key, _ in pairs(addMenuOpen) do
+					addMenuOpen[key] = false
+				end
+			end
 			addMenuOpen[instance] = not addMenuOpen[instance]
 		end
 	end
@@ -384,6 +486,12 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 			end
 		end
 	end
+
+	-- double clicks
+	local object = arect.new(btnX, btnY, nodeWidth, nodeHeight)
+	arect.RightClick(object, function()
+		print("right click")
+	end)
 
 	if hasChildren then
 		-- place the toggle button on the left side
@@ -419,6 +527,8 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 			DrawTree(child, indent + 1, winX, winY, winWidth)
 		end
 	end
+
+	drawAdditionMenu(instance, mousePos, btnY, toggleX)
 end
 
 window.stepped = function(windowData)

@@ -35,6 +35,7 @@
         "r3d": "./src/external/r3d",
         "EnumMap": "./src/enviroment/libraries/Enum/map",
         "Camera": "./src/enviroment/class/list/Camera",
+        "Kinemium.FFILayer": "./src/modules/ffilayer",
         "Kinemium.datatypes.get": "./src/enviroment/datatypes/getDatatypes",
         "Kinemium.registry": "./src/enviroment/class/Registry",
         "Kinemium.3d": "./src/renderer",

@@ -3,6 +3,7 @@
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
+local EngineSignal = game.EngineSignal
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -28,6 +29,7 @@ local windowRegistry = {}
 
 local aereon = import("@Kinemium.Aereon")
 local window = aereon.window(game, nil, 1)
+local ide = aereon.ide(nil, game)
 
 local blacklisted = {
 	"Children",
@@ -75,7 +77,9 @@ local function Color3ToRaylib(c, transparency)
 	})
 end
 
+--[[
 task.wait(2)
+
 renderer.renderSceneCallbackSet(function(texture, lib, size)
 	lib.DrawTexturePro(
 		texture,
@@ -83,11 +87,35 @@ renderer.renderSceneCallbackSet(function(texture, lib, size)
 		structs.Rectangle:new({
 			x = frame.AbsolutePosition.X,
 			y = frame.AbsolutePosition.Y,
-			width = frame.AbsoluteSize.X,
-			height = frame.AbsoluteSize.Y,
+			width = lib.GetRenderWidth(),
+			height = lib.GetRenderHeight(),
 		}),
 		vector.create(0, 0, 0),
 		0,
 		KinemiumRaylib.const.WHITE
 	)
+end)
+--]]
+
+local enableIDE = false
+
+EngineSignal:Connect(function(route, value)
+	if route == "idestate" then
+		enableIDE = value
+	end
+end)
+
+renderer.Add2DStack(function(data)
+	local screenWidth = rl.GetRenderWidth()
+	local screenHeight = rl.GetRenderHeight()
+	local toolbarHeight = 122
+	local viewportX = 0
+	local viewportY = toolbarHeight
+	local viewportWidth = screenWidth - 400
+	local viewportHeight = screenHeight - toolbarHeight - screenHeight * 0.2
+	if enableIDE then
+		ide.draw(viewportX, viewportY, vector.create(viewportWidth, viewportHeight), 50)
+	end
+	EngineSignal:Fire("ideText", ide:getCode())
+	aereon.step()
 end)

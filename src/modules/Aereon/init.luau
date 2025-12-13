@@ -14,6 +14,7 @@ local Color3 = require("@Color3")
 -- components
 local window = require("./Aereon/window")
 local rect = require("./Aereon/rect")
+local ide = require("./Aereon/scripteditor")
 
 -- config Data
 local config = {}
@@ -37,6 +38,13 @@ local themes = {
 			ShadowTransparency = 0.98,
 			ShadowColor = Color3.new(0, 0, 0),
 		},
+
+		ide = {
+			BackgroundColor = Color3.new(0.05, 0.05, 0.05),
+			SecondaryBackgroundColor = Color3.new(0.07, 0.07, 0.07),
+			TextColor = Color3.new(1, 1, 1),
+			currentLineColor = Color3.new(0.2, 0.2, 0.2),
+		},
 	},
 }
 
@@ -51,6 +59,10 @@ function Aereon.rect()
 	return rect(raylib.lib)
 end
 
+function Aereon.getOnStep()
+	return stepcallbacks
+end
+
 function Aereon.window(game, theme, priority)
 	local lib = window(raylib.lib, raylib.structs, game, function()
 		return themes[theme] or themes.default
@@ -60,6 +72,11 @@ function Aereon.window(game, theme, priority)
 	table.insert(stepcallbacks, { callback = lib.update, priority = priority })
 	table.insert(stepcallbacks, { callback = lib.draw, priority = priority })
 
+	return lib
+end
+
+function Aereon.ide(theme, game)
+	local lib = ide(lib, themes[theme] or themes.default, Aereon, game)
 	return lib
 end
 

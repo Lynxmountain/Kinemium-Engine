@@ -5,6 +5,9 @@ local function lerp(a, b, t)
 	return a + (b - a) * t
 end
 
+local doubleClickData = {}
+local doubleClickThreshold = 0.1 -- 300ms
+
 return function(raylib: typeof(rl.lib))
 	local rect = {}
 
@@ -310,6 +313,28 @@ return function(raylib: typeof(rl.lib))
 	function rect.Button(object, clicked)
 		if raylib.IsMouseButtonReleased(0) == 1 and rect.MouseIsInRect(object) then
 			clicked(object)
+		end
+	end
+
+	function rect.RightClick(object, clicked)
+		if raylib.IsMouseButtonReleased(1) == 1 and rect.MouseIsInRect(object) then
+			clicked(object)
+		end
+	end
+
+	function rect.DoubleClick(object, callback)
+		if raylib.IsMouseButtonPressed(0) == 1 and rect.MouseIsInRect(object) then
+			print("blud in rect")
+			local currentTime = os.clock()
+
+			if doubleClickData[object] and (currentTime - doubleClickData[object]) < doubleClickThreshold then
+				print("DOUBLE CLICK DETECTED!")
+				callback(object)
+				doubleClickData[object] = nil
+			else
+				print("First click at:", currentTime)
+				doubleClickData[object] = currentTime
+			end
 		end
 	end
 

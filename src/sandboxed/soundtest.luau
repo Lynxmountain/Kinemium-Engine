@@ -155,23 +155,19 @@ local function createDock()
 	end
 end
 
--- Add point lights for testing
 local function createLights()
-	-- Campfire light
 	local campfireLight = Instance.new("PointLight")
 	campfireLight.Position = Vector3.new(-5, 2, -5)
 	campfireLight.Color = Color3.fromRGB(255, 120, 40)
 	campfireLight.Range = 25
 	campfireLight.Parent = workspace
 
-	-- Lantern on dock
 	local lanternLight = Instance.new("PointLight")
 	lanternLight.Position = Vector3.new(0, 0, 48)
 	lanternLight.Color = Color3.fromRGB(255, 200, 100)
 	lanternLight.Range = 20
 	lanternLight.Parent = workspace
 
-	-- Moon-like light
 	local moonLight = Instance.new("PointLight")
 	moonLight.Position = Vector3.new(30, 40, -30)
 	moonLight.Color = Color3.fromRGB(150, 160, 200)

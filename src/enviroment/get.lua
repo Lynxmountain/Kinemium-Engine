@@ -60,21 +60,21 @@ return function(renderer)
 	local LogService = mainDatamodel:GetService("LogService")
 
 	data.print = function(message)
-		print("RUNTIME: " .. message)
+		print("RUNTIME", message)
 
-		return LogService.CreateLog("print", message)
+		return LogService.CreateLog("print", tostring(message))
 	end
 
 	data.warn = function(message)
-		print("RUNTIME: " .. message)
+		print("RUNTIME", message)
 
-		return LogService.CreateLog("warn", message)
+		return LogService.CreateLog("warn", tostring(message))
 	end
 
 	data.error = function(message)
-		print("RUNTIME: " .. message)
+		print("RUNTIME", message)
 
-		return LogService.CreateLog("error", message)
+		return LogService.CreateLog("error", tostring(message))
 	end
 
 	data.require = function(Instance)

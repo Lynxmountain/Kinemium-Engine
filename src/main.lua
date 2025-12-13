@@ -8,7 +8,7 @@ local Instance = require("@Instance")
 local ModuleScript = require("@ModuleScript")
 local Kinemium_env = require("./enviroment/get")
 local task = zune.task
-local threads = {}
+local threads = { internals = {}, game = {} }
 local Kinemium = {}
 local luacss = "./src/rblx/luacss/init.luau"
 
@@ -21,39 +21,50 @@ sandboxer.enviroment = Kinemium_env
 
 local game = Kinemium_env.game
 
-local function execute(path, entry, env)
-	if threads[path] then
+local function newThread(path, entry, env)
+	if threads.internals[path] or threads.game[path] then
 		return
 	end -- Prevent double execution
-	local code = filesystem.read(path)
-	local thread = task.spawn(function()
-		sandboxer.run(code, entry.name, env)
+	return sandboxer.newThread(path, entry, env)
+end
+
+local function loop(base, callback)
+	base = base or "src/sandboxed"
+	filesystem.entryloop(base, function(entry)
+		local path = base .. "/" .. entry.name
+
+		if entry.kind == "directory" then
+			loop(path, callback)
+		else
+			-- Call your callback for this file
+			callback(path, entry)
+		end
 	end)
-	threads[path] = thread
 end
 
-local function callback(entry, base, env)
-	local base = base or "src/sandboxed"
-	local path = base .. "/" .. entry.name
-
-	if entry.kind == "directory" then
-		filesystem.entryloop(path, function(e)
-			callback(e, path)
-		end)
-	else
-		execute(path, entry, env)
+loop("src/sandboxed/internals", function(path, entry)
+	if threads.internals[path] then
+		return
 	end
-end
-
-filesystem.entryloop("src/sandboxed/internals", function(e)
+	if threads.game[path] then
+		return
+	end
 	sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.Internals
-	callback(e, "src/sandboxed/internals")
+	print("Running internal:", path)
+	threads.internals[path] = sandboxer.thread.new(path, entry, sandboxer.enviroment)
 end)
 
 function Kinemium:playtest()
-	filesystem.entryloop("src/sandboxed", function(e)
+	loop("src/sandboxed", function(path, entry)
+		if threads.internals[path] then
+			return
+		end
+		if threads.game[path] then
+			return
+		end
 		sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.UserScript
-		callback(e, "src/sandboxed")
+		print("Running game:", path)
+		threads.game[path] = sandboxer.thread.new(path, entry, sandboxer.enviroment)
 	end)
 end
 
@@ -88,8 +99,6 @@ sandboxer.rblxrequire(luacss, function(code, path)
 end)
 --]]
 
-print(threads)
-
 renderer.Kinemium_camera.Parent = sandboxer.enviroment.workspace
 
 game.EngineSignal:Connect(function(route)
@@ -98,4 +107,6 @@ game.EngineSignal:Connect(function(route)
 	end
 end)
 
+Kinemium:playtest()
+print(threads)
 renderer.Run()

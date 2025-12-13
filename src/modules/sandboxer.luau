@@ -2,9 +2,12 @@ local sandboxer = {}
 
 local luau = zune.luau
 local fs = zune.fs
+local task = zune.task
+local filesystem = require("./filesystem")
 
 sandboxer.enviroment = {}
 sandboxer.native_code_gen = true
+sandboxer.thread = { active = {} }
 
 local function gsub(code)
 	-- transform into kinemium compatible code
@@ -56,6 +59,46 @@ function sandboxer.rblxrequire(path: string, callbackScript)
 		return result
 	end
 	return
+end
+
+-- Threads API
+function sandboxer.thread.new(path, entry, env)
+	local code = filesystem.read(path)
+	local thread = task.spawn(function()
+		sandboxer.run(code, entry.name, env)
+	end)
+	local info = { thread = thread, flags = { running = true } }
+	sandboxer.thread.active[path] = info
+
+	local wrapper = {}
+
+	function wrapper.set(prop, val)
+		sandboxer.thread.active[path][prop] = val
+		wrapper.info = sandboxer.thread.active[path][prop]
+
+		return wrapper
+	end
+
+	function wrapper.get()
+		wrapper.info = sandboxer.thread.active[path][prop]
+
+		return sandboxer.thread.active[path]
+	end
+
+	wrapper.info = sandboxer.thread.active[path][prop]
+
+	return wrapper
+end
+
+function sandboxer.thread.kill(thread)
+	thread.flags.running = false
+	task.cancel(thread.thread)
+end
+
+function sandboxer.thread.clear()
+	for _, thread in pairs(sandboxer.thread.active) do
+		sandboxer.thread.kill(thread)
+	end
 end
 
 return sandboxer

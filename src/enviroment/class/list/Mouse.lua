@@ -94,6 +94,11 @@ return {
 				instance.Y = position.Y
 				instance.IsMouseHidden = data.is_cursor_hidden
 				instance.IsMouseOutOfBounds = data.is_cursor_inbounds
+				instance.Target = data.Target
+				instance.target = data.target
+				instance.Hit = data.Hit
+				instance.hit = data.hit
+				instance.TargetSurface = data.TargetSurface
 
 				if mouse_wheel_move then
 					Move:Fire()

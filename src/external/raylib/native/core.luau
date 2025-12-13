@@ -661,6 +661,8 @@ return {
 		-- void SetMouseCursor(int cursor);
 		SetMouseCursor = fn(void, { int }),
 
+		GetRayCollisionMesh = fn(structs.RayCollision, { Ray, structs.Mesh, Matrix }),
+
 		-- int GetTouchX(void);
 		GetTouchX = fn(int, {}),
 		-- int GetTouchY(void);
@@ -671,6 +673,11 @@ return {
 		GetTouchPointId = fn(int, { int }),
 		-- int GetTouchPointCount(void);
 		GetTouchPointCount = fn(int, {}),
+
+		MatrixTranslate = fn(Matrix, { float, float, float }),
+		MatrixRotate = fn(Matrix, { Vector3, float }),
+		MatrixScale = fn(Matrix, { float, float, float }),
+		MatrixMultiply = fn(Matrix, { Matrix, Matrix }),
 
 		-- void SetGesturesEnabled(unsigned int flags);
 		SetGesturesEnabled = fn(void, { uint }),

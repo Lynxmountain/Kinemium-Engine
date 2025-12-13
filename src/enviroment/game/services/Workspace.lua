@@ -17,43 +17,26 @@ Workspace:SetProperties({
 	StreamingEnabled = false,
 })
 
-local function loopRegister(v, renderer)
-	local children = v:GetChildren()
-
-	for _, child in pairs(children) do
-		if allowed_to_render[child.ClassName] then
-			renderer.AddToRegistry(function()
-				return child
-			end)
-		end
-
-		v.ChildAdded:Connect(function(child)
-			if allowed_to_render[child.ClassName] then
-				renderer.AddToRegistry(function()
-					return child
-				end)
-			end
-		end)
-
-		if child.BaseClass and child.BaseClass == "Kinemium.light" then
-			renderer.AddToRegistry(function()
-				return child
-			end)
-		end
-	end
-
-	if allowed_to_render[v.ClassName] then
-		renderer.AddToRegistry(function()
-			return v
-		end)
-	end
-end
-
 Workspace.InitRenderer = function(renderer, signal)
 	signal:Connect(function(route, data) end)
 
-	Workspace.ChildAdded:Connect(function(v)
-		loopRegister(v, renderer)
+	for _, child in pairs(Workspace:GetDescendants()) do
+		if not allowed_to_render[child.ClassName] then
+			continue
+		end
+		renderer.AddToRegistry(function()
+			return child
+		end)
+	end
+
+	Workspace.DescendantAdded:Connect(function(v)
+		if not allowed_to_render[v.ClassName] then
+			return
+		end
+
+		renderer.AddToRegistry(function()
+			return v
+		end)
 	end)
 end
 

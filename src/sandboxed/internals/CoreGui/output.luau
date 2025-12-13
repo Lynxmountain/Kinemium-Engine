@@ -75,7 +75,6 @@ local function Color3ToRaylib(c, transparency)
 	})
 end
 
--- Add this at the top, outside window.stepped
 local scrollOffset = 0
 
 window.stepped = function(windowData)
@@ -96,20 +95,17 @@ window.stepped = function(windowData)
 		local totalHeight = #logs * (cellHeight + padding)
 		local targetOffset = 0
 
-		-- If total height exceeds window height, scroll to latest
 		if totalHeight > winHeight then
 			targetOffset = totalHeight - winHeight
 		end
 
-		-- Smoothly interpolate scrollOffset toward targetOffset
-		local scrollSpeed = 0.2 -- adjust speed (0-1), higher = faster
+		local scrollSpeed = 0.2
 		scrollOffset = scrollOffset + (targetOffset - scrollOffset) * scrollSpeed
 
 		for i, log in ipairs(logs) do
 			local cellY = winY + (i - 1) * (cellHeight + padding) - scrollOffset
 			local rect = { x = winX + 5, y = cellY, width = winWidth - 10, height = cellHeight }
 
-			-- skip drawing if outside window for performance
 			if cellY + cellHeight >= winY and cellY <= winY + winHeight then
 				local bgColor = (i % 2 == 0) and structs.Color:new({ r = 30, g = 30, b = 30, a = 255 })
 					or structs.Color:new({ r = 20, g = 20, b = 20, a = 255 })
@@ -131,7 +127,3 @@ window.stepped = function(windowData)
 		end
 	end
 end
-
-renderer.Add2DStack(function(data)
-	--aereon.step()
-end)

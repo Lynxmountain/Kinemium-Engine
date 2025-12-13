@@ -47,7 +47,7 @@ return function(lib)
 		local model = lib.LoadModelFromMesh(mesh)
 		modelRegistry[meshId] = model
 		print(`Generated mesh: {meshId} ({meshType})`)
-		return model
+		return { model, mesh }
 	end
 
 	local function PreloadStandardMeshes()

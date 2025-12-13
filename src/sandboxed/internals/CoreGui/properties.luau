@@ -166,7 +166,3 @@ window.stepped = function(windowData)
 		end
 	end
 end
-
-renderer.Add2DStack(function(data)
-	--aereon.step()
-end)
