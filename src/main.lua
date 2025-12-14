@@ -21,6 +21,8 @@ sandboxer.enviroment = Kinemium_env
 
 local game = Kinemium_env.game
 
+renderer.DatamodelObject(game)
+
 local function newThread(path, entry, env)
 	if threads.internals[path] or threads.game[path] then
 		return
@@ -108,5 +110,4 @@ game.EngineSignal:Connect(function(route)
 end)
 
 Kinemium:playtest()
-print(threads)
 renderer.Run()

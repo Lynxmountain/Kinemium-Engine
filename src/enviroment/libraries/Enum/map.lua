@@ -316,6 +316,17 @@ enumTable.Font = {
 	Unknown = "Unknown",
 }
 
+enumTable.Language = {
+	Luau = 1,
+	Lua = 2,
+	JavaScript = 3,
+	Python = 4,
+	C = 5,
+	["C++"] = 6,
+	["C#"] = 7,
+	Zig = 8,
+}
+
 enumTable.TextXAlignment = {
 	Left = 0,
 	Center = 1,

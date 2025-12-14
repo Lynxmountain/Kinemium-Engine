@@ -20,17 +20,15 @@ local classes = Instance.getClasses()
 local lastClickTime = {}
 local doubleClickThreshold = 0.3
 
-print("This is explorer.")
-
 if game.Context ~= Enum.GameContext.Editor then
 	return
 end
 
 local function DoubleClicked(instance)
-	if instance:IsA("Script") then
-		EngineSignal:Fire("idestate", true)
+	if instance:IsA("Script") or instance:IsA("ModuleScript") or instance:IsA("LocalScript") then
+		EngineSignal:Fire("idestate", true, instance)
 	else
-		EngineSignal:Fire("idestate", false)
+		EngineSignal:Fire("idestate", false, instance)
 	end
 end
 
@@ -228,6 +226,17 @@ local function handleSelection(instance, rectData, mousePos)
 	end
 end
 
+task.spawn(function()
+	for _, class in pairs(instanceTypes) do
+		if not loadedIcon[class] then
+			local png = KinemiumIconLoader.Get(class .. ".png")
+			if png then
+				loadedIcon[class] = KinemiumIconLoader.ToTexture(png)
+			end
+		end
+	end
+end)
+
 local addMenuScroll = {}
 
 local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
@@ -270,10 +279,11 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 			end
 		end
 
+		local scissorPadding = 2
 		rl.BeginScissorMode(
-			math.floor(menuX),
+			math.floor(menuX + scissorPadding),
 			math.floor(menuY + menuPadding),
-			math.floor(itemW),
+			math.floor(itemW - scissorPadding * 2),
 			math.floor(menuHeight - menuPadding * 2)
 		)
 
@@ -283,19 +293,12 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 			local itemRect = { x = itemX, y = itemY, width = itemW, height = itemH }
 
 			if itemY + itemH >= menuY and itemY <= menuY + menuHeight then
-				if not loadedIcon[class] then
-					local png = KinemiumIconLoader.Get(class .. ".png")
-					if png then
-						loadedIcon[class] = KinemiumIconLoader.ToTexture(png)
-					end
-				end
-
 				local isHovered = isMouseInRect(itemRect, mousePos)
 					and mousePos.y >= menuY + menuPadding
 					and mousePos.y <= menuY + menuHeight - menuPadding
 
 				if isHovered then
-					rl.DrawRectangle(itemX, itemY, itemW, itemH, Color3ToRaylib(Color3.new(0.2, 0.2, 0.2), 0))
+					rl.DrawRectangle(itemX, itemY, itemW, itemH, Color3ToRaylib(Color3.new(0.2, 0.2, 0.2), 1))
 
 					if rl.IsMouseButtonPressed(0) == 1 then
 						local success, newObj = pcall(Instance.new, class)

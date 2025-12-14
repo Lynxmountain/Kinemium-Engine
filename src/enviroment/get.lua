@@ -57,6 +57,9 @@ return function(renderer)
 	renderer.SetLightingService(mainDatamodel:GetService("Lighting"))
 	renderer.Kinemium_camera.Parent = mainDatamodel:GetService("Workspace")
 
+	local ScriptRunnerService = mainDatamodel:GetService("ScriptRunnerService")
+	ScriptRunnerService.InitEnviroment(data)
+
 	local LogService = mainDatamodel:GetService("LogService")
 
 	data.print = function(message)
@@ -86,7 +89,7 @@ return function(renderer)
 
 				data.script = Instance
 
-				local returned = sandboxer.run(source, Instance.Name, data)
+				local returned = ScriptRunnerService.RunScript(Instance)
 				if returned then
 					return returned
 				end

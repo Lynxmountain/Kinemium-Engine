@@ -35,7 +35,7 @@ function sandboxer.run(code, chunk, env)
 
 	setfenv(thread, setmetatable(env or sandboxer.enviroment, { __index = getfenv(1) }))
 
-	return thread()
+	return thread(), thread
 end
 
 function sandboxer.rblxrequire(path: string, callbackScript)

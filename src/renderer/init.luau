@@ -2,6 +2,7 @@
 --!native
 
 local raylib = require("./external/raylib")
+local task = zune.task
 --local raygui = require("@raygui")
 
 local signal = require("@Kinemium.signal")
@@ -13,6 +14,7 @@ local shader3d = require("./renderer/shader")
 local skybox = require("./renderer/skybox")
 local Enum = require("@EnumMap")
 local mainSignal = signal.new()
+local game
 
 local CFrame = require("@CFrame")
 local Instance = require("@Instance")
@@ -636,38 +638,39 @@ local function step(time)
 
 	--lib.BeginTextureMode(viewport)
 	lib.BeginDrawing()
-	lib.BeginMode3D(camera)
-	lib.ClearBackground(const.BLUE)
 
-	--lib.rlEnableBackfaceCulling()
+	if game and game.Dimension == Enum.Dimension["3D"] then
+		lib.BeginMode3D(camera)
+		lib.ClearBackground(const.BLUE)
+		lib.rlEnableBackfaceCulling()
 
-	for _, part in pairs(partRegistry) do
-		local partData = part()
-		if not partData then
-			continue
+		for _, part in pairs(partRegistry) do
+			task.spawn(function()
+				local partData = part()
+				if not partData then
+					return
+				end
+				if partData.BaseClass == "Kinemium.light" then
+					table.insert(activeLights, {
+						pos = { partData.Position.X, partData.Position.Y, partData.Position.Z },
+						intensity = partData.Range,
+						color = { partData.Color.R / 255, partData.Color.G / 255, partData.Color.B / 255 },
+					})
+				end
+				drawPart(partData)
+			end)
 		end
-		if partData.BaseClass == "Kinemium.light" then
-			table.insert(activeLights, {
-				pos = { partData.Position.X, partData.Position.Y, partData.Position.Z },
-				intensity = partData.Range,
-				color = { partData.Color.R / 255, partData.Color.G / 255, partData.Color.B / 255 },
-			})
-		else
-			drawPart(partData)
+
+		skybox.draw(lib, cameraPos)
+
+		shader3d(lib, loopshader, lighting, const, cameraPos, activeLights, SetShaderUniform, time)
+
+		for _, v in pairs(renderPool3d) do
+			v(runtimelib)
 		end
+		lib.rlDisableBackfaceCulling()
+		lib.EndMode3D()
 	end
-
-	skybox.draw(lib, cameraPos)
-
-	shader3d(lib, loopshader, lighting, const, cameraPos, activeLights, SetShaderUniform, time)
-
-	for _, v in pairs(renderPool3d) do
-		v(runtimelib)
-	end
-	lib.EndShaderMode()
-	--lib.rlDisableBackfaceCulling()
-
-	lib.EndMode3D()
 	--lib.EndTextureMode()
 
 	for _, gui in pairs(guiRegistry) do
@@ -710,6 +713,19 @@ return {
 	AddToRegistry = function(data)
 		table.insert(partRegistry, data)
 		mainSignal:Fire("AddedPartToRenderPool", data())
+	end,
+	GetPool3D = function()
+		local results = {}
+
+		for _, part in pairs(partRegistry) do
+			local data = part()
+			table.insert(results, data)
+		end
+
+		return results
+	end,
+	DatamodelObject = function(object)
+		game = object
 	end,
 	Step = step,
 	AddToGuiRenderingPool = function(object, renderFn)

@@ -7,6 +7,7 @@ local propTable = {
 	Name = "ModuleScript",
 	Source = [[]],
 	RunContext = Enum.RunContext.Client,
+	Language = Enum.Language.Luau,
 }
 
 return {

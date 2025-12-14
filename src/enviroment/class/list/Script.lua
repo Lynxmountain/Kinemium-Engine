@@ -5,8 +5,11 @@ local Enum = require("@EnumMap")
 
 local propTable = {
 	Name = "Script",
-	Source = [[]],
+	Source = [[
+		print("Hello Kinemium!");
+	]],
 	RunContext = Enum.RunContext.Server,
+	Language = Enum.Language.Luau,
 }
 
 return {

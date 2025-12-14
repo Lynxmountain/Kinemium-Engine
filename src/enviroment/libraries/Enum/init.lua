@@ -2,10 +2,6 @@ local Enum = {}
 local EnumItem = {}
 EnumItem.__index = EnumItem
 
-function EnumItem:__tostring()
-	return self.EnumType.Name .. "." .. self.Name
-end
-
 function EnumItem:IsA(value)
 	return self.EnumType == value
 end
@@ -18,7 +14,7 @@ function Enum.new(api)
 		local enumType = {}
 		enumType.Name = enumName
 		enumType.__index = enumType
-		enumType.EnumType = enumType -- roblox-style
+		enumType.EnumType = enumType
 
 		-- add items
 		for itemName, itemValue in pairs(items) do

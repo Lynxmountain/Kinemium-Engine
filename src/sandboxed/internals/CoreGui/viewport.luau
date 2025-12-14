@@ -3,6 +3,7 @@
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
+local KinemiumIDE = game:GetService("KinemiumIDE")
 local EngineSignal = game.EngineSignal
 
 local Players = game:GetService("Players")
@@ -98,10 +99,20 @@ end)
 --]]
 
 local enableIDE = false
+local currentObject
 
-EngineSignal:Connect(function(route, value)
+EngineSignal:Connect(function(route, value, Script)
 	if route == "idestate" then
-		enableIDE = value
+		if value == true then
+			--KinemiumIDE.Open()
+			ide.text:clear()
+			ide.text:insertString(Script.Source)
+			enableIDE = true
+			currentObject = Script
+		else
+			enableIDE = false
+			currentObject = nil
+		end
 	end
 end)
 
@@ -115,7 +126,15 @@ renderer.Add2DStack(function(data)
 	local viewportHeight = screenHeight - toolbarHeight - screenHeight * 0.2
 	if enableIDE then
 		ide.draw(viewportX, viewportY, vector.create(viewportWidth, viewportHeight), 50)
+		if currentObject then
+			currentObject.Source = ide:getCode()
+		end
 	end
+	--[[
 	EngineSignal:Fire("ideText", ide:getCode())
+	if enableIDE then
+		print(KinemiumIDE.GetText())
+	end
+	--]]
 	aereon.step()
 end)

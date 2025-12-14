@@ -38,6 +38,11 @@ function DataModel.new(RENDERER, ...)
 		return self.Services[v]
 	end
 
+	function self:AddService(ServiceObject)
+		ServiceObject.Parent = self
+		self.Services[ServiceObject.Name] = ServiceObject
+	end
+
 	return self
 end
 

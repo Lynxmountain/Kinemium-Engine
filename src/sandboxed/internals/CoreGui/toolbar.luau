@@ -45,7 +45,9 @@ local categoryRegistry = {
 				type = "ImageButton",
 				text = "Playtest",
 				callback = function()
-					print("hello world")
+					local playtestService = game:GetService("PlaytestService")
+					print("playtesting..")
+					playtestService.CreatePlaytestAsync()
 				end,
 				hoverTransparency = 0.5,
 				hoverColor = Color3.new(0, 0, 0),
@@ -56,7 +58,10 @@ local categoryRegistry = {
 				type = "ImageButton",
 
 				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+
 					print("Stopping the simulation")
+					playtestService.StopCurrentPlaytest()
 				end,
 				hoverTransparency = 0.5,
 				hoverColor = Color3.new(1, 0, 0),
