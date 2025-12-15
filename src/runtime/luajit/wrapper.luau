@@ -1,18 +1,18 @@
--- lua bindings
--- this was made to load lua libraries that are not luau
--- (yes i was that lazy to make bindings for the libraries i want)
+-- luajit bindings
+-- similar to lua but has some tweaks
+-- can run libraries (no shit)
 
-local dll = "./src/runtime/lua/bin/"
+local dll = "./src/runtime/luajit/bin/"
 local ffi = zune.ffi
 local platform = zune.platform
 
 local libname
 if platform.os == "windows" then
-	libname = "lua54.dll"
+	libname = "luajit.dll"
 elseif platform.os == "linux" then
-	libname = "lua54.so"
+	libname = "luajit.so"
 elseif platform.os == "macos" then
-	libname = "lua54.dylib"
+	libname = "luajit.dylib"
 end
 
 local funcs = {
@@ -37,9 +37,9 @@ local funcs = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64, ffi.types.pointer, ffi.types.pointer },
 	},
-	lua_pcallk = {
+	lua_pcall = {
 		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.i32, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.i32 },
 	},
 
 	lua_gettop = {
@@ -58,21 +58,9 @@ local funcs = {
 		returns = ffi.types.pointer,
 		args = { ffi.types.pointer, ffi.types.i32 },
 	},
-	lua_absindex = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.i32 },
-	},
 	lua_pushvalue = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.i32 },
-	},
-	lua_rotate = {
-		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
-	},
-	lua_copy = {
-		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
 	},
 
 	lua_pushnil = {
@@ -88,11 +76,11 @@ local funcs = {
 		args = { ffi.types.pointer, ffi.types.i64 },
 	},
 	lua_pushlstring = {
-		returns = ffi.types.void, -- Changed from pointer
+		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.u64 },
 	},
 	lua_pushstring = {
-		returns = ffi.types.void, -- Changed from pointer
+		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer },
 	},
 	lua_pushboolean = {
@@ -149,25 +137,13 @@ local funcs = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.i32 },
 	},
-	lua_isinteger = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.i32 },
-	},
 	lua_isuserdata = {
 		returns = ffi.types.i32,
 		args = { ffi.types.pointer, ffi.types.i32 },
 	},
 
-	lua_getglobal = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.pointer },
-	},
-	lua_setglobal = {
-		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer },
-	},
 	lua_gettable = {
-		returns = ffi.types.i32,
+		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.i32 },
 	},
 	lua_settable = {
@@ -175,20 +151,20 @@ local funcs = {
 		args = { ffi.types.pointer, ffi.types.i32 },
 	},
 	lua_getfield = {
-		returns = ffi.types.i32,
+		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
 	lua_setfield = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.i32, ffi.types.pointer },
 	},
-	lua_geti = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i64 },
-	},
-	lua_seti = {
+	lua_rawgeti = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i64 },
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
+	},
+	lua_rawseti = {
+		returns = ffi.types.void,
+		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32 },
 	},
 	lua_createtable = {
 		returns = ffi.types.void,
@@ -204,22 +180,14 @@ local funcs = {
 	},
 
 	lua_rawget = {
-		returns = ffi.types.i32,
+		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.i32 },
 	},
 	lua_rawset = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.i32 },
 	},
-	lua_rawgeti = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i64 },
-	},
-	lua_rawseti = {
-		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i64 },
-	},
-	lua_rawlen = {
+	lua_objlen = {
 		returns = ffi.types.u64,
 		args = { ffi.types.pointer, ffi.types.i32 },
 	},
@@ -235,14 +203,6 @@ local funcs = {
 	lua_concat = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.i32 },
-	},
-	lua_len = {
-		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.i32 },
-	},
-	lua_compare = {
-		returns = ffi.types.i32,
-		args = { ffi.types.pointer, ffi.types.i32, ffi.types.i32, ffi.types.i32 },
 	},
 
 	luaL_checktype = {
@@ -313,6 +273,19 @@ local LUA_ERRERR = 5
 local LuaVM = {}
 LuaVM.__index = LuaVM
 
+local LUA_GLOBALSINDEX = -10002
+local LUA_ENVIRONINDEX = -10001
+local LUA_REGISTRYINDEX = -10000
+
+-- Helper functions for macros (not real exported functions)
+local function lua_getglobal(L, name_ptr)
+	lua_lib.lua_getfield(L, LUA_GLOBALSINDEX, name_ptr)
+end
+
+local function lua_setglobal(L, name_ptr)
+	lua_lib.lua_setfield(L, LUA_GLOBALSINDEX, name_ptr)
+end
+
 function LuaVM.new()
 	local self = setmetatable({}, LuaVM)
 	self.L = lua_lib.luaL_newstate()
@@ -326,15 +299,21 @@ function LuaVM.new()
 	return self
 end
 
+function LuaVM:_absindex(index: number): number
+	if index > 0 or index <= LUA_REGISTRYINDEX then
+		return index
+	else
+		return lua_lib.lua_gettop(self.L) + index + 1
+	end
+end
+
 function LuaVM:execute(code: string): (boolean, any, string?)
 	code = string.gsub(code, "%z+$", "")
 
-	-- Store buffer as instance variable to prevent GC
 	self._temp_buffer = buffer.fromstring(code)
 
 	local load_result = lua_lib.luaL_loadbufferx(self.L, self._temp_buffer, #code, buffer.fromstring("=(execute)"), nil)
 
-	-- Clear temp buffer after use
 	local success = load_result == LUA_OK
 
 	if not success then
@@ -343,8 +322,7 @@ function LuaVM:execute(code: string): (boolean, any, string?)
 		return false, nil, err_msg or "Failed to load Lua code"
 	end
 
-	-- Changed from 0 to -1 to return all results (LUA_MULTRET)
-	local exec_result = lua_lib.lua_pcallk(self.L, 0, -1, 0, nil, nil)
+	local exec_result = lua_lib.lua_pcall(self.L, 0, 1, 0)
 
 	if exec_result ~= LUA_OK then
 		local err_msg = self:_popString()
@@ -352,15 +330,8 @@ function LuaVM:execute(code: string): (boolean, any, string?)
 		return false, nil, err_msg or "Runtime error in Lua code"
 	end
 
-	-- Get the return value (if any)
-	local ret = nil
-	local top = lua_lib.lua_gettop(self.L)
-	if top > 0 then
-		ret = self:_getValue(-1)
-	end
-
-	-- Clean up the stack
-	lua_lib.lua_settop(self.L, 0)
+	local ret = self:_getValue(-1)
+	lua_lib.lua_settop(self.L, -2)
 	self._temp_buffer = nil
 
 	return true, ret, nil
@@ -376,7 +347,7 @@ function LuaVM:executeFile(filename: string): (boolean, string?)
 		return false, err_msg or "Failed to load Lua file"
 	end
 
-	local exec_result = lua_lib.lua_pcallk(self.L, 0, 0, 0, nil, nil)
+	local exec_result = lua_lib.lua_pcall(self.L, 0, 0, 0)
 
 	if exec_result ~= LUA_OK then
 		local err_msg = self:_popString()
@@ -401,7 +372,9 @@ function LuaVM:call(funcName: string, ...): (boolean, any)
 	local args = { ... }
 
 	local fname_ptr = buffer.fromstring(funcName)
-	local func_type = lua_lib.lua_getglobal(self.L, fname_ptr)
+	lua_getglobal(self.L, fname_ptr)
+
+	local func_type = lua_lib.lua_type(self.L, -1)
 
 	if func_type ~= LUA_TFUNCTION then
 		lua_lib.lua_settop(self.L, -2)
@@ -412,7 +385,7 @@ function LuaVM:call(funcName: string, ...): (boolean, any)
 		self:_pushValue(arg)
 	end
 
-	local result = lua_lib.lua_pcallk(self.L, #args, 1, 0, nil, nil)
+	local result = lua_lib.lua_pcall(self.L, #args, 1, 0)
 
 	if result ~= LUA_OK then
 		local err_msg = self:_popString()
@@ -428,16 +401,14 @@ end
 function LuaVM:setGlobal(name: string, value: any)
 	self:_pushValue(value)
 	local name_ptr = buffer.fromstring(name)
-	lua_lib.lua_setglobal(self.L, name_ptr)
+	lua_setglobal(self.L, name_ptr)
 end
 
 function LuaVM:getGlobal(name: string): any
 	local name_ptr = buffer.fromstring(name)
-	lua_lib.lua_getglobal(self.L, name_ptr)
-
+	lua_getglobal(self.L, name_ptr)
 	local value = self:_getValue(-1)
 	lua_lib.lua_settop(self.L, -2)
-
 	return value
 end
 
@@ -486,21 +457,11 @@ function LuaVM:_getValue(index: number): any
 	elseif lua_type == LUA_TBOOLEAN then
 		return lua_lib.lua_toboolean(self.L, index) ~= 0
 	elseif lua_type == LUA_TNUMBER then
-		if lua_lib.lua_isinteger(self.L, index) ~= 0 then
-			local val = lua_lib.lua_tointegerx(self.L, index, ffi.null)
-			-- i64 returns as buffer, read lower 32 bits
-			if type(val) == "buffer" then
-				return buffer.readi32(val, 0) -- Read as 32-bit signed int
-			end
-			return val
-		else
-			local val = lua_lib.lua_tonumberx(self.L, index, ffi.null)
-			-- double might also return as buffer
-			if type(val) == "buffer" then
-				return buffer.readf64(val, 0)
-			end
-			return val
+		local val = lua_lib.lua_tonumberx(self.L, index, nil)
+		if type(val) == "buffer" then
+			return buffer.readf64(val, 0)
 		end
+		return val
 	elseif lua_type == LUA_TSTRING then
 		return self:_getString(index)
 	elseif lua_type == LUA_TTABLE then
@@ -520,7 +481,7 @@ end
 
 function LuaVM:_getTable(index: number): { [any]: any }
 	local result = {}
-	local abs_index = lua_lib.lua_absindex(self.L, index)
+	local abs_index = self:_absindex(index)
 
 	lua_lib.lua_pushnil(self.L)
 

@@ -33,8 +33,7 @@ function buffer:backspace()
 	end
 
 	local prevLine = self.lines[c.line - 1]
-	local merged = prevLine .. line
-	self.lines[c.line - 1] = merged
+	self.lines[c.line - 1] = prevLine .. line
 
 	table.remove(self.lines, c.line)
 
@@ -82,7 +81,8 @@ function buffer:moveUp()
 	local c = self.cursor
 	if c.line > 1 then
 		c.line -= 1
-		c.col = math.min(c.col, #self.lines[c.line] + 1)
+		local len = self._lineLengths and self._lineLengths[c.line] or #self.lines[c.line]
+		c.col = math.min(c.col, len + 1)
 	end
 end
 
@@ -90,7 +90,8 @@ function buffer:moveDown()
 	local c = self.cursor
 	if c.line < #self.lines then
 		c.line += 1
-		c.col = math.min(c.col, #self.lines[c.line] + 1)
+		local len = self._lineLengths and self._lineLengths[c.line] or #self.lines[c.line]
+		c.col = math.min(c.col, len + 1)
 	end
 end
 
@@ -104,20 +105,36 @@ function buffer:delete()
 	end
 
 	if c.line < #self.lines then
-		self.lines[c.line] ..= self.lines[c.line + 1]
+		self.lines[c.line] = self.lines[c.line] .. self.lines[c.line + 1]
 		table.remove(self.lines, c.line + 1)
 	end
 end
 
 function buffer:insertString(str)
-	for i = 1, #str do
-		local ch = str:sub(i, i)
-		if ch == "\n" then
-			self:newline()
-		else
-			self:insertChar(ch)
-		end
+	local lines = string.split(str, "\n")
+	if #lines == 1 then
+		local c = self.cursor
+		local line = self.lines[c.line]
+		self.lines[c.line] = line:sub(1, c.col - 1) .. lines[1] .. line:sub(c.col)
+		c.col += #lines[1]
+		return
 	end
+
+	local c = self.cursor
+	local line = self.lines[c.line]
+	local left = line:sub(1, c.col - 1)
+	local right = line:sub(c.col)
+
+	self.lines[c.line] = left .. lines[1]
+
+	for i = 2, #lines - 1 do
+		table.insert(self.lines, c.line + i - 1, lines[i])
+	end
+
+	table.insert(self.lines, c.line + #lines - 1, lines[#lines] .. right)
+
+	c.line += #lines - 1
+	c.col = #lines[#lines] + 1
 end
 
 function buffer:getText()

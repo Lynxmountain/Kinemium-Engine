@@ -9,21 +9,24 @@ local ScriptRunnerService = Instance.new("ScriptRunnerService")
 ScriptRunnerService.ExplorerHidden = true
 
 --local lua = require("@lua")
-local python = require("@python")
-local duktape = require("@duktape")
-local threads = { luau = {}, python = {}, duktape = {} }
+
+local threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
 
 ScriptRunnerService.InitEnviroment = function(enviroment)
 	ScriptRunnerService:SetProperties({
 		RunLuauScript = function(ScriptInstance)
 			local object = task.spawn(function()
+				enviroment.script = ScriptInstance
 				sandboxer.run(ScriptInstance.Source, ScriptInstance.Name, enviroment)
+				enviroment.script = nil
 			end)
 			threads.luau[ScriptInstance.Name] = object
 			return object
 		end,
 
 		RunPythonScript = function(ScriptInstance)
+			local python = require("@python")
+
 			local VM = python.PythonVM.new()
 
 			for k, p in pairs(enviroment) do
@@ -36,6 +39,8 @@ ScriptRunnerService.InitEnviroment = function(enviroment)
 		end,
 
 		RunDuktapeScript = function(ScriptInstance)
+			local duktape = require("@duktape")
+
 			local object = task.spawn(function()
 				local VM = duktape.DuktapeVM.new()
 

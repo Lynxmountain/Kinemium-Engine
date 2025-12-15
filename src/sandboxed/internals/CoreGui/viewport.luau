@@ -4,6 +4,7 @@ local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local KinemiumIDE = game:GetService("KinemiumIDE")
+local DiscordRPC = game:GetService("DiscordRPC")
 local EngineSignal = game.EngineSignal
 
 local Players = game:GetService("Players")
@@ -109,9 +110,11 @@ EngineSignal:Connect(function(route, value, Script)
 			ide.text:insertString(Script.Source)
 			enableIDE = true
 			currentObject = Script
+			DiscordRPC.ChangeDetail(`Editing {Script.Name}`)
 		else
 			enableIDE = false
 			currentObject = nil
+			DiscordRPC.ChangeDetail(`idle..`)
 		end
 	end
 end)

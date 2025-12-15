@@ -95,5 +95,17 @@ No?
 # How do I spell Kinemium?
 Ki-nem-yum!!
 
+# Open-sourced projects used in the engine
+- Raylib
+- Lua
+- LuaJIT
+- Python
+- Duktape
+- lua-discordrpc
+- lua-webview
+- jolt
+- r3d
+- moonode
+
 # Do you like cats?
 <img width="444" height="200" alt="Cat...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />

@@ -5,25 +5,10 @@ local ideBuffer = require("./idebuffer")
 local EnumMap = require("@EnumMap")
 local Color3 = require("@Color3")
 local syntax = require("./syntax")
+local autocomplete = require("./autocomplete")
 local task = zune.task
 local structs = rl.structs
 local const = rl.const
-
-local completions = {
-	"function",
-	"local",
-	"return",
-	"end",
-	"if",
-	"then",
-	"else",
-	"elseif",
-	"while",
-	"for",
-	"do",
-	"break",
-	"continue",
-}
 
 local function Color3ToRaylib(c, transparency)
 	local r, g, b = c:ToRGB()
@@ -35,60 +20,17 @@ local function Color3ToRaylib(c, transparency)
 	})
 end
 
-local function getCurrentWord(editor)
-	local c = editor.text.cursor
-	local line = editor.text.lines[c.line] or ""
-	local beforeCursor = line:sub(1, c.col - 1)
-
-	local word = beforeCursor:match("([%w_]+)$") or ""
-	return word
-end
-
-local function updateAutocomplete(editor)
-	local word = getCurrentWord(editor)
-
-	if #word == 0 then
-		editor.autocomplete.visible = false
-		return
-	end
-
-	local allItems = completions
-
-	editor.autocomplete.items = {}
-	for _, item in ipairs(allItems) do
-		if item:sub(1, #word):lower() == word:lower() and item ~= word then
-			table.insert(editor.autocomplete.items, item)
-		end
-	end
-
-	if #editor.autocomplete.items > 0 then
-		editor.autocomplete.visible = true
-		editor.autocomplete.selectedIndex = 1
-	else
-		editor.autocomplete.visible = false
-	end
-end
-
-local function completeWord(editor)
-	if not editor.autocomplete.visible or #editor.autocomplete.items == 0 then
-		return
-	end
-
-	local selectedItem = editor.autocomplete.items[editor.autocomplete.selectedIndex]
-	local currentWord = getCurrentWord(editor)
-
-	for i = 1, #currentWord do
-		editor.text:backspace()
-	end
-
-	editor.text:insertString(selectedItem)
-	editor.autocomplete.visible = false
-end
-
 return function(raylib: typeof(rl.lib), theme, aereon, game)
 	local rect = aereon.rect()
 	local editor = {}
 	local KinemiumFontService = game:GetService("KinemiumFontService")
+	local IconLoader = game:GetService("KinemiumIconLoader")
+
+	local icons = {
+		constant = "./src/assets/images/icons/vanilla3/general/32x/200/WireframeRendering.png",
+		functionVar = "./src/assets/images/icons/vanilla3/general/32x/200/Function.png",
+	}
+
 	local vend = KinemiumFontService.GetMonoFontDefault()
 
 	local function measureTextWidth(text, fontSize, spacing)
@@ -134,6 +76,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		Color3ToRaylib(theme.TextColor, 0),
 		Color3ToRaylib(theme.currentLineColor, 0)
 
+	local autocompletetheme = theme.autocomplete
+
 	editor.text = ideBuffer.create()
 	editor.text.lines = {}
 	editor.isActive = false
@@ -143,23 +87,21 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 	editor.autocomplete = {
 		visible = false,
-		items = { "function", "local", "return", "end", "if", "then" },
+		items = autocomplete.completions,
 		selectedIndex = 1,
 		currentX = 0,
 		currentY = 0,
 		targetX = 0,
 		targetY = 0,
-		lerpSpeed = 15,
+		lerpSpeed = 35,
 	}
 
 	function editor:getCode()
-		local source = ""
-
-		for _, line in ipairs(editor.text.lines) do
-			source ..= line .. "\n"
+		local buf = table.create(#editor.text.lines)
+		for i, line in ipairs(editor.text.lines) do
+			buf[i] = line
 		end
-
-		return source
+		return table.concat(buf, "\n")
 	end
 
 	editor.scrollY = 0
@@ -173,7 +115,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			editor.caretTimer = editor.caretTimer - editor.caretBlinkRate
 		end
 
-		local padding = 10
+		local padding = 20
 		local fontSize = 18
 		local lineHeight = fontSize + 4
 		local spacing = 1
@@ -218,7 +160,33 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 			local yLine = y + padding + (i - 1) * lineHeight - editor.scrollY
 
-			local tokens = syntax.highlight(line)
+			local indentLevel = autocomplete.getIndentLevel(line)
+			local indentWidth = 14
+			local indentStartX = x + gutterwidth + padding
+
+			for lvl = 1, indentLevel do
+				local rx = indentStartX + (lvl - 1) * indentWidth
+
+				raylib.DrawRectangle(
+					rx,
+					yLine,
+					2,
+					lineHeight,
+					structs.Color:new({
+						r = 255,
+						g = 255,
+						b = 255,
+						a = 40, -- transparency
+					})
+				)
+			end
+
+			editor._highlightCache = editor._highlightCache or {}
+			local tokens = editor._highlightCache[i]
+			if not tokens then
+				tokens = syntax.highlight(line)
+				editor._highlightCache[i] = tokens
+			end
 
 			local lineNumberText = tostring(i)
 			local lineNumberX = x + padding
@@ -226,9 +194,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 			local xPos = x + gutterwidth + padding
 			for _, tok in ipairs(tokens) do
-				task.spawn(function()
-					raylib.DrawTextEx(vend, tok.text, vector.create(xPos, yLine), fontSize, spacing, tok.color)
-				end)
+				raylib.DrawTextEx(vend, tok.text, vector.create(xPos, yLine), fontSize, spacing, tok.color)
+
 				xPos += raylib.MeasureTextEx(vend, tok.text, fontSize, spacing).x
 			end
 		end
@@ -238,7 +205,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			local char = string.char(byte)
 			if byte ~= 0 then
 				editor.text:insertChar(char)
-				updateAutocomplete(editor)
+				autocomplete.updateAutocomplete(editor)
+				editor._highlightCache = {}
 			end
 		end
 
@@ -293,101 +261,46 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			end
 		end
 
-		-- AUTOCOMPLETE with smooth lerp animation
-		if editor.isActive and editor.autocomplete.visible then
-			local c = editor.text.cursor
-			local textBeforeCursor = editor.text.lines[c.line]:sub(1, c.col - 1)
-			local cx = x + gutterwidth + padding + measureTextWidth(textBeforeCursor, fontSize, spacing)
-			local cy = y + padding + (c.line - 1) * lineHeight - editor.scrollY
-
-			local acWidth = 200
-			local acItemHeight = 20
-			local acHeight = #editor.autocomplete.items * acItemHeight
-			local acPadding = 5
-
-			-- Calculate target position
-			local targetX = cx
-			local targetY = cy - acHeight - 5
-
-			if targetY < y then
-				targetY = cy + lineHeight + 5
-			end
-
-			-- Update target
-			editor.autocomplete.targetX = targetX
-			editor.autocomplete.targetY = targetY
-
-			-- Smooth lerp to target position
-			local lerpFactor = 1 - math.exp(-editor.autocomplete.lerpSpeed * dt)
-			editor.autocomplete.currentX = editor.autocomplete.currentX
-				+ (targetX - editor.autocomplete.currentX) * lerpFactor
-			editor.autocomplete.currentY = editor.autocomplete.currentY
-				+ (targetY - editor.autocomplete.currentY) * lerpFactor
-
-			-- Use lerped position for rendering
-			local acX = editor.autocomplete.currentX
-			local acY = editor.autocomplete.currentY
-
-			raylib.DrawRectangle(acX, acY, acWidth, acHeight, theme_secondary)
-			raylib.DrawRectangleLines(acX, acY, acWidth, acHeight, theme_text)
-
-			for i, item in ipairs(editor.autocomplete.items) do
-				local itemY = acY + (i - 1) * acItemHeight
-
-				if i == editor.autocomplete.selectedIndex then
-					raylib.DrawRectangle(
-						acX + 1,
-						itemY + 1,
-						acWidth - 2,
-						acItemHeight - 2,
-						Color3ToRaylib(Color3.new(0.2, 0.3, 0.5), 0)
-					)
-				end
-
-				raylib.DrawTextEx(
-					vend,
-					item,
-					vector.create(acX + acPadding, itemY + 2),
-					fontSize - 2,
-					spacing,
-					theme_text
-				)
-			end
-		else
-			-- Reset position when hidden
-			editor.autocomplete.currentX = editor.autocomplete.targetX or 0
-			editor.autocomplete.currentY = editor.autocomplete.targetY or 0
-		end
-
-		if editor.autocomplete.visible then
-			if raylib.IsKeyPressed(const.KeyboardKey.KEY_DOWN) == 1 then
-				editor.autocomplete.selectedIndex =
-					math.min(editor.autocomplete.selectedIndex + 1, #editor.autocomplete.items)
-			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_UP) == 1 then
-				editor.autocomplete.selectedIndex = math.max(editor.autocomplete.selectedIndex - 1, 1)
-			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_ENTER) == 1 then
-				local selectedItem = editor.autocomplete.items[editor.autocomplete.selectedIndex]
-				editor.text:insertString(selectedItem)
-				editor.autocomplete.visible = false
-			elseif raylib.IsKeyPressed(const.KeyboardKey.KEY_ESCAPE) == 1 then
-				editor.autocomplete.visible = false
-			end
-		end
+		-- AUTOCOMPLETE
+		autocomplete.step(
+			editor,
+			x,
+			gutterwidth,
+			padding,
+			measureTextWidth,
+			fontSize,
+			5,
+			lineHeight,
+			autocompletetheme,
+			rect,
+			raylib,
+			Color3ToRaylib,
+			vend,
+			spacing,
+			theme_text,
+			theme_secondary,
+			y,
+			dt
+		)
 
 		if editor.isActive then
 			if raylib.IsKeyPressed(const.KeyboardKey.KEY_TAB) == 1 then
 				if editor.autocomplete.visible then
-					completeWord(editor)
+					autocomplete.completeWord(editor)
+					editor._highlightCache = {}
 				else
 					editor.text:insertChar("\t")
+					editor._highlightCache = {}
 				end
 			end
 
 			if raylib.IsKeyPressed(const.KeyboardKey.KEY_ENTER) == 1 then
 				if editor.autocomplete.visible then
-					completeWord(editor)
+					autocomplete.completeWord(editor)
+					editor._highlightCache = {}
 				else
 					editor.text:newline()
+					editor._highlightCache = {}
 				end
 			end
 
@@ -399,7 +312,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 			if raylib.IsKeyPressed(const.KeyboardKey.KEY_BACKSPACE) == 1 then
 				editor.text:backspace()
-				updateAutocomplete(editor)
+				autocomplete.updateAutocomplete(editor)
+				editor._highlightCache = {}
 			end
 
 			-- paste
@@ -413,31 +327,32 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 			else
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_LEFT) == 1 then
 					editor.text:moveLeft()
-					updateAutocomplete(editor)
+					autocomplete.updateAutocomplete(editor)
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_RIGHT) == 1 then
 					editor.text:moveRight()
-					updateAutocomplete(editor)
+					autocomplete.updateAutocomplete(editor)
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_UP) == 1 then
 					editor.text:moveUp()
-					updateAutocomplete(editor)
+					autocomplete.updateAutocomplete(editor)
 				end
 				if raylib.IsKeyPressed(const.KeyboardKey.KEY_DOWN) == 1 then
 					editor.text:moveDown()
-					updateAutocomplete(editor)
+					autocomplete.updateAutocomplete(editor)
 				end
 			end
 
 			if raylib.IsKeyDown(341) == 1 then
-				if raylib.IsKeyDown(86) == 1 then
+				if raylib.IsKeyReleased(86) == 1 then
 					local text = raylib.GetClipboardText()
 					local bufferLength = buffer.len(text:span())
 					local data = buffer.readstring(text:span(), 0, bufferLength - 1)
 					data = string.gsub(data, "\r\n", "\n")
 					data = string.gsub(data, "\r", "\n")
 					editor.text:insertString(data)
-					updateAutocomplete(editor)
+					autocomplete.updateAutocomplete(editor)
+					editor._highlightCache = {}
 				end
 			end
 		end

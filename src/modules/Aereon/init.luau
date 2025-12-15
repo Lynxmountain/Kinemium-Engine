@@ -14,7 +14,7 @@ local Color3 = require("@Color3")
 -- components
 local window = require("./Aereon/window")
 local rect = require("./Aereon/rect")
-local ide = require("./Aereon/scripteditor")
+local ide = require("./Aereon/ide/scripteditor")
 
 -- config Data
 local config = {}
@@ -44,6 +44,19 @@ local themes = {
 			SecondaryBackgroundColor = Color3.new(0.07, 0.07, 0.07),
 			TextColor = Color3.new(1, 1, 1),
 			currentLineColor = Color3.new(0.2, 0.2, 0.2),
+
+			autocomplete = {
+				BackgroundColor = Color3.new(0.07, 0.07, 0.07),
+				OutlineColor = Color3.new(1, 1, 1),
+				ItemSelectColor = Color3.new(0, 0, 0.3),
+				OutlineThickness = 0.6,
+				OutlineTransparency = 0.8,
+				CornerRadius = 0.2,
+
+				Width = 200,
+				Height = 20,
+				ListPadding = 5,
+			},
 		},
 	},
 }

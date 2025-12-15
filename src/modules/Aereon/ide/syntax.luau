@@ -47,6 +47,7 @@ local stdlib = {
 	["type"] = true,
 	["error"] = true,
 	["assert"] = true,
+	["typeof"] = true,
 }
 
 local operators = {
