@@ -12,15 +12,23 @@ ScriptRunnerService.ExplorerHidden = true
 
 local threads = { luau = {}, python = {}, duktape = {}, quickjs = {}, luajit = {} }
 
-ScriptRunnerService.InitEnviroment = function(enviroment)
+ScriptRunnerService.InitEnviroment = function(enviroment, datamodel)
 	ScriptRunnerService:SetProperties({
 		RunLuauScript = function(ScriptInstance)
+			local LogService = datamodel:GetService("LogService")
+			local outsideSuccess, outsideResult
 			local object = task.spawn(function()
 				enviroment.script = ScriptInstance
-				sandboxer.run(ScriptInstance.Source, ScriptInstance.Name, enviroment)
+				local thread, success, result = sandboxer.run(ScriptInstance.Source, ScriptInstance.Name, enviroment)
 				enviroment.script = nil
+				outsideSuccess = success
+				outsideResult = result
 			end)
-			threads.luau[ScriptInstance.Name] = object
+			if outsideSuccess then
+				threads.luau[ScriptInstance.Name] = object
+			else
+				LogService.CreateLog("error", outsideResult)
+			end
 			return object
 		end,
 

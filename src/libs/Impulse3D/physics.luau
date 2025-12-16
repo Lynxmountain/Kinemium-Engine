@@ -24,8 +24,6 @@ function physics.step(body_manager: BodyManager, dt: number)
 	end
 end
 
--- Replace the substep function with this:
-
 function physics.substep(body_manager: BodyManager, dt: number)
 	body_manager.each(function(id, body)
 		body.velocity = body.velocity or Vector3.new(0, 0, 0)
@@ -33,39 +31,51 @@ function physics.substep(body_manager: BodyManager, dt: number)
 	end)
 
 	for id, body in pairs(body_manager.pool) do
-		-- Apply gravity
 		body.velocity += physics.gravity * dt
 		body.velocity += physics.wind_direction * dt
 
-		-- Hertz-based air resistance
 		local airDamping = 0.99
 		body.velocity *= math.pow(airDamping, dt * physics.hertz)
 
-		local newPos = body.position + body.velocity * dt
+		body.position += body.velocity * dt
+	end
 
-		-- Collision detection
+	for id, body in pairs(body_manager.pool) do
 		for otherId, other in pairs(body_manager.pool) do
 			if
 				otherId ~= id
-				and Utility.AABBOverlap({ pos = newPos, size = body.size }, { pos = other.position, size = other.size })
+				and Utility.AABBOverlap(
+					{ pos = body.position, size = body.size },
+					{ pos = other.position, size = other.size }
+				)
 			then
-				-- Bounce off other objects
-				local restitution = 0.3
-				body.velocity = Vector3.new(body.velocity.X, -body.velocity.Y * restitution, body.velocity.Z)
-				newPos = body.position
-				break
+				local normal, penetration = Utility.resolveCollision(body, other)
+
+				body.position += normal * (penetration / 2)
+				other.position -= normal * (penetration / 2)
+
+				local relativeVel = body.velocity - other.velocity
+				local velAlongNormal = relativeVel.X * normal.X + relativeVel.Y * normal.Y + relativeVel.Z * normal.Z
+
+				if velAlongNormal < 0 then
+					local restitution = 0.3
+					local j = -(1 + restitution) * velAlongNormal / 2 -- Assuming equal mass
+
+					local impulse = normal * j
+					body.velocity += impulse
+					other.velocity -= impulse
+				end
 			end
 		end
+	end
 
-		-- Ground collision
-		if newPos.Y - body.size.Y / 2 <= 0 then
-			newPos = Vector3.new(newPos.X, body.size.Y / 2, newPos.Z)
+	for id, body in pairs(body_manager.pool) do
+		if body.position.Y - body.size.Y / 2 <= 0 then
+			body.position = Vector3.new(body.position.X, body.size.Y / 2, body.position.Z)
 
-			-- Hertz-based bounce
 			local restitution = 0.3
 			body.velocity = Vector3.new(body.velocity.X, -body.velocity.Y * restitution, body.velocity.Z)
 
-			-- Ground friction
 			local friction = 0.85
 			body.velocity = Vector3.new(
 				body.velocity.X * math.pow(friction, dt * physics.hertz),
@@ -74,10 +84,8 @@ function physics.substep(body_manager: BodyManager, dt: number)
 			)
 		end
 
-		body.position = newPos
-
 		if physics.render then
-			physics.render(id, body)
+			physics.render(id, body, dt)
 		end
 	end
 end

@@ -14,9 +14,12 @@ local function build()
 		"src/renderer/**/*.lua*",
 		"src/sandboxed/**/*.lua*",
 		"src/shaders/**/*.lua*",
+		"src/runtime/**/*.lua*",
 		"src/external/**/*.lua*",
 		"src/assets/**",
-		"src/rblx/**",
+		"src/runtime/**",
+		"src/libs/**",
+		"src/**",
 		"src/template/**",
 
 		"src/external/signal.lua",

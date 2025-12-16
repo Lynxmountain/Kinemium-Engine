@@ -120,6 +120,9 @@ window.stepped = function(windowData)
 					logColor = structs.Color:new({ r = 255, g = 50, b = 50, a = 255 })
 				end
 
+				if not log then
+					return
+				end
 				local ts = os.date("%H:%M:%S", log.time)
 				local text = string.format("[%s] %s", ts, log.message)
 				rl.DrawTextEx(vend, text, vector.create(rect.x + 8, rect.y + 4), 22, 1, logColor)
