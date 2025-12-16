@@ -1,6 +1,7 @@
 local process = zune.process
 local io = zune.io
 local fs = zune.fs
+
 local function deriveHomeDir()
 	local cwd = fs.realPath("./")
 	cwd = cwd:gsub("\\", "/")
@@ -9,7 +10,9 @@ local function deriveHomeDir()
 	end
 	return cwd:match("(.+)/[^/]+$") or cwd
 end
+
 local ENGINE_DIR = deriveHomeDir() .. "/.Kinemium-Engine"
+
 local function checkProcessResult(result, commandName)
 	if type(result) == "table" then
 		local success = result.ok == true or result.code == 0
@@ -19,6 +22,7 @@ local function checkProcessResult(result, commandName)
 	end
 	return false, "unknown", "", ""
 end
+
 local function clone()
 	print("UPDATER: Cloning repository...")
 	local result = process.run("git", {
@@ -35,8 +39,20 @@ local function clone()
 		error("Git clone failed with exit code: " .. tostring(code))
 	end
 end
+
+local function pull()
+	print("UPDATER: Pulling latest changes...")
+	local result = process.run("git", { "-C", ENGINE_DIR, "pull", "origin", "main" })
+	local success, code = checkProcessResult(result, "pull")
+	if not success then
+		error("Git pull failed with exit code: " .. tostring(code))
+	else
+		print("UPDATER: Pull completed successfully")
+	end
+	return result
+end
+
 local dir = fs.realPath("./")
-print("UPDATER: Working directory:", dir)
 print("UPDATER: Engine install directory:", ENGINE_DIR)
 local function isInstalled()
 	local success, result = pcall(function()
@@ -71,6 +87,7 @@ local function clearDir(dir)
 		end
 	end
 end
+
 if isInstalled() then
 	if isGitRepo(ENGINE_DIR) then
 		print("UPDATER: Updating existing installation...")
@@ -155,13 +172,37 @@ if isInstalled() then
 			print("UPDATER: Already up to date!")
 			return
 		end
+		local statusResult = process.run("git", { "-C", ENGINE_DIR, "status", "--porcelain" })
+		local _, _, statusOutput = checkProcessResult(statusResult)
+		local hasLocalChanges = statusOutput and statusOutput:match("%S") ~= nil
+		if hasLocalChanges then
+			print("UPDATER: Warning - Local changes detected")
+			io.stdout:write("UPDATER: Discard local changes and update? (y/n): ")
+			local answer = io.stdin:read():lower()
+			if type(answer) == "string" then
+				answer = answer:match("^%s*(.-)%s*$")
+			end
+			if answer ~= "n" and answer ~= "no" then
+				print("UPDATER: Update cancelled.")
+				return
+			end
+			local resetResult = process.run("git", { "-C", ENGINE_DIR, "reset", "--hard", "HEAD" })
+			local resetSuccess, resetCode, _, resetErr = checkProcessResult(resetResult)
+			if not resetSuccess then
+				print("UPDATER: Git reset failed (exit code: " .. tostring(resetCode) .. ")")
+				if resetErr and resetErr ~= "" then
+					print("UPDATER: Error details: " .. resetErr)
+				end
+			end
+		end
+
 		print("UPDATER: Updating to latest version...")
-		local resetResult = process.run("git", { "-C", ENGINE_DIR, "reset", "--hard", "origin/" .. branchName })
-		local resetSuccess, resetCode, _, resetErr = checkProcessResult(resetResult)
-		if not resetSuccess then
-			print("UPDATER: Git reset failed (exit code: " .. tostring(resetCode) .. ")")
-			if resetErr and resetErr ~= "" then
-				print("UPDATER: Error details: " .. resetErr)
+		local pullResult = pull()
+		local pullSuccess, pullCode, _, pullErr = checkProcessResult(pullResult)
+		if not pullSuccess then
+			print("UPDATER: Git pull failed (exit code: " .. tostring(pullCode) .. ")")
+			if pullErr and pullErr ~= "" then
+				print("UPDATER: Error details: " .. pullErr)
 			end
 			print("UPDATER: This could mean the repository is corrupted.")
 			io.stdout:write("UPDATER: Would you like to delete and reinstall? (y/n): ")
