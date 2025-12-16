@@ -11,6 +11,7 @@ local texture = require("./renderer/texture")
 local signal = require("@Kinemium.signal")
 local Vector2 = require("@Vector2")
 local shader = require("./renderer/shader")
+local shadowmap = require("./renderer/shadowmap")
 local freecam = require("./renderer/freecam")
 local Enum = require("@EnumMap")
 local CFrame = require("@CFrame")
@@ -28,7 +29,6 @@ Camera.callback(Kinemium_camera)
 Kinemium_camera.Name = "CurrentCamera"
 
 -- TABLES
-local loadedMaterials = {}
 local fontRegistry = {}
 local renderPool3d = {}
 local renderPool2d = {}
@@ -36,7 +36,6 @@ local callbackStep = {}
 local global_registry = {}
 local mouseProperties = {}
 local activeShaders = {}
-local shaderUniforms = {}
 local partRegistry = {}
 local guiRegistry = {}
 
@@ -44,8 +43,6 @@ local guiRegistry = {}
 local lib = raylib.lib
 local const = raylib.const
 local structs = raylib.structs
-local task = zune.task
-local ffi = zune.ffi
 
 -- W&H
 local screenWidth = raylib.lib.GetScreenWidth()
@@ -56,29 +53,11 @@ local txtureMethods = texture(lib)
 local materialList = txtureMethods.GetMaterials()
 
 -- CAMERA SETTINGS
-local MOVE_SPEED = 10.0
-local MOUSE_SENSITIVITY = 0.003
 local FOV = 70
-
 Kinemium_camera.FieldOfView = FOV
-
 local cameraPos = vector.create(0.0, 5.0, 10.0)
-local yaw = 0.0
-local pitch = 0.0
-local MouseTarget
-local lighting = nil
-
-print("buh")
-
--- UTIL
-local function loopshader(callback)
-	for shaderName, shader in pairs(activeShaders) do
-		callback(shaderName, shader)
-	end
-end
 
 -- RAYLIB INIT
-print("Real")
 lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 lib.InitWindow(screenWidth, screenHeight, "Kinemium Engine")
@@ -86,14 +65,14 @@ lib.SetTargetFPS(0)
 
 local engineIcon = lib.LoadImage("./src/assets/icon/icon.png")
 lib.SetWindowIcon(engineIcon)
-skybox.load(lib)
 lib.InitAudioDevice()
 
+-- SHADOWS
+local shadowSystem = shadowmap.new(lib, structs, const, 2048)
+local lightPosition = vector.create(10.0, 15.0, 10.0)
+shadowSystem:UpdateLightPosition(lightPosition)
+
 -- LOAD MATERIALS
-
-print(meshlib)
-local preloadedMeshes = meshlib.PreloadStandardMeshes()
-
 local camera = structs.Camera3D:new({
 	position = cameraPos,
 	target = vector.create(0.0, 0.0, 0.0),
@@ -101,16 +80,6 @@ local camera = structs.Camera3D:new({
 	fovy = 70.0,
 	projection = const.CameraProjection.CAMERA_PERSPECTIVE,
 })
-
-local function Color3ToRaylib(c, transparency)
-	local r, g, b = c:ToRGB()
-	return structs.Color:new({
-		r = r,
-		g = g,
-		b = b,
-		a = math.floor(255 * (1 - transparency)),
-	})
-end
 
 local function readRayCollision(collisionBuffer)
 	-- RayCollision struct layout:
@@ -308,7 +277,15 @@ local function step(time)
 
 	time += delta
 
-	freecam.Update(camera, delta, Kinemium_camera)
+	local cameraPosition = freecam.Update(camera, delta, Kinemium_camera)
+
+	shadowSystem:BeginShadowMapRender()
+
+	for _, v in pairs(renderPool3d) do
+		v(runtimelib)
+	end
+
+	shadowSystem:EndShadowMapRender()
 
 	for name, keycode in pairs(const.KeyboardKey) do
 		if lib.IsKeyPressed(keycode) == 1 then
@@ -347,11 +324,34 @@ local function step(time)
 		lib.ClearBackground(const.BLUE)
 		lib.rlEnableBackfaceCulling()
 
-		skybox.draw(lib, cameraPos)
+		shadowSystem:ApplyShadows()
+
+		print("shadowMapLoc:", shadowSystem.shadowMapLoc)
+		print("lightSpaceMatrixLoc:", shadowSystem.lightSpaceMatrixLoc)
+
+		local viewPosLoc = lib.GetShaderLocation(shadowSystem.shadowShader, "viewPos")
+		local lightPosLoc = lib.GetShaderLocation(shadowSystem.shadowShader, "lightPos")
+
+		lib.SetShaderValue(
+			shadowSystem.shadowShader,
+			viewPosLoc,
+			vector.create(cameraPosition.x, cameraPosition.y, cameraPosition.z),
+			const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+		)
+
+		lib.SetShaderValue(
+			shadowSystem.shadowShader,
+			lightPosLoc,
+			lightPosition,
+			const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
+		)
 
 		for _, v in pairs(renderPool3d) do
 			v(runtimelib)
 		end
+
+		shadowSystem:EndShadows()
+
 		lib.rlDisableBackfaceCulling()
 		lib.EndMode3D()
 	end
@@ -477,10 +477,10 @@ return {
 	SetLightingService = function(service)
 		lighting = service
 	end,
-
 	Viewport = viewport,
-
 	meshlib = meshlib,
+	skybox = skybox,
+	shadowSystem = shadowSystem,
 
 	-- Mouse
 	SetMouseTargetFilter = function() end,

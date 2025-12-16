@@ -560,6 +560,20 @@ return {
 		-- long GetFileModTime(const char *fileName);
 		GetFileModTime = fn(long, { cstring }),
 
+		-- Matrix functions
+		MatrixIdentity = fn(Matrix, {}),
+		MatrixLookAt = fn(Matrix, { Vector3, Vector3, Vector3 }),
+		MatrixMultiply = fn(Matrix, { Matrix, Matrix }),
+		MatrixPerspective = fn(Matrix, { float, float, float, float }),
+		MatrixOrtho = fn(Matrix, { float, float, float, float, float, float }),
+		MatrixFrustum = fn(Matrix, { float, float, float, float, float, float }),
+		MatrixToFloatV = fn(ffi.types.pointer, { Matrix }), -- returns float* to use in shaders
+
+		rlActiveTextureSlot = fn(void, { int }),
+		rlEnableTexture = fn(void, { uint }),
+		rlDisableTexture = fn(void, {}),
+		rlSetUniform = fn(void, { int, ffi.types.pointer, int, int }),
+
 		-- unsigned char *CompressData(const unsigned char *data, int dataSize, int *compDataSize);
 		CompressData = fn(ffi.types.pointer, { ffi.types.pointer, int, ffi.types.pointer }),
 		-- unsigned char *DecompressData(const unsigned char *compData, int compDataSize, int *dataSize);

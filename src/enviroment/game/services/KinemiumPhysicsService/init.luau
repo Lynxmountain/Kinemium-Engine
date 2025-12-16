@@ -25,7 +25,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				print("Part is anchored, Not registering body.")
 				return
 			end
-			print("buh")
 			local id = engine.body.new({
 				position = data.Position,
 				size = data.Size,
@@ -43,7 +42,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			end
 			local physicsId = part.PhysicsId
 			if physicsId == id then
-				print(`Updated part to position {object.position} in {dt}`)
 				part.Position = object.position
 			end
 		end

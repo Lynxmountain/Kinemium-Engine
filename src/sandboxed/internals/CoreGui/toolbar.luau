@@ -39,6 +39,7 @@ local png = KinemiumIconLoader.Get("Play")
 local PlayIcon = KinemiumIconLoader.ToTexture(png)
 
 local categoryRegistry = {
+	--[[
 	Category = {
 		elements = {
 			{
@@ -69,16 +70,12 @@ local categoryRegistry = {
 			},
 		},
 	},
+	-]]
 }
 
 local aereon = import("@Kinemium.Aereon")
 local window = aereon.window(game, nil, 1)
 local aRect = aereon.rect()
-local elements = {}
-
-local blacklisted = {
-	"Children",
-}
 
 local function create_window(title, frame)
 	repeat
@@ -183,6 +180,12 @@ local function renderSeperator(i, windowData, element)
 	rl.DrawRectangle(rectX, rectY, element.width or 2, element.height or 50, sepColor)
 end
 
+game.EngineSignal:Connect(function(route, name, data)
+	if route == "NewToolbarCategory" then
+		categoryRegistry[name] = data
+	end
+end)
+
 window.stepped = function(windowData)
 	if windowData.title == "Toolbar" then
 		windowData.x = frame.AbsolutePosition.X
@@ -195,8 +198,6 @@ window.stepped = function(windowData)
 			local elements = category.elements
 			for _, element in pairs(elements) do
 				if element.type == "ImageButton" then
-					game.EngineSignal:Fire("ToolbarUpdateElement", element)
-
 					renderButton(i, element.text, element, windowData)
 				elseif element.type == "Separator" then
 					renderSeperator(i, windowData, element)

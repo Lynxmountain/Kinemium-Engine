@@ -1,8 +1,13 @@
 local Instance = require("@Instance")
 local Color3 = require("@Color3")
 local Vector3 = require("@Vector3")
-
+local raylib = require("@raylib")
+local const = raylib.const
+local lib = raylib.lib
+local structs = raylib.structs
 local Lighting = Instance.new("Lighting")
+
+local sun = "./src/assets/sky/default/sun.png"
 
 Lighting:SetProperties({
 	Ambient = Color3.fromRGB(128, 128, 128), -- Now this will be 128/255 = 0.5
@@ -11,7 +16,7 @@ Lighting:SetProperties({
 	ColorShift_Bottom = Color3.fromRGB(0, 0, 0),
 	OutdoorAmbient = Color3.fromRGB(128, 128, 128),
 	GlobalShadows = true,
-	ClockTime = 14.0, -- Afternoon sun (higher in sky)
+	ClockTime = 14.0,
 	GeographicLatitude = 0.0,
 })
 
@@ -36,7 +41,42 @@ function Lighting:GetSunDirection()
 	)
 end
 
-Lighting.InitRenderer = function(renderer, renderer_signal)
+local function handleSky(skyObject, renderer)
+	if skyObject.ClassName == "Sky" then
+		local skybox = renderer.skybox
+		local cubemapPaths
+
+		if skyObject.Cubemap ~= "" then
+			skybox.Load(skyObject.Cubemap)
+		else
+			cubemapPaths = {
+				skyObject.SkyboxRt, -- +X
+				skyObject.SkyboxLf, -- -X
+				skyObject.SkyboxUp, -- +Y
+				skyObject.SkyboxDn, -- -Y
+				skyObject.SkyboxFt, -- +Z
+				skyObject.SkyboxBk, -- -Z
+			}
+
+			local cubemap = skybox.FromCubemap(cubemapPaths)
+			if not cubemap then
+				return
+			end
+			skybox.Unload()
+			skybox.Load(cubemap)
+		end
+
+		print("Reinitialized sky with new Skybox skyObject")
+	end
+end
+
+Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
+	local EngineSignal = datamodel.EngineSignal
+	renderer.skybox.Load()
+
+	local sunTexture = lib.LoadTexture(sun)
+	local sunPos = vector.create(0, 100, 0)
+
 	renderer_signal:Connect(function(route, dt)
 		if route == "RenderStepped" then
 			local ambient = Lighting.Ambient
@@ -48,7 +88,25 @@ Lighting.InitRenderer = function(renderer, renderer_signal)
 				4
 			)
 			renderer.shader.SetShaderUniform("Kinemium", "brightness", brightness, 0)
+
+			local sunDir = Lighting:GetSunDirection()
+			renderer.shader.SetShaderUniform("Kinemium", "sunDirection", { sunDir.X, sunDir.Y, sunDir.Z }, 3)
 		end
+	end)
+
+	Lighting.ChildAdded:Connect(function(child)
+		handleSky(child, renderer)
+	end)
+
+	renderer.Add3DStack(function()
+		local distance = 1000 -- how far the sun is in the sky
+		local sunDir = Lighting:GetSunDirection()
+		local sunPos = vector.create(sunDir.X * distance, sunDir.Y * distance, sunDir.Z * distance)
+		local sunSize = 100
+		local size = vector.create(buffer.readi32(sunTexture, 4), buffer.readi32(sunTexture, 8))
+		local sunRec = structs.Rectangle:new({ x = 0, y = 0, width = size.x, height = size.y })
+		--lib.DrawBillboardRec(renderer.camera, sunTexture, sunRec, sunPos, sunSize, const.WHITE)
+		renderer.skybox.Draw(renderer.camera, 50)
 	end)
 end
 
