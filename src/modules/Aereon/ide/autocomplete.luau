@@ -2,7 +2,6 @@ local completions = {
 	"function ",
 	"local ",
 	"return ",
-	"end",
 	"if ",
 	"then",
 	"else",

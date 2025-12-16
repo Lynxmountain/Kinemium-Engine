@@ -1,3 +1,6 @@
+if zune.platform.os == "linux" then
+	return
+end
 local KinemiumShaderService = game:GetService("KinemiumShaderService")
 local fs = zune.fs
 

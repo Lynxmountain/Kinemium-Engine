@@ -30,12 +30,22 @@ function sandboxer.run(code, chunk, env)
 		native_code_gen = sandboxer.native_code_gen,
 	}
 
-	local bytecode = luau.compile(code)
-	local thread = luau.load(bytecode, options)
+	local success, result = pcall(function(...)
+		local bytecode = luau.compile(code)
+		local thread = luau.load(bytecode, options)
 
-	setfenv(thread, setmetatable(env or sandboxer.enviroment, { __index = getfenv(1) }))
+		setfenv(thread, setmetatable(env or sandboxer.enviroment, { __index = getfenv(1) }))
+		return thread()
+	end)
 
-	return thread(), thread
+	local thread
+	if success then
+		thread = result
+	else
+		thread = nil
+	end
+
+	return thread, success, result
 end
 
 function sandboxer.rblxrequire(path: string, callbackScript)

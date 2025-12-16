@@ -7,7 +7,7 @@ KinemiumPhysicsService.ExplorerHidden = true
 
 local bodiesMap = {}
 
-KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal)
+KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	local propTable = {
 		GetBody = function(part)
 			return bodiesMap[part]
@@ -25,7 +25,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal)
 				print("Part is anchored, Not registering body.")
 				return
 			end
-			print(data.ClassName)
+			print("buh")
 			local id = engine.body.new({
 				position = data.Position,
 				size = data.Size,
@@ -36,13 +36,16 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal)
 		end
 	end)
 
-	engine.physics.render = function(id, object)
-		for _, part in pairs(renderer.GetPool3D()) do
+	engine.physics.render = function(id, object, dt)
+		for _, part in pairs(game.Workspace:GetDescendants()) do
 			if part.Anchored then
 				continue
 			end
 			local physicsId = part.PhysicsId
-			part.Position = object.position
+			if physicsId == id then
+				print(`Updated part to position {object.position} in {dt}`)
+				part.Position = object.position
+			end
 		end
 	end
 

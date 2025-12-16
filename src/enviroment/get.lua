@@ -58,7 +58,7 @@ return function(renderer)
 	renderer.Kinemium_camera.Parent = mainDatamodel:GetService("Workspace")
 
 	local ScriptRunnerService = mainDatamodel:GetService("ScriptRunnerService")
-	ScriptRunnerService.InitEnviroment(data)
+	ScriptRunnerService.InitEnviroment(data, mainDatamodel)
 
 	local LogService = mainDatamodel:GetService("LogService")
 
