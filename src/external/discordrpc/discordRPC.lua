@@ -1,6 +1,16 @@
 local ffi = require("ffi")
 local scriptDir = debug.getinfo(1, "S").source:match("@?(.*[/\\])")
-local discordRPClib = ffi.load(scriptDir .. "discord-rpc.dll")
+
+local libExtension
+if ffi.os == "Windows" then
+	libExtension = "dll"
+elseif ffi.os == "OSX" then
+	libExtension = "dylib"
+else -- Linux
+	libExtension = "so"
+end
+
+local discordRPClib = ffi.load(scriptDir .. "discord-rpc." .. libExtension)
 
 ffi.cdef([[
 typedef struct DiscordRichPresence {
