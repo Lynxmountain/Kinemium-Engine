@@ -21,12 +21,22 @@ function DataModel.new(RENDERER, ...)
 	local services = fs.entries("./src/enviroment/game/services")
 	for _, service in pairs(services) do
 		local name = service.name:gsub(".lua", "")
-		local returnedData = require("./services/" .. name)
-		self.Services[name] = returnedData
-		if returnedData.InitRenderer then
-			returnedData.InitRenderer(RENDERER, RENDERER.Signal, self)
+		local success, returnedData = pcall(require, "./services/" .. name)
+		if success then
+			local success2, returnedData2 = pcall(function()
+				self.Services[name] = returnedData
+				if returnedData.InitRenderer then
+					returnedData.InitRenderer(RENDERER, RENDERER.Signal, self)
+				end
+			end)
+			if success2 then
+				print("Added service " .. name)
+			else
+				warn("Error initializing service " .. name .. ": " .. tostring(returnedData2))
+			end
+		else
+			warn("Failed to get service " .. name .. ": " .. tostring(returnedData))
 		end
-		print("Added service " .. name)
 	end
 
 	for name, service in pairs(self.Services) do
