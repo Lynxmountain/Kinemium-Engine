@@ -28,6 +28,7 @@ Workspace.InitRenderer = function(renderer, signal)
 	local meshlib = renderer.meshlib
 	local runtimelib = renderer.runtimelib
 	local camera = renderer.camera
+	local shadowSystem = renderer.shadowSystem
 	local materialList = renderer.materialList
 	local loadedMaterials = {}
 
@@ -80,35 +81,38 @@ Workspace.InitRenderer = function(renderer, signal)
 	--]]
 
 	local function drawPart(part)
+		local mesh
 		if part.ClassName == "MeshPart" then
-			local model = meshlib.GetModelRegistry()[part.MeshId]
-			if model then
-				if part.render then
-					part.render(part, camera, runtimelib)
-				end
-				part._mesh = model
-
-				meshlib.drawModel(model, part, loadedMaterials)
-			end
+			mesh = meshlib.GetModelRegistry()[part.MeshId]
 		else
-			if part.render then
-				part.render(part, camera, runtimelib)
-			end
-
-			local mesh = preloadedMeshes[part.Shape.Value]
-			meshlib.drawModel(mesh[1], part, loadedMaterials)
-
-			part._mesh = mesh[2]
+			mesh = preloadedMeshes[part.Shape.Value][1]
 		end
+
+		if not mesh then
+			return
+		end
+
+		part._mesh = mesh
+
+		meshlib.drawModel(mesh, part, loadedMaterials)
 
 		signal:Fire("Rendered", part)
 	end
 
 	renderer.Add3DStack(function()
+		-- Main render pass
 		for i = 1, #pool do
-			print(pool[i].Position)
 			drawPart(pool[i])
 		end
+	end)
+
+	renderer.Add3DStack(function()
+		-- Shadow pass
+		shadowSystem:BeginShadowMapRender()
+		for i = 1, #pool do
+			drawPart(pool[i])
+		end
+		shadowSystem:EndShadowMapRender()
 	end)
 end
 

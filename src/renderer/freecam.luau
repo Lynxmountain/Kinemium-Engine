@@ -65,6 +65,7 @@ local function UpdateFreecam(camera: raylib.Camera3D, delta: number, Kinemium_ca
 
 	Kinemium_camera.CFrame = lookAt
 	Kinemium_camera.Position = Vector3.new(cameraPos.x, cameraPos.y, cameraPos.z)
+	return cameraPos, target
 end
 
 return {

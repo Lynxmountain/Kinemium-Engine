@@ -59,7 +59,7 @@ function physics.substep(body_manager: BodyManager, dt: number)
 
 				if velAlongNormal < 0 then
 					local restitution = 0.3
-					local j = -(1 + restitution) * velAlongNormal / 2 -- Assuming equal mass
+					local j = -(1 + restitution) * velAlongNormal / 2
 
 					local impulse = normal * j
 					body.velocity += impulse

@@ -1,4 +1,4 @@
-return function(raylib, structs, game, theme)
+return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local windowRegistry = {}
 	local module = {}
 	local draggedWindow = nil
@@ -169,8 +169,10 @@ return function(raylib, structs, game, theme)
 				)
 			end
 
-			raylib.DrawRectangleRec(
+			raylib.DrawRectangleRounded(
 				rect,
+				0,
+				30,
 				Color3ToRaylib(window_theme_config.BackgroundColor, window_theme_config.BackgroundTransparency)
 			)
 

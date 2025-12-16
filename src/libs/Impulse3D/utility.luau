@@ -1,4 +1,5 @@
 local PhysicsUtils = {}
+local Vector3 = require("@Vector3")
 
 function PhysicsUtils.AABBOverlap(box1, box2)
 	local b1min = box1.pos - box1.size / 2
@@ -25,7 +26,6 @@ function PhysicsUtils.resolveCollision(body, other)
 	local overlapZ = math.min(b1max.Z - b2min.Z, b2max.Z - b1min.Z)
 
 	local minOverlap = math.min(overlapX, overlapY, overlapZ)
-
 	local normal = Vector3.new(0, 0, 0)
 	local penetration = 0
 
@@ -54,6 +54,7 @@ function PhysicsUtils.SphereAABBOverlap(sphere, box)
 	local bmin = box.pos - box.size / 2
 	local bmax = box.pos + box.size / 2
 
+	-- Find closest point on AABB to sphere center
 	local closest = Vector3.new(
 		math.max(bmin.X, math.min(sphere.pos.X, bmax.X)),
 		math.max(bmin.Y, math.min(sphere.pos.Y, bmax.Y)),
@@ -62,6 +63,68 @@ function PhysicsUtils.SphereAABBOverlap(sphere, box)
 
 	local diff = sphere.pos - closest
 	return diff.Magnitude ^ 2 <= sphere.radius * sphere.radius
+end
+
+function PhysicsUtils.RayAABBIntersection(rayOrigin, rayDir, box)
+	local bmin = box.pos - box.size / 2
+	local bmax = box.pos + box.size / 2
+
+	local tmin = (bmin - rayOrigin) / rayDir
+	local tmax = (bmax - rayOrigin) / rayDir
+
+	if tmin.X > tmax.X then
+		tmin.X, tmax.X = tmax.X, tmin.X
+	end
+	if tmin.Y > tmax.Y then
+		tmin.Y, tmax.Y = tmax.Y, tmin.Y
+	end
+	if tmin.Z > tmax.Z then
+		tmin.Z, tmax.Z = tmax.Z, tmin.Z
+	end
+
+	local tEnter = math.max(tmin.X, tmin.Y, tmin.Z)
+	local tExit = math.min(tmax.X, tmax.Y, tmax.Z)
+
+	return tEnter <= tExit and tExit >= 0, tEnter, tExit
+end
+
+function PhysicsUtils.PointInAABB(point, box)
+	local bmin = box.pos - box.size / 2
+	local bmax = box.pos + box.size / 2
+
+	return point.X >= bmin.X
+		and point.X <= bmax.X
+		and point.Y >= bmin.Y
+		and point.Y <= bmax.Y
+		and point.Z >= bmin.Z
+		and point.Z <= bmax.Z
+end
+
+function PhysicsUtils.BoxInertia(mass, size)
+	local w, h, d = size.X, size.Y, size.Z
+	return (mass / 12) * (h * h + d * d), (mass / 12) * (w * w + d * d), (mass / 12) * (w * w + h * h)
+end
+
+function PhysicsUtils.CenterOfMass(bodies)
+	local totalMass = 0
+	local com = Vector3.new(0, 0, 0)
+
+	for _, body in ipairs(bodies) do
+		local mass = body.mass or 1
+		totalMass += mass
+		com += body.position * mass
+	end
+
+	return totalMass > 0 and com / totalMass or Vector3.new(0, 0, 0)
+end
+
+-- Clamp vector magnitude
+function PhysicsUtils.ClampMagnitude(vec, maxMagnitude)
+	local mag = vec.Magnitude
+	if mag > maxMagnitude then
+		return (vec / mag) * maxMagnitude
+	end
+	return vec
 end
 
 return PhysicsUtils

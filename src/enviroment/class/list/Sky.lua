@@ -8,6 +8,7 @@ local propTable = {
 	StarCount = 3000,
 	SunAngularSize = 21,
 	MoonAngularSize = 21,
+	Cubemap = "./src/assets/sky/test/images/cubemap.png",
 	SkyboxBk = "",
 	SkyboxDn = "",
 	SkyboxFt = "",
