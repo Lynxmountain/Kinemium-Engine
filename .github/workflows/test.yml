@@ -83,7 +83,7 @@ jobs:
     - name: Initialize Rokit and install Zune
       run: |
         rokit init
-        rokit add --global Scythe-Technology/zune
+        rokit add Scythe-Technology/zune
     
     # Note: macOS runners have limited display capabilities
     # This will test basic startup but not full rendering
