@@ -1,4 +1,4 @@
-name: Test Kinemium Engine
+name: Build Kinemium Engine
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Install Rokit
       run: |
@@ -23,13 +23,15 @@ jobs:
       run: |
         rokit --version
     
-    - name: Rokit Init
+    - name: Initialize Rokit and install Zune
       run: |
         rokit init
-
-    - name: Install Zune
-      run : |
-        rokit add Scythe-Technology/zune
+        rokit add --global Scythe-Technology/zune
+    
+    - name: Install Xvfb for virtual display
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb libgl1-mesa-glx libgl1-mesa-dri mesa-utils
     
     - name: Install Xvfb for virtual display
       run: |
@@ -54,7 +56,7 @@ jobs:
         echo "Engine tested successfully on Linux!"
     
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: kinemium-linux
         path: |
@@ -78,13 +80,10 @@ jobs:
       run: |
         rokit --version
     
-    - name: Rokit Init
+    - name: Initialize Rokit and install Zune
       run: |
         rokit init
-
-    - name: Install Zune
-      run : |
-        rokit add Scythe-Technology/zune
+        rokit add --global Scythe-Technology/zune
     
     # Note: macOS runners have limited display capabilities
     # This will test basic startup but not full rendering
@@ -99,7 +98,7 @@ jobs:
         echo "Engine tested on macOS!"
     
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: kinemium-macos
         path: |
@@ -119,9 +118,10 @@ jobs:
         curl -sSf https://raw.githubusercontent.com/rojo-rbx/rokit/main/scripts/install.sh | bash
         echo "$HOME/.rokit/bin" >> $GITHUB_PATH
     
-    - name: Install tools via Rokit
+    - name: Initialize Rokit and install tools
       run: |
-        rokit install
+        rokit init
+        rokit add --global Scythe-Technology/zune
     
     - name: Check Luau files syntax
       run: |
