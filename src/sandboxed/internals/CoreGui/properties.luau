@@ -84,10 +84,12 @@ window.stepped = function(windowData)
 		local padding = 5
 		local mousePos = rl.GetMousePosition()
 
-		windowData.x = frame.AbsolutePosition.X
-		windowData.y = frame.AbsolutePosition.Y
-		windowData.width = frame.AbsoluteSize.X
-		windowData.height = frame.AbsoluteSize.Y
+		if rl.IsWindowResized() == 1 then
+			windowData.x = frame.AbsolutePosition.X
+			windowData.y = frame.AbsolutePosition.Y
+			windowData.width = frame.AbsoluteSize.X
+			windowData.height = frame.AbsoluteSize.Y
+		end
 
 		local selected = Selection.Get()[1]
 
@@ -101,9 +103,6 @@ window.stepped = function(windowData)
 				continue
 			end
 			if type(propValue) == "function" then
-				continue
-			end
-			if type(propValue) == "table" then
 				continue
 			end
 			i += 1

@@ -17,7 +17,7 @@ filesystem.entryloop("./src/enviroment/class/list", function(entry)
 	-- returned = { class = "Part", callback = function(Part) ... end }
 
 	listOfClasses[returned.class] = returned
-	print("Created class for " .. returned.class)
+	print("CLASS: Successfully created class '" .. returned.class .. "' from file: " .. entry.name)
 end)
 
 function registry.createclass(data)

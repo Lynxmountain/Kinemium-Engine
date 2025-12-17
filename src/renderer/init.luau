@@ -58,6 +58,7 @@ Kinemium_camera.FieldOfView = FOV
 local cameraPos = vector.create(0.0, 5.0, 10.0)
 
 -- RAYLIB INIT
+lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 lib.InitWindow(screenWidth, screenHeight, "Kinemium Engine")
@@ -69,7 +70,7 @@ lib.InitAudioDevice()
 
 -- SHADOWS
 local shadowSystem = shadowmap.new(lib, structs, const, 2048)
-local lightPosition = vector.create(10.0, 15.0, 10.0)
+local lightPosition = vector.create(30, 50.0, 0)
 shadowSystem:UpdateLightPosition(lightPosition)
 
 -- LOAD MATERIALS
@@ -210,7 +211,36 @@ local function getMouseRay()
 			Hit = CFrame.new(closestCollision.point.x, closestCollision.point.y, closestCollision.point.z),
 			hit = CFrame.new(closestCollision.point.x, closestCollision.point.y, closestCollision.point.z),
 		}
+		return true, mouseProperties
 	end
+end
+
+local function mouseOverVector3(point, size)
+	local mousePos = raylib.lib.GetMousePosition()
+	local ray = raylib.lib.GetScreenToWorldRay(mousePos, camera)
+
+	local mesh = raylib.lib.GenMeshCube(size, size, size)
+
+	local scaleMatrix = raylib.lib.MatrixScale(1, 1, 1)
+	local rotateMatrix = raylib.lib.MatrixRotate(vector.create(0, 1, 0), 0) -- no rotation
+	local translateMatrix = raylib.lib.MatrixTranslate(point.x, point.y, point.z)
+	local transform = raylib.lib.MatrixMultiply(scaleMatrix, rotateMatrix)
+	transform = raylib.lib.MatrixMultiply(transform, translateMatrix)
+
+	local collisionBuffer = raylib.lib.GetRayCollisionMesh(ray, mesh, transform)
+	local collision = readRayCollision(collisionBuffer)
+
+	raylib.lib.UnloadMesh(mesh)
+
+	if collision.hit == 1 then
+		mouseProperties = {
+			Hit = CFrame.new(point.x, point.y, point.z),
+			hit = CFrame.new(point.x, point.y, point.z),
+		}
+		return true, mouseProperties
+	end
+
+	return false
 end
 
 local viewport = lib.LoadRenderTexture(screenWidth, screenHeight)
@@ -326,9 +356,6 @@ local function step(time)
 
 		shadowSystem:ApplyShadows()
 
-		print("shadowMapLoc:", shadowSystem.shadowMapLoc)
-		print("lightSpaceMatrixLoc:", shadowSystem.lightSpaceMatrixLoc)
-
 		local viewPosLoc = lib.GetShaderLocation(shadowSystem.shadowShader, "viewPos")
 		local lightPosLoc = lib.GetShaderLocation(shadowSystem.shadowShader, "lightPos")
 
@@ -352,6 +379,8 @@ local function step(time)
 
 		shadowSystem:EndShadows()
 
+		lib.DrawCubeV(lightPosition, vector.create(3, 3, 3), const.RED)
+
 		lib.rlDisableBackfaceCulling()
 		lib.EndMode3D()
 	end
@@ -369,7 +398,7 @@ local function step(time)
 
 	table.clear(activeLights)
 
-	lib.DrawFPS(10, 135)
+	lib.DrawFPS(10, 170)
 
 	lib.EndDrawing()
 	mainSignal:Fire("Heartbeat", delta)
@@ -478,9 +507,11 @@ return {
 		lighting = service
 	end,
 	Viewport = viewport,
+	mouseOverVector3 = mouseOverVector3,
 	meshlib = meshlib,
 	skybox = skybox,
 	shadowSystem = shadowSystem,
+	readRayCollision = readRayCollision,
 
 	-- Mouse
 	SetMouseTargetFilter = function() end,

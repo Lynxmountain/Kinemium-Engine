@@ -35,6 +35,7 @@
         "rpc": "./src/external/discordrpc/vm",
         "duktape": "./src/runtime/duktape/wrapper",
         "quickjs": "./src/runtime/quickjs/wrapper",
+        "kilang.rules": "./src/enviroment/langrules/read",
         "python": "./src/runtime/python/wrapper",
         "luajit": "./src/runtime/luajit/wrapper",
         "raylib": "./src/external/raylib",

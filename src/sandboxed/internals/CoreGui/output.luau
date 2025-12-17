@@ -84,7 +84,7 @@ window.stepped = function(windowData)
 		local cellHeight = 25
 		local padding = 0
 
-		if not windowData.IsDragging then
+		if rl.IsWindowResized() == 1 then
 			windowData.x = frame.AbsolutePosition.X
 			windowData.y = frame.AbsolutePosition.Y
 			windowData.width = frame.AbsoluteSize.X
