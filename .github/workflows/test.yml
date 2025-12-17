@@ -26,7 +26,7 @@ jobs:
     - name: Initialize Rokit and install Zune
       run: |
         rokit init
-        rokit add --global Scythe-Technology/zune
+        rokit add Scythe-Technology/zune
     
     - name: Install Xvfb for virtual display
       run: |
