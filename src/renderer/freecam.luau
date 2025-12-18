@@ -76,4 +76,7 @@ return {
 	SetSensitivity = function(v)
 		MOUSE_SENSITIVITY = v
 	end,
+	GetPos = function()
+		return cameraPos
+	end,
 }

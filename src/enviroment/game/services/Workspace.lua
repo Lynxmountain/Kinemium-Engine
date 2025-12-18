@@ -56,15 +56,15 @@ Workspace.InitRenderer = function(renderer, signal)
 	end
 
 	for _, child in pairs(Workspace:GetDescendants()) do
-		if isRenderable(child) then
-			pool[#pool + 1] = child
+		pool[#pool + 1] = child
+		if isRenderable(v) then
 			signal:Fire("AddedPartToRenderPool", v)
 		end
 	end
 
 	Workspace.DescendantAdded:Connect(function(v)
+		pool[#pool + 1] = v
 		if isRenderable(v) then
-			pool[#pool + 1] = v
 			signal:Fire("AddedPartToRenderPool", v)
 		end
 	end)
@@ -102,17 +102,19 @@ Workspace.InitRenderer = function(renderer, signal)
 	renderer.Add3DStack(function()
 		-- Main render pass
 		for i = 1, #pool do
-			drawPart(pool[i])
-		end
-	end)
+			local object = pool[i]
+			if isRenderable(pool[i]) then
+				drawPart(object)
 
-	renderer.Add3DStack(function()
-		-- Shadow pass
-		shadowSystem:BeginShadowMapRender()
-		for i = 1, #pool do
-			drawPart(pool[i])
+				if object.Position.Y <= 300 then
+					--object:Destroy()
+				end
+			else
+				if object.render then
+					object.render(object, renderer)
+				end
+			end
 		end
-		shadowSystem:EndShadowMapRender()
 	end)
 end
 

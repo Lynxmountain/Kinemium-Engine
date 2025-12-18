@@ -22,13 +22,6 @@ local game = Kinemium_env.game
 
 renderer.DatamodelObject(game)
 
-local function newThread(path, entry, env)
-	if threads.internals[path] or threads.game[path] then
-		return
-	end -- Prevent double execution
-	return sandboxer.newThread(path, entry, env)
-end
-
 local function loop(base, callback)
 	base = base or "src/sandboxed"
 	filesystem.entryloop(base, function(entry)

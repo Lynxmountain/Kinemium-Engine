@@ -5,9 +5,3 @@ baseplate.Color = Color3.new(0.2, 0.2, 0.2)
 baseplate.Name = "Baseplate"
 baseplate.Anchored = true
 baseplate.Parent = workspace
-
-local Part = Instance.new("Part")
-Part.Position = Vector3.new(0, 10, 0)
-Part.Size = Vector3.new(4, 4, 4)
-Part.Anchored = true
-Part.Parent = workspace

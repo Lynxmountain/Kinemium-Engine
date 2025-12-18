@@ -6,12 +6,10 @@ local KinemiumFontService = game:GetService("KinemiumFontService")
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local renderer = KinemiumRaylib.renderer
 local rl = KinemiumRaylib.lib
-local Selection = game:GetService("Selection")
-local LogService = game:GetService("LogService")
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
+local currentlySelected = ""
 
 export type elementTitle = string
 
@@ -39,7 +37,6 @@ local png = KinemiumIconLoader.Get("Play")
 local PlayIcon = KinemiumIconLoader.ToTexture(png)
 
 local categoryRegistry = {
-	--[[
 	Category = {
 		elements = {
 			{
@@ -70,7 +67,161 @@ local categoryRegistry = {
 			},
 		},
 	},
-	-]]
+
+	Category2 = {
+		elements = {
+			{
+				type = "ImageButton",
+				text = "Playtest",
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+					print("playtesting..")
+					playtestService.CreatePlaytestAsync()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(0, 0, 0),
+				roundness = 0.2,
+				texture = PlayIcon,
+			},
+			{
+				type = "ImageButton",
+
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+
+					print("Stopping the simulation")
+					playtestService.StopCurrentPlaytest()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(1, 0, 0),
+				roundness = 0.2,
+			},
+		},
+	},
+
+	Category3 = {
+		elements = {
+			{
+				type = "ImageButton",
+				text = "Playtest",
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+					print("playtesting..")
+					playtestService.CreatePlaytestAsync()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(0, 0, 0),
+				roundness = 0.2,
+				texture = PlayIcon,
+			},
+			{
+				type = "ImageButton",
+
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+
+					print("Stopping the simulation")
+					playtestService.StopCurrentPlaytest()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(1, 0, 0),
+				roundness = 0.2,
+			},
+		},
+	},
+
+	Category4 = {
+		elements = {
+			{
+				type = "ImageButton",
+				text = "Playtest",
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+					print("playtesting..")
+					playtestService.CreatePlaytestAsync()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(0, 0, 0),
+				roundness = 0.2,
+				texture = PlayIcon,
+			},
+			{
+				type = "ImageButton",
+
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+
+					print("Stopping the simulation")
+					playtestService.StopCurrentPlaytest()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(1, 0, 0),
+				roundness = 0.2,
+			},
+		},
+	},
+
+	Category5 = {
+		elements = {
+			{
+				type = "ImageButton",
+				text = "Playtest",
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+					print("playtesting..")
+					playtestService.CreatePlaytestAsync()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(0, 0, 0),
+				roundness = 0.2,
+				texture = PlayIcon,
+			},
+			{
+				type = "ImageButton",
+
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+
+					print("Stopping the simulation")
+					playtestService.StopCurrentPlaytest()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(1, 0, 0),
+				roundness = 0.2,
+			},
+		},
+	},
+
+	Category6 = {
+		elements = {
+			{
+				type = "ImageButton",
+				text = "Playtest",
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+					print("playtesting..")
+					playtestService.CreatePlaytestAsync()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(0, 0, 0),
+				roundness = 0.2,
+				texture = PlayIcon,
+			},
+			{
+				type = "ImageButton",
+
+				callback = function()
+					local playtestService = game:GetService("PlaytestService")
+
+					print("Stopping the simulation")
+					playtestService.StopCurrentPlaytest()
+				end,
+				hoverTransparency = 0.5,
+				hoverColor = Color3.new(1, 0, 0),
+				roundness = 0.2,
+			},
+		},
+	},
 }
 
 local aereon = import("@Kinemium.Aereon")
@@ -107,7 +258,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "Toolbar"
 screenGui.Parent = LocalPlayer.PlayerGui
 
-local propback, frame = create_window_back(screenGui, "Toolbar", Vector2.new(0, 0), UDim2.new(1, 0, 0, 122))
+local propback, frame = create_window_back(screenGui, "Toolbar", Vector2.new(0, 0), UDim2.new(1, 0, 0, 160))
 
 local function Color3ToRaylib(c, transparency)
 	local r, g, b = c:ToRGB()
@@ -120,7 +271,7 @@ local function Color3ToRaylib(c, transparency)
 end
 
 local function renderButton(i, name, element, windowData)
-	local winX, winY = windowData.x, windowData.y + 30
+	local winX, winY = windowData.x, windowData.y + 80
 	local winWidth = windowData.width
 	local cellWidth = element.width or 50
 	local cellHeight = element.height or 50
@@ -186,15 +337,66 @@ game.EngineSignal:Connect(function(route, name, data)
 	end
 end)
 
+local function drawCategories(windowData)
+	local buttonWidth = 100
+	local buttonHeight = 30
+	local padding = 5
+
+	local categoryCount = 0
+	for _ in pairs(categoryRegistry) do
+		categoryCount += 1
+	end
+
+	local extraPadding = 5
+	local totalWidth = categoryCount * buttonWidth + math.max(0, (categoryCount - 1) * padding)
+	local width = totalWidth + extraPadding
+
+	local height = 35
+	local x = windowData.x + (windowData.width - width) / 2 -- center inside window
+	local y = windowData.y + 35
+
+	local Categories = aRect.new(x, y, width, height)
+	rl.DrawRectangleRounded(aRect:translate(Categories), 0.5, 18, Color3ToRaylib(Color3.new(0.133, 0.133, 0.133), 0))
+
+	-- Draw buttons inside
+	local startX = x + extraPadding / 2
+	local i = 0
+	for name, category in pairs(categoryRegistry) do
+		local rect =
+			aRect.new(startX + i * (buttonWidth + padding), y + (height - buttonHeight) / 2, buttonWidth, buttonHeight)
+
+		aRect.Button(rect, function()
+			currentlySelected = name
+		end)
+
+		local bg = Color3ToRaylib(Color3.new(0.3, 0.3, 0.3), 1)
+		if currentlySelected == name then
+			bg = Color3ToRaylib(Color3.new(0.3, 0.3, 0.3), 0)
+		end
+
+		rl.DrawRectangleRounded(aRect:translate(rect), 0.5, 5, bg)
+
+		local textX = rect.x + buttonWidth / 2 - (#name * 9) / 2
+		local textY = rect.y + buttonHeight / 2 - 9
+		rl.DrawTextEx(vend, name, vector.create(textX, textY), 18, 1, KinemiumRaylib.const.WHITE)
+
+		i += 1
+	end
+end
+
 window.stepped = function(windowData)
 	if windowData.title == "Toolbar" then
-		windowData.x = frame.AbsolutePosition.X
-		windowData.y = frame.AbsolutePosition.Y
-		windowData.width = frame.AbsoluteSize.X
-		windowData.height = frame.AbsoluteSize.Y
+		if rl.IsWindowResized() == 1 then
+			windowData.x = frame.AbsolutePosition.X
+			windowData.y = frame.AbsolutePosition.Y
+			windowData.width = frame.AbsoluteSize.X
+			windowData.height = frame.AbsoluteSize.Y
+		end
 
 		local i = 0
-		for _, category in pairs(categoryRegistry) do
+		local category = categoryRegistry[currentlySelected]
+
+		if category then
 			local elements = category.elements
 			for _, element in pairs(elements) do
 				if element.type == "ImageButton" then
@@ -205,5 +407,6 @@ window.stepped = function(windowData)
 				i += 1
 			end
 		end
+		drawCategories(windowData)
 	end
 end
