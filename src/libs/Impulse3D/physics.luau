@@ -90,4 +90,12 @@ function physics.substep(body_manager: BodyManager, dt: number)
 	end
 end
 
+function physics.applyImpulse(body, impulse: Vector3)
+	body.velocity += impulse
+end
+
+function physics.applyForce(body, force: Vector3, dt: number)
+	body.velocity += force * dt
+end
+
 return physics

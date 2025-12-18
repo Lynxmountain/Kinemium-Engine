@@ -52,4 +52,17 @@ function Region3:ToRegion3()
 	return Region3.new(self.Min, self.Max)
 end
 
+function Region3:ToTable()
+	return {
+		type = "Region3",
+		Min = self.Min:ToTable(),
+		Max = self.Max:ToTable(),
+	}
+end
+
+function Region3.FromTable(tbl)
+	assert(tbl.type == "Region3")
+	return Region3.new(Vector3.FromTable(tbl.Min), Vector3.FromTable(tbl.Max))
+end
+
 return Region3

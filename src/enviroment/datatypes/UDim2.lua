@@ -60,4 +60,23 @@ function UDim2.__div(a, b)
 	return UDim2.new(a.X.Scale / b, a.X.Offset / b, a.Y.Scale / b, a.Y.Offset / b)
 end
 
+function UDim2:ToTable()
+	return {
+		type = "UDim2",
+		X = {
+			Scale = self.X.Scale,
+			Offset = self.X.Offset,
+		},
+		Y = {
+			Scale = self.Y.Scale,
+			Offset = self.Y.Offset,
+		},
+	}
+end
+
+function UDim2.FromTable(tbl)
+	assert(tbl.type == "UDim2")
+	return UDim2.new(tbl.X.Scale, tbl.X.Offset, tbl.Y.Scale, tbl.Y.Offset)
+end
+
 return UDim2

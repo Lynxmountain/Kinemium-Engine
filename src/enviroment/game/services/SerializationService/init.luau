@@ -1,15 +1,77 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
+local encoder = require("./SerializationService/encoder")
+
+local serde = zune.serde
+local lz4 = serde.lz4
+local zstd = serde.zstd
+local json = serde.json
+local zlib = serde.zlib
 
 local SerializationService = Instance.new("SerializationService")
 SerializationService.ExplorerHidden = true
 
+local blacklisted = {
+	"function",
+	"userdata",
+	"FFIPointer",
+}
+
+local function compress(tbl)
+	local result = encoder.encode(tbl)
+	return zstd.compress(result)
+end
+
+local function decompress(data)
+	local raw = zstd.decompress(data)
+	return encoder.decode(raw)
+end
+
+local function serialize_value(value)
+	if type(value) == "table" then
+		if value["ToTable"] then
+			return value:ToTable()
+		end
+	elseif table.find(blacklisted, typeof(value)) then
+		return nil
+	else
+		return value
+	end
+end
+
+local function serialize_object(object)
+	local result = {
+		class = object.ClassName,
+		name = object.Name,
+		props = {},
+		children = {},
+		attr = {},
+		tags = object.tags,
+	}
+
+	for propname, propvalue in pairs(object._props) do
+		result.props[propname] = serialize_value(propvalue)
+	end
+
+	for _, child in pairs(object:GetChildren()) do
+		result.children[child.Name] = serialize_object(child)
+	end
+
+	return result
+end
+
 SerializationService.InitRenderer = function(renderer, renderer_signal)
 	SerializationService:SetProperties({
-		SerializeInstancesAsync = function(self, m)
-			-- since the instance is already a table, we dont need to serialize it
-			-- we could just.. compress it i guess
-			-- TODO
+		SerializeInstancesAsync = function(m)
+			local objects = {}
+
+			for _, v in pairs(m) do
+				local serialized = serialize_object(v)
+				table.insert(objects, serialized)
+			end
+
+			local compressed = compress(objects)
+			return compressed
 		end,
 	})
 end

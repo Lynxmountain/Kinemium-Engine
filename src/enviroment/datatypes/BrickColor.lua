@@ -84,4 +84,18 @@ function BrickColor.fromColor3(c3)
 	return BrickColor.new(best)
 end
 
+function BrickColor:ToTable()
+	return {
+		type = "BrickColor",
+		Name = self.Name,
+		Number = self.Number,
+		Color = self.Color:ToTable(),
+	}
+end
+
+function BrickColor.FromTable(tbl)
+	assert(tbl.type == "BrickColor")
+	return BrickColor.new(tbl.Name)
+end
+
 return BrickColor

@@ -219,7 +219,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 
 			local mousePos = raylib.GetMousePosition()
 			local relX = mousePos.x - (x + gutterwidth + padding)
-			local relY = mousePos.y - (y + padding) + editor.scrollY -- Add scroll offset
+			local relY = mousePos.y - (y + padding) + editor.scrollY
 
 			local clickedLine = math.floor(relY / lineHeight) + 1
 			clickedLine = math.clamp(clickedLine, 1, #editor.text.lines)

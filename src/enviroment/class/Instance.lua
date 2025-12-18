@@ -75,6 +75,7 @@ function Instance.new(className)
 	self.ChildAdded = Signal.new()
 	self.Changed = Signal.new()
 	self.DescendantAdded = Signal.new()
+	self.tags = {}
 
 	self._props = {
 		ClassName = className,

@@ -327,4 +327,19 @@ function CFrame:__tostring()
 	return ("CFrame.new(%s, %s, %s)"):format(self.Position.X, self.Position.Y, self.Position.Z)
 end
 
+function CFrame:ToTable()
+	return {
+		type = "CFrame",
+		Position = self.Position:ToTable(),
+		Rotation = self.Rotation,
+	}
+end
+
+function CFrame.FromTable(tbl)
+	assert(tbl.type == "CFrame")
+	local cf = CFrame.new(Vector3.FromTable(tbl.Position))
+	cf.Rotation = tbl.Rotation
+	return cf
+end
+
 return CFrame

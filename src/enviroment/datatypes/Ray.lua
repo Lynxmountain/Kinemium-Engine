@@ -28,4 +28,17 @@ function Ray:DistanceToPoint(point)
 	return (point - closest):Magnitude()
 end
 
+function Ray:ToTable()
+	return {
+		type = "Ray",
+		Origin = self.Origin:ToTable(),
+		Direction = self.Direction:ToTable(),
+	}
+end
+
+function Ray.FromTable(tbl)
+	assert(tbl.type == "Ray")
+	return Ray.new(Vector3.FromTable(tbl.Origin), Vector3.FromTable(tbl.Direction))
+end
+
 return Ray

@@ -28,6 +28,13 @@ local propTable = {
 	ElapsedTime = 0,
 	Name = "Part",
 	_mesh = nil,
+
+	-- Velocity
+	AssemblyAngularVelocity = Vector3.new(0, 0, 0),
+	AssemblyCenterOfMass = Vector3.new(0, 0, 0),
+	AssemblyLinearVelocity = Vector3.new(0, 0, 0),
+	AssemblyMass = 0,
+	AssemblyRootPart = nil,
 }
 
 return {

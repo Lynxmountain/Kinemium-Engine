@@ -76,7 +76,6 @@ local function run_test(stepfunc)
 	local tmeas = {}
 	-- Simulation loop:
 	for i = 1, NUMSTEPS do
-		-- add random forces and torques to all bodies
 		for i = 1, NUMBODIES do
 			body[i]:add_force(randomvec3(-5, 5))
 			body[i]:add_torque(randomvec3(-5, 5))

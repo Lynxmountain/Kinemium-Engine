@@ -2,11 +2,11 @@ local CustomPhysicalProperties = {}
 CustomPhysicalProperties.__index = CustomPhysicalProperties
 
 export type CustomPhysicalProperties = {
-	density: number?,
-	friction: number?,
-	elasticity: number?,
-	frictionWeight: number?,
-	elasticityWeight: number?,
+	Density: number?,
+	Friction: number?,
+	Elasticity: number?,
+	FrictionWeight: number?,
+	ElasticityWeight: number?,
 }
 
 function CustomPhysicalProperties.new(
@@ -43,6 +43,28 @@ function CustomPhysicalProperties:Equals(other: CustomPhysicalProperties)
 		and self.Elasticity == other.Elasticity
 		and self.FrictionWeight == other.FrictionWeight
 		and self.ElasticityWeight == other.ElasticityWeight
+end
+
+function CustomPhysicalProperties:ToTable()
+	return {
+		type = "CustomPhysicalProperties",
+		Density = self.Density,
+		Friction = self.Friction,
+		Elasticity = self.Elasticity,
+		FrictionWeight = self.FrictionWeight,
+		ElasticityWeight = self.ElasticityWeight,
+	}
+end
+
+function CustomPhysicalProperties.FromTable(tbl)
+	assert(tbl.type == "CustomPhysicalProperties")
+	return CustomPhysicalProperties.new(
+		tbl.Density,
+		tbl.Friction,
+		tbl.Elasticity,
+		tbl.FrictionWeight,
+		tbl.ElasticityWeight
+	)
 end
 
 return CustomPhysicalProperties

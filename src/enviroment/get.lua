@@ -68,7 +68,6 @@ return function(renderer)
 
 		return LogService.CreateLog("print", tostring(message))
 	end
-
 	data.warn = function(message)
 		print("RUNTIME", message)
 
@@ -76,7 +75,7 @@ return function(renderer)
 	end
 
 	data.error = function(message)
-		print("RUNTIME", message)
+		warn("RUNTIME", message)
 
 		return LogService.CreateLog("error", tostring(message))
 	end

@@ -97,4 +97,18 @@ function Color3.__unm(a)
 	return Color3.new(-a.R, -a.G, -a.B)
 end
 
+function Color3:ToTable()
+	return {
+		type = "Color3",
+		R = self.R,
+		G = self.G,
+		B = self.B,
+	}
+end
+
+function Color3.FromTable(tbl)
+	assert(tbl.type == "Color3")
+	return Color3.new(tbl.R, tbl.G, tbl.B)
+end
+
 return Color3

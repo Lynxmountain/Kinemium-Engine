@@ -2,12 +2,20 @@ _G.warn = function(...)
 	print("[\x1b[33mWARN\x1b[0m]", ...)
 end
 
+_G.FlagExists = function(flag)
+	local args = zune.process.args
+	for _, v in pairs(args) do
+		if v == "--" .. flag then
+			return true
+		end
+	end
+	return false
+end
+
 local sandboxer = require("./modules/sandboxer")
-local filesystem = require("./modules/filesystem")
 local Instance = require("@Instance")
-local ModuleScript = require("@ModuleScript")
+local filesystem = require("./modules/filesystem")
 local Kinemium_env = require("./enviroment/get")
-local task = zune.task
 local threads = { internals = {}, game = {} }
 local Kinemium = {}
 
@@ -30,11 +38,14 @@ local function loop(base, callback)
 		if entry.kind == "directory" then
 			loop(path, callback)
 		else
-			-- Call your callback for this file
 			callback(path, entry)
 		end
 	end)
 end
+
+local Folder = Instance.new("Folder")
+Folder.Name = "Studio"
+Folder.Parent = sandboxer.enviroment.game.CoreGui
 
 loop("src/sandboxed/internals", function(path, entry)
 	if threads.internals[path] then
@@ -46,6 +57,14 @@ loop("src/sandboxed/internals", function(path, entry)
 	sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.Internals
 	print("Running internal:", path)
 	threads.internals[path] = sandboxer.thread.new(path, entry, sandboxer.enviroment)
+
+	local luauCleaned = string.gsub(entry.name, ".luau", "")
+	local luaCleaned = string.gsub(luauCleaned, ".lua", "")
+
+	local object = Instance.new("LocalScript")
+	object.Source = filesystem.read(path)
+	object.Name = luaCleaned
+	object.Parent = Folder
 end)
 
 function Kinemium:playtest()

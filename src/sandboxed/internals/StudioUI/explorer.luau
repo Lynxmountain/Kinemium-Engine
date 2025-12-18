@@ -24,6 +24,10 @@ if game.Context ~= Enum.GameContext.Editor then
 	return
 end
 
+if FlagExists("client") then
+	return
+end
+
 local function DoubleClicked(instance)
 	if instance:IsA("Script") or instance:IsA("ModuleScript") or instance:IsA("LocalScript") then
 		EngineSignal:Fire("idestate", true, instance)

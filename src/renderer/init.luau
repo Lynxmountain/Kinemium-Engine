@@ -398,7 +398,11 @@ local function step(time)
 
 	table.clear(activeLights)
 
-	lib.DrawFPS(10, 170)
+	if FlagExists("client") then
+		lib.DrawFPS(10, 40)
+	else
+		lib.DrawFPS(10, 170)
+	end
 
 	lib.EndDrawing()
 	mainSignal:Fire("Heartbeat", delta)

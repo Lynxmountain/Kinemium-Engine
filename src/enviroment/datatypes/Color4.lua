@@ -103,4 +103,19 @@ function Color4.__unm(a)
 	return Color4.new(-a.R, -a.G, -a.B, -a.A)
 end
 
+function Color4:ToTable()
+	return {
+		type = "Color4",
+		R = self.R,
+		G = self.G,
+		B = self.B,
+		A = self.A,
+	}
+end
+
+function Color4.FromTable(tbl)
+	assert(tbl.type == "Color4")
+	return Color4.new(tbl.R, tbl.G, tbl.B, tbl.A)
+end
+
 return Color4

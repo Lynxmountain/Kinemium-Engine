@@ -69,4 +69,17 @@ end
 Vector2.Zero = Vector2.new(0, 0)
 Vector2.One = Vector2.new(1, 1)
 
+function Vector2:ToTable()
+	return {
+		type = "Vector2",
+		X = self.X,
+		Y = self.Y,
+	}
+end
+
+function Vector2.FromTable(tbl)
+	assert(tbl.type == "Vector2")
+	return Vector2.new(tbl.X, tbl.Y)
+end
+
 return Vector2

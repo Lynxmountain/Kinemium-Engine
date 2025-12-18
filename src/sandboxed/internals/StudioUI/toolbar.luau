@@ -31,6 +31,10 @@ if game.Context ~= Enum.GameContext.Editor then
 	return
 end
 
+if FlagExists("client") then
+	return
+end
+
 KinemiumIconLoader.new("Play", "src/assets/images/icons/vanilla3/general/32x/200/Play.png")
 
 local png = KinemiumIconLoader.Get("Play")

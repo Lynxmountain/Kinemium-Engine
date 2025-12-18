@@ -5,3 +5,10 @@ baseplate.Color = Color3.new(0.2, 0.2, 0.2)
 baseplate.Name = "Baseplate"
 baseplate.Anchored = true
 baseplate.Parent = workspace
+
+local SerializationService = game:GetService("SerializationService")
+print("buh 2")
+local success, result = pcall(function(...)
+	return SerializationService.SerializeInstancesAsync({ game, baseplate })
+end)
+warn(result)

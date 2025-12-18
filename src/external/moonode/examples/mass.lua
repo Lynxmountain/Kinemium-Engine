@@ -5,7 +5,6 @@ local glmath = require("moonglmath")
 ode.glmath_compat(true)
 local vec3, mat3 = glmath.vec3, glmath.mat3
 
--- add metamethods for printing masses:
 local mt = getmetatable(ode.mass())
 mt.__tostring = function(m)
 	return "total="

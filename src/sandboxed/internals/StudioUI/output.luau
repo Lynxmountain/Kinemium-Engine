@@ -17,6 +17,10 @@ if game.Context ~= Enum.GameContext.Editor then
 	return
 end
 
+if FlagExists("client") then
+	return
+end
+
 print("This is output.")
 
 KinemiumIconLoader.new("Add", "./src/assets/images/icons/vanilla3/ui/16x/200/Add.png")
