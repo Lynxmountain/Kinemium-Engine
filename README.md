@@ -3,7 +3,7 @@
 [<img width="50" height="50" alt="image" src="https://github.com/user-attachments/assets/83c3a863-d290-487f-b073-fed9caa6832f" />
 ](https://discord.gg/7byuxfYtAP)
 ## Introduction
-Kinemium is a sandbox engine written in Luau. It includes a custom scripting language called Kilang, with Luau-style syntax and additional features.
+Kinemium is a sandbox engine written in Luau (Zune Runtime). It includes a custom scripting language called Kilang, with Luau-style syntax and additional features.
 
 # Notice
 Kinemium is not affiliated with or endorsed by Roblox Corporation.
@@ -88,7 +88,7 @@ This lets you add mods to your game, and you can set the enviroment of your said
 # How do I spell Kinemium?
 Ki-nem-yum!!
 
-# Open-sourced projects used in the engine
+# This project uses
 - Raylib
 - Lua
 - LuaJIT
@@ -99,6 +99,7 @@ Ki-nem-yum!!
 - jolt
 - r3d
 - moonode
+- and most importantly.. Zune
 
 # Do you like cats?
 <img width="444" height="200" alt="Cat...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />
