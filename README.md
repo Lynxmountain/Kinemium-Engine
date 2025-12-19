@@ -3,8 +3,8 @@
 [<img width="50" height="50" alt="image" src="https://github.com/user-attachments/assets/83c3a863-d290-487f-b073-fed9caa6832f" />
 ](https://discord.gg/7byuxfYtAP)
 ## Introduction
-Kinemium Engine is an engine (duh) that imitates roblox's API Surface, this means you can develop roblox-style syntax in this engine and it will work normally!<br>
-It was originally to test zune's capabilities on raylib, but now, it has expanded to a full on independent engine.
+Kinemium is a Lua-based sandbox engine with a familiar scripting style inspired by modern game creation platforms.
+It provides a high-level object and service framework designed for ease of use, not direct compatibility with any proprietary engine.
 
 # Features
 ## Datatypes
@@ -106,6 +106,8 @@ Ki-nem-yum!!
 - jolt
 - r3d
 - moonode
+
+Kinemium is an independent Lua-based engine inspired by sandbox game creation platforms. It is not affiliated with or endorsed by Roblox Corporation.
 
 # Do you like cats?
 <img width="444" height="200" alt="Cat...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />
