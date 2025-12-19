@@ -13,6 +13,10 @@ local GamepadDisconnected = signal.new()
 local active_keys = {}
 
 UserInputService.InitRenderer = function(renderer, renderer_signal)
+	if IsHeadless then
+		UserInputService:SetProperties({})
+		return
+	end
 	local Enum = require("@EnumMap")
 
 	local lib = renderer.lib

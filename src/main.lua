@@ -15,20 +15,37 @@ end
 local sandboxer = require("./modules/sandboxer")
 local Instance = require("@Instance")
 local filesystem = require("./modules/filesystem")
-local Kinemium_env = require("./enviroment/get")
-local threads = { internals = {}, game = {} }
+local Enum = require("@EnumMap")
+local kilang = require("@kilang")
 local Kinemium = {}
 
-local renderer = require("@Kinemium.3d")
-Kinemium_env = Kinemium_env(renderer)
+local dummy = require("./renderer/dummy")
 
---local raygui = require("@raygui")
+local renderer
 
-sandboxer.enviroment = Kinemium_env
+if FlagExists("client") then
+	_G.IsClient = true
+	_G.IsServer = false
+elseif FlagExists("server") then
+	kilang.renderer = dummy
 
-local game = Kinemium_env.game
+	_G.IsServer = true
+	_G.IsClient = false
 
-renderer.DatamodelObject(game)
+	print("Running engine headless mode (Server).")
+end
+
+if FlagExists("headless") or FlagExists("cli") then
+	kilang.renderer = dummy
+	_G.IsHeadless = true
+else
+	kilang.renderer = require("@Kinemium.3d")
+end
+
+kilang:init()
+
+local game = kilang.env.game
+kilang.renderer.DatamodelObject(game)
 
 local function loop(base, callback)
 	base = base or "src/sandboxed"
@@ -45,18 +62,18 @@ end
 
 local Folder = Instance.new("Folder")
 Folder.Name = "Studio"
-Folder.Parent = sandboxer.enviroment.game.CoreGui
+Folder.Parent = kilang.env.game.CoreGui
 
 loop("src/sandboxed/internals", function(path, entry)
-	if threads.internals[path] then
+	if kilang.threads[path] then
 		return
 	end
-	if threads.game[path] then
-		return
-	end
-	sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.Internals
-	print("Running internal:", path)
-	threads.internals[path] = sandboxer.thread.new(path, entry, sandboxer.enviroment)
+
+	local code = zune.fs.readFile(path)
+	kilang:execute(code, {
+		SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+		StackId = path,
+	})
 
 	local luauCleaned = string.gsub(entry.name, ".luau", "")
 	local luaCleaned = string.gsub(luauCleaned, ".lua", "")
@@ -69,19 +86,19 @@ end)
 
 function Kinemium:playtest()
 	loop("src/sandboxed", function(path, entry)
-		if threads.internals[path] then
+		if kilang.threads[path] then
 			return
 		end
-		if threads.game[path] then
-			return
-		end
-		sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.UserScript
-		print("Running game:", path)
-		threads.game[path] = sandboxer.thread.new(path, entry, sandboxer.enviroment)
+
+		local code = filesystem.read(path)
+		kilang:execute(code, {
+			SecurityCapabilities = Enum.SecurityCapabilities.UserScript,
+			StackId = path,
+		})
 	end)
 end
 
-renderer.Kinemium_camera.Parent = sandboxer.enviroment.workspace
+kilang.renderer.Kinemium_camera.Parent = sandboxer.enviroment.Scene
 
 game.EngineSignal:Connect(function(route)
 	if route == "playtest" then
@@ -90,4 +107,18 @@ game.EngineSignal:Connect(function(route)
 end)
 
 Kinemium:playtest()
-renderer.Run()
+
+if FlagExists("kilang") then
+	require("./repl"):init(function(line)
+		print(kilang)
+		local success, result = pcall(function(...)
+			kilang:execute(line, {
+				SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+			})
+		end)
+
+		print(success, result)
+	end)
+end
+
+kilang.renderer.Run()

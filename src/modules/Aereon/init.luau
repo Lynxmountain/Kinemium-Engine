@@ -63,6 +63,7 @@ local themes = {
 
 -- data
 Aereon.raylib = raylib
+Aereon.gui = require("./Aereon/component/lib")
 
 function Aereon.theme(name, new)
 	themes[name] = new
@@ -99,13 +100,14 @@ function Aereon.include(game)
 	callerEnv.window = Aereon.window(game, themes.default)
 end
 
-function Aereon.step()
+function Aereon.step(dt)
+	Aereon.gui:step(dt)
 	table.sort(stepcallbacks, function(a, b)
 		return a.priority > b.priority
 	end)
 
 	for _, v in ipairs(stepcallbacks) do
-		v.callback(game)
+		v.callback(dt)
 	end
 end
 

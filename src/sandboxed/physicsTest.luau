@@ -12,7 +12,7 @@ local function createPart(pos, size, color, anchored, mass, restitution, frictio
 	part.Mass = mass or 1
 	part.Restitution = restitution or 0.5
 	part.Friction = friction or 0.3
-	part.Parent = workspace
+	part.Parent = Scene
 	return part
 end
 

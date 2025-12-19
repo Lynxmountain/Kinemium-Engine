@@ -39,6 +39,7 @@
         "python": "./src/runtime/python/wrapper",
         "enet": "./src/external/lua-enet/wrapper",
         "luajit": "./src/runtime/luajit/wrapper",
+        "kispring": "./src/libs/spring",
         "raylib": "./src/external/raylib",
         "moonode": "./src/external/moonode/wrapper",
         "Impulse3D": "./src/libs/Impulse3D/main",
@@ -59,10 +60,11 @@
         "Kinemium.gameservices": "./src/enviroment/game/services",
         "jolt": "./src/external/jolt/wrapper",
         "Kinemium.joltdll": "./src/external/jolt/joltc.dll",
+        "Kilang": "./src/kilang/init",
         "Kinemium.bullet": "./src/external/bullet",
         "Kinemium.ode": "./src/external/odebindings/odezune",
         "StarterGui": "./src/enviroment/game/services/StarterGui",
-        "Workspace": "./src/enviroment/game/services/Workspace",
+        "Scene": "./src/enviroment/game/services/Scene",
         "RunService": "./src/enviroment/game/services/RunService",
         "Players": "./src/enviroment/game/services/Players"
     }

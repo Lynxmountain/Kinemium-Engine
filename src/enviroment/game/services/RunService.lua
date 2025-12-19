@@ -81,7 +81,7 @@ RunService.InitRenderer = function(renderer, renderer_signal)
 	end)
 end
 
-function RunService:SetRobloxFPS(fps)
+function RunService:SetSchedulerFPS(fps)
 	local dt = 1 / fps
 	local last = os.clock()
 	return function()

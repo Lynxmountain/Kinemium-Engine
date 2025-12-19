@@ -71,6 +71,9 @@ local function handleSky(skyObject, renderer)
 end
 
 Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
+	if IsHeadless == true then
+		return Lighting:SetProperties({})
+	end
 	local EngineSignal = datamodel.EngineSignal
 	renderer.skybox.Load()
 

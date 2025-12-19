@@ -26,7 +26,7 @@ return function(renderer)
 		wait = zune.task.wait,
 	}
 	data.game = mainDatamodel
-	data.workspace = mainDatamodel:GetService("Workspace")
+	data.Scene = mainDatamodel:GetService("Scene")
 	data.shared = shared
 	data._VERSION = "Kilang 1.0.1"
 	data.wait = zune.task.wait
@@ -46,7 +46,6 @@ return function(renderer)
 
 	data.kinemium = {
 		version = 1.0,
-		window = require("@Kinemium.window")(renderer.lib),
 
 		--jolt = require("@Kinemium.jolt"),
 	}
@@ -56,7 +55,7 @@ return function(renderer)
 	players.LocalPlayer.Parent = players
 
 	renderer.SetLightingService(mainDatamodel:GetService("Lighting"))
-	renderer.Kinemium_camera.Parent = mainDatamodel:GetService("Workspace")
+	renderer.Kinemium_camera.Parent = mainDatamodel:GetService("Scene")
 
 	local ScriptRunnerService = mainDatamodel:GetService("ScriptRunnerService")
 	ScriptRunnerService.InitEnviroment(data, mainDatamodel)

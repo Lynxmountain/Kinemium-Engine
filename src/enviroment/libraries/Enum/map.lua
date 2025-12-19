@@ -135,7 +135,6 @@ enumTable.KeyCode = {
 	Apps = 93,
 	Sleep = 95,
 
-	-- Roblox-specific virtual keys
 	Thumbstick1 = 1000,
 	Thumbstick2 = 1001,
 	ButtonX = 1002,
@@ -178,9 +177,9 @@ enumTable.UserInputType = {
 	Accelerometer = 16,
 	Gyro = 17,
 
-	Gamepad = 18, -- alias Roblox uses
+	Gamepad = 18,
 	TextInput = 19,
-	Voice = 20, -- UGC voice (Roblox internal)
+	Voice = 20,
 }
 
 enumTable.PartType = {

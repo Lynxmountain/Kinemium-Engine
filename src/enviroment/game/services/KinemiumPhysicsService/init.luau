@@ -18,6 +18,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	local jolt = require("@jolt")
 	local lib = jolt.lib
 
+	--[[
 	local state = lib.JPH_Init()
 
 	print("Physics system initialized with status:", state)
@@ -49,6 +50,8 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	local objectVsBroadPhaseFilter =
 		lib.JPH_ObjectVsBroadPhaseLayerFilterTable_Create(broadPhaseLayerInterface, 2, objectLayerFilter, 2)
 	print(5)
+			--]]
+
 	local propTable = {
 		GetBody = function(part)
 			return bodiesMap[part]
@@ -77,7 +80,7 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	end)
 
 	engine.physics.render = function(id, object, dt)
-		for _, part in pairs(game.Workspace:GetDescendants()) do
+		for _, part in pairs(game.Scene:GetDescendants()) do
 			if part.Anchored then
 				continue
 			end
