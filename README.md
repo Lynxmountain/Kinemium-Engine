@@ -3,8 +3,10 @@
 [<img width="50" height="50" alt="image" src="https://github.com/user-attachments/assets/83c3a863-d290-487f-b073-fed9caa6832f" />
 ](https://discord.gg/7byuxfYtAP)
 ## Introduction
-Kinemium is a Lua-based sandbox engine with a familiar scripting style inspired by modern game creation platforms.
-It provides a high-level object and service framework designed for ease of use, not direct compatibility with any proprietary engine.
+Kinemium is a sandbox engine written in Luau. It includes a custom scripting language called Kilang, with Luau-style syntax and additional features.
+
+# Notice
+Kinemium is not affiliated with or endorsed by Roblox Corporation.
 
 # Features
 ## Datatypes
@@ -46,11 +48,11 @@ It provides a high-level object and service framework designed for ease of use, 
 - StarterGui
 - TweenService
 - UserInputService
-- Workspace
+- Scene
 
 ## Kinemium Custom Services
 *(All custom services start with Kinemium.)*
-- KinemiumFFI
+- KinemiumFFIService
 - KinemiumFontService
 - KinemiumIconLoader
 - KinemiumModService
@@ -83,15 +85,6 @@ There are a set of predefined scripts in there as examples, but you can change a
 Yes! there is a modding service called KinemiumModService (said up there)<br>
 This lets you add mods to your game, and you can set the enviroment of your said mods!
 
-# I want to get more updates about this project, is there a reliable source?
-You can join our [discord server](https://discord.gg/7byuxfYtAP) to get more updates.
-
-# Can I code in another code editor instead of the native code editor?
-Yes, there will be a menu where you can choose your preferred code editor, this will be added soon.
-
-# Are you gonna disappear like Lunar Engine's developer?
-No?
-
 # How do I spell Kinemium?
 Ki-nem-yum!!
 
@@ -106,8 +99,6 @@ Ki-nem-yum!!
 - jolt
 - r3d
 - moonode
-
-Kinemium is an independent Lua-based engine inspired by sandbox game creation platforms. It is not affiliated with or endorsed by Roblox Corporation.
 
 # Do you like cats?
 <img width="444" height="200" alt="Cat...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />
