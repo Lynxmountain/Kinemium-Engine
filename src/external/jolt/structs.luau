@@ -154,9 +154,6 @@ local JPH_MotorSettings = ffi.struct({
 })
 export type JPH_MotorSettings = typeof(JPH_MotorSettings:new({}))
 
-local JPH_CollideSettingsBase = ffi.struct({})
-export type JPH_CollideSettingsBase = typeof(JPH_CollideSettingsBase:new({}))
-
 local JPH_CollideShapeSettings = ffi.struct({
 	{ base = JPH_CollideSettingsBase },
 })
@@ -503,9 +500,13 @@ export type JPH_JobSystemConfig = typeof(JPH_JobSystemConfig:new({}))
 
 local JPH_PhysicsSystemSettings = ffi.struct({
 	{ maxBodies = ffi.types.u32 },
-	{ broadPhaseLayerInterface = JPH_BroadPhaseLayerInterface },
-	{ objectLayerPairFilter = JPH_ObjectLayerPairFilter },
-	{ objectVsBroadPhaseLayerFilter = JPH_ObjectVsBroadPhaseLayerFilter },
+	{ numBodyMutexes = ffi.types.u32 },
+	{ maxBodyPairs = ffi.types.u32 },
+	{ maxContactConstraints = ffi.types.u32 },
+	{ _padding = ffi.types.u32 },
+	{ broadPhaseLayerInterface = ffi.types.pointer },
+	{ objectLayerPairFilter = ffi.types.pointer },
+	{ objectVsBroadPhaseLayerFilter = ffi.types.pointer },
 })
 export type JPH_PhysicsSystemSettings = typeof(JPH_PhysicsSystemSettings:new({}))
 
@@ -676,18 +677,6 @@ local JPH_BodyCreationSettings = ffi.struct({
 	{ userData = ffi.types.u64 },
 })
 export type JPH_BodyCreationSettings = typeof(JPH_BodyCreationSettings:new({}))
-
--- JPH_BodyInterface (opaque)
-local JPH_BodyInterface = ffi.struct({})
-export type JPH_BodyInterface = typeof(JPH_BodyInterface:new({}))
-
--- JPH_BodyManager (opaque)
-local JPH_BodyManager = ffi.struct({})
-export type JPH_BodyManager = typeof(JPH_BodyManager:new({}))
-
--- JPH_ShapeCast (opaque)
-local JPH_ShapeCast = ffi.struct({})
-export type JPH_ShapeCast = typeof(JPH_ShapeCast:new({}))
 
 local structs = {
 	JPH_CollideSettingsBase = JPH_CollideSettingsBase,

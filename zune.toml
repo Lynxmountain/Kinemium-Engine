@@ -11,7 +11,7 @@ game = "src/main.lua"
 # Compiling settings
 #  This affects all required files and the main file.
 [runtime.luau.options]
-debug_level = 3
+debug_level = 10
 optimization_level = 1
 native_code_gen = true
 
