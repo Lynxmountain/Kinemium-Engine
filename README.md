@@ -73,9 +73,22 @@ https://zune.sh/guides/install
 ```zune run game```<br>
 *This tutorial works with both Linux and Windows, MacOS support is coming soon.*
 
+# Commands
+Kinemium provides with several flags you can run with ```zune run game```<br>
+- headless (lets you run the engine without the graphics or renderer)<br>
+- server (lets you run a server version of the engine, this is used for games and such)<br>
+- client (lets you run a client, it removes all the core UI only (for now))<br>
+- kilang (lets you run kilang code in the terminal, you can add this flag with any other flag and it will still work (headless not working yet))<br>
+
+example command with a flag:<br>
+```zune run game --client```<br>
+```zune run game --client --kilang```<br>
+```zune run game --server --kilang```<br>
+```zune run game --headless```<br>
+
 # Preview
-<img width="1919" height="1018" alt="image" src="https://github.com/user-attachments/assets/65e18ea9-eb2b-4ab8-8836-cce0ae00236f" />
-*yes that is 500 fps*
+<img width="1919" height="1019" alt="image" src="https://github.com/user-attachments/assets/5b4e7608-7f20-4e10-b7bb-1c9e67b2d74b" /><br>
+<img width="1293" height="865" alt="Screenshot 2025-12-20 004117" src="https://github.com/user-attachments/assets/20d0ca16-ebfa-4f0a-bf2f-084fde6f67db" />
 
 # How do I add scripts?
 Once you clone the github repo, you will find a folder called ```sandboxed``` inside the engine *(src)*<br>
