@@ -5,3 +5,11 @@ baseplate.Color = Color3.new(0.2, 0.2, 0.2)
 baseplate.Name = "Grid"
 baseplate.Anchored = true
 baseplate.Parent = Scene
+
+for i = 1, 10 do
+	local part = Instance.new("Part")
+	part.Anchored = false
+	part.Position = Vector3.new(0, 10, 0)
+	part.Size = Vector3.new(4, 4, 4)
+	part.Parent = game.Scene
+end

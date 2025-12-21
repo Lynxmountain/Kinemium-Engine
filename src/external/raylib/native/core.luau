@@ -562,6 +562,7 @@ return {
 
 		-- Matrix functions
 		MatrixIdentity = fn(Matrix, {}),
+		MatrixInvert = fn(Matrix, { Matrix }),
 		MatrixLookAt = fn(Matrix, { Vector3, Vector3, Vector3 }),
 		MatrixMultiply = fn(Matrix, { Matrix, Matrix }),
 		MatrixPerspective = fn(Matrix, { float, float, float, float }),

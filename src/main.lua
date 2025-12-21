@@ -17,6 +17,7 @@ local Instance = require("@Instance")
 local filesystem = require("./modules/filesystem")
 local Enum = require("@EnumMap")
 local kilang = require("@kilang")
+local task = zune.task
 local Kinemium = {}
 
 local dummy = require("./renderer/dummy")
@@ -106,19 +107,18 @@ game.EngineSignal:Connect(function(route)
 	end
 end)
 
-Kinemium:playtest()
-
 if FlagExists("kilang") then
 	require("./repl"):init(function(line)
-		print(kilang)
-		local success, result = pcall(function(...)
-			kilang:execute(line, {
-				SecurityCapabilities = Enum.SecurityCapabilities.Internals,
-			})
+		task.spawn(function()
+			local success, result = pcall(function(...)
+				kilang:execute(line, {
+					SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+				})
+			end)
 		end)
-
-		print(success, result)
 	end)
 end
+
+Kinemium:playtest()
 
 kilang.renderer.Run()

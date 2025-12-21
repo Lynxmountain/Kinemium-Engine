@@ -110,7 +110,7 @@ Ki-nem-yum!!
 - lua-discordrpc
 - lua-webview
 - jolt
-- r3d
+- red
 - moonode
 - and most importantly.. Zune
 

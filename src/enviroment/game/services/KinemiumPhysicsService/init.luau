@@ -90,11 +90,10 @@ local function createBody(bodyInterface, part)
 		return
 	end
 
-	local halfSize = structs.JPH_Vec3:new({
-		x = part.Size.X / 2,
-		y = part.Size.Y / 2,
-		z = part.Size.Z / 2,
-	})
+	local halfSize = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
+	halfSize:writef32(0, part.Size.X / 2)
+	halfSize:writef32(4, part.Size.Y / 2)
+	halfSize:writef32(8, part.Size.Z / 2)
 
 	print({
 		x = part.Size.X / 2,
@@ -102,15 +101,13 @@ local function createBody(bodyInterface, part)
 		z = part.Size.Z / 2,
 	})
 
-	local boxShape = lib.JPH_BoxShape_Create(halfSize, float_ptr(0.05))
-
+	local boxShape = lib.JPH_BoxShape_Create(halfSize, float_ptr(0.001))
 	print(boxShape)
 
-	local position = structs.JPH_RVec3:new({
-		x = part.Position.X,
-		y = part.Position.Y,
-		z = part.Position.Z,
-	})
+	local position = ffi.alloc(structs.JPH_RVec3:size(), structs.JPH_RVec3:alignment())
+	position:writef64(0, part.Position.X)
+	position:writef64(8, part.Position.Y)
+	position:writef64(16, part.Position.Z)
 
 	local rotation = structs.JPH_Quat:new({ x = 0, y = 0, z = 0, w = 1 })
 
@@ -152,12 +149,6 @@ local function createBody(bodyInterface, part)
 
 	if state == 2 then
 		lib.JPH_BodyInterface_ResetSleepTimer(bodyInterface, bodyID)
-
-		local testVel = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
-		testVel:writef32(0, 0)
-		testVel:writef32(4, -1) -- Small downward velocity
-		testVel:writef32(8, 0)
-		lib.JPH_BodyInterface_SetLinearVelocity(bodyInterface, bodyID, testVel)
 	end
 
 	bodiesMap[part] = bodyID
@@ -230,9 +221,9 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 	-- Set gravity
 	local gravity = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
-	gravity:writef32(0, 0) -- x
-	gravity:writef32(4, -9.81) -- y
-	gravity:writef32(8, 0) -- z
+	gravity:writef32(0, 0) -- X
+	gravity:writef32(4, -9.81) -- Y
+	gravity:writef32(8, 0) -- Z
 	lib.JPH_PhysicsSystem_SetGravity(physicsSystem, gravity)
 	print("[Physics] Gravity set")
 
@@ -344,9 +335,9 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 				lib.JPH_BodyInterface_GetPositionAndRotation(bodyInterface, bodyID, position, rotation)
 
-				local posX = position:readf64(8)
-				local posY = position:readf64(0) -- Correct offset for second double
-				local posZ = position:readf64(16) -- Correct offset for third double
+				local posX = position:readf64(0)
+				local posY = position:readf64(8)
+				local posZ = position:readf64(16)
 
 				part.Position = Vector3.new(posX, posY, posZ)
 				local velocity = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())

@@ -1,7 +1,7 @@
 --!strict
 
-local native = require("@self/native");
-local raylib = require("@self/native/raylib");
+local native = require("@self/native")
+local raylib = require("@self/native/raylib")
 
 export type Vector2 = raylib.Vector2
 export type Vector3 = raylib.Vector3
@@ -44,12 +44,15 @@ export type FilePathList = raylib.FilePathList
 export type AutomationEvent = raylib.AutomationEvent
 export type AutomationEventList = raylib.AutomationEventList
 
-local lib = native.lib;
-local const = native.const;
-local structs = const.structs;
+local lib = native.lib
+local const = native.const
+local structs = const.structs
+
+local r3d = require("./raylib/r3dwrapper")
 
 return {
-    lib = lib,
-    const = const,
-    structs = structs,
+	lib = lib,
+	const = const,
+	structs = structs,
+	r3d = r3d :: typeof(r3d),
 }

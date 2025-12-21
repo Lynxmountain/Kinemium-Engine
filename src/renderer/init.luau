@@ -17,6 +17,7 @@ local Enum = require("@EnumMap")
 local CFrame = require("@CFrame")
 local meshlib = require("./renderer/mesh")
 local Instance = require("@Instance")
+local bufferUtils = require("@bufferutils")
 local Camera = require("@Camera")
 
 -- CONF
@@ -45,8 +46,8 @@ local const = raylib.const
 local structs = raylib.structs
 
 -- W&H
-local screenWidth = raylib.lib.GetScreenWidth()
-local screenHeight = raylib.lib.GetScreenHeight()
+local screenWidth = raylib.lib.GetMonitorWidth(1)
+local screenHeight = raylib.lib.GetMonitorHeight(1)
 
 -- MATERIALS
 local txtureMethods = texture(lib)
@@ -61,6 +62,7 @@ local cameraPos = vector.create(0.0, 5.0, 10.0)
 lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
+
 lib.InitWindow(screenWidth, screenHeight, "Kinemium Engine")
 lib.SetTargetFPS(0)
 
@@ -378,8 +380,6 @@ local function step(time)
 		end
 
 		shadowSystem:EndShadows()
-
-		lib.DrawCubeV(lightPosition, vector.create(3, 3, 3), const.RED)
 
 		lib.rlDisableBackfaceCulling()
 		lib.EndMode3D()
