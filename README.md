@@ -6,7 +6,8 @@
 Kinemium is a sandbox engine written in Luau (Zune Runtime). It includes a custom scripting language called Kilang, with Luau-style syntax and additional features.
 
 # Notice
-Kinemium is not affiliated with or endorsed by Roblox Corporation.
+Kinemium is an independent project not affiliated with, endorsed by, 
+or connected to Roblox Corporation. Roblox is a trademark of Roblox Corporation
 
 # Features
 ## Datatypes
