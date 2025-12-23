@@ -5,8 +5,10 @@ local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local rl = KinemiumRaylib.lib
+local renderer = KinemiumRaylib.renderer
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
 local currentlySelected = ""
@@ -262,7 +264,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "Toolbar"
 screenGui.Parent = LocalPlayer.PlayerGui
 
-local propback, frame = create_window_back(screenGui, "Toolbar", Vector2.new(0, 0), UDim2.new(1, 0, 0, 160))
+local propback, frame = create_window_back(screenGui, "Toolbar", Vector2.new(0, 0), UDim2.new(0.795, 0, 0, 160))
 
 local function Color3ToRaylib(c, transparency)
 	local r, g, b = c:ToRGB()
@@ -388,8 +390,24 @@ local function drawCategories(windowData)
 	end
 end
 
+local windowObject
+
+RunService.GuiRender:Connect(function()
+	if not windowObject then
+		return
+	end
+	renderer.blur:DrawBlurredRegion(
+		windowObject.x,
+		windowObject.y,
+		windowObject.width,
+		windowObject.height,
+		Color3ToRaylib(Color3.new(1, 1, 1), 0)
+	)
+end)
+
 window.stepped = function(windowData)
 	if windowData.title == "Toolbar" then
+		windowObject = windowData
 		if rl.IsWindowResized() == 1 then
 			window.dragspring:target(windowData, {
 				x = frame.AbsolutePosition.X,

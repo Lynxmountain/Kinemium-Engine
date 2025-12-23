@@ -10,6 +10,7 @@ local renderer = KinemiumRaylib.renderer
 local rl = KinemiumRaylib.lib
 local Selection = game:GetService("Selection")
 local LogService = game:GetService("LogService")
+local RunService = game:GetService("RunService")
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
 
@@ -81,8 +82,24 @@ end
 
 local scrollOffset = 0
 
+local windowObject
+
+RunService.GuiRender:Connect(function()
+	if not windowObject then
+		return
+	end
+	renderer.blur:DrawBlurredRegion(
+		windowObject.x,
+		windowObject.y,
+		windowObject.width,
+		windowObject.height,
+		Color3ToRaylib(Color3.new(1, 1, 1), 0)
+	)
+end)
+
 window.stepped = function(windowData)
-	if windowData.title == "Output" then
+	if windowData.title == "Console" then
+		windowObject = windowData
 		local winX, winY = windowData.x, windowData.y + 30
 		local winWidth, winHeight = windowData.width, windowData.height
 		local cellHeight = 25

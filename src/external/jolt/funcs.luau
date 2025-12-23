@@ -80,9 +80,10 @@ local funcs = {
 	},
 	JPH_ObjectLayerPairFilterMask_GetGroup = { returns = ffi.types.u32, args = { ffi.types.pointer } },
 	JPH_ObjectLayerPairFilterMask_GetMask = { returns = ffi.types.u32, args = { ffi.types.pointer } },
+
 	JPH_ObjectLayerPairFilterTable_DisableCollision = {
 		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
+		args = { ffi.types.pointer, ffi.types.u32, ffi.types.u32 },
 	},
 	JPH_ObjectLayerPairFilterTable_EnableCollision = {
 		returns = ffi.types.void,

@@ -7,6 +7,8 @@ local RenderStepped = signal.new()
 local Heartbeat = signal.new()
 local Stepped = signal.new()
 local PreRender = signal.new()
+local PreGuiRender = signal.new()
+local GuiRender = signal.new()
 
 local renderBindings = {}
 
@@ -45,7 +47,9 @@ RunService.InitRenderer = function(renderer, renderer_signal)
 		RenderStepped = RenderStepped,
 		Heartbeat = Heartbeat,
 		Stepped = Stepped,
+		GuiRender = GuiRender,
 		PreRender = PreRender,
+		PreGuiRender = PreGuiRender,
 
 		IsClient = function()
 			return status.IsClient
@@ -77,6 +81,10 @@ RunService.InitRenderer = function(renderer, renderer_signal)
 			Heartbeat:Fire(dt)
 		elseif route == "Stepped" then
 			Stepped:Fire(dt)
+		elseif route == "GuiRender" then
+			GuiRender:Fire(dt)
+		elseif route == "PreGuiRender" then
+			PreGuiRender:Fire(dt)
 		end
 	end)
 end

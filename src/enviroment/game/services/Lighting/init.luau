@@ -21,14 +21,12 @@ Lighting:SetProperties({
 	GlobalShadows = true,
 	ClockTime = 14.0,
 	GeographicLatitude = 0.0,
-	-- Volumetric Lighting Settings
 	VolumetricCloudsEnabled = true,
 	CloudHeight = 1000.0,
 	CloudThickness = 200.0,
 	CloudDensity = 0.5,
 	CloudSpeed = 0.01,
 	CloudCoverage = 0.7,
-	-- SSAO Settings
 	SSAOEnabled = true,
 	SSAORadius = 0.5,
 	SSAOBias = 0.025,
@@ -98,7 +96,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	local sunShader = lib.LoadShader("./src/assets/shaders/sun.vert", "./src/assets/shaders/sun.frag")
 
 	volumetricClouds.Init()
-	ssao.Init()
+	--ssao.Init()
 
 	renderer_signal:Connect(function(route, dt)
 		if route == "RenderStepped" then
@@ -117,11 +115,22 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 			if Lighting.VolumetricCloudsEnabled then
 				local cameraPos = zune.mem.toVector3(renderer.camera, 0)
-				--volumetricClouds.UpdateUniforms(renderer.camera, cameraPos, sunDir, Lighting)
+				volumetricClouds.UpdateUniforms(renderer.camera, cameraPos, sunDir, Lighting)
 			end
 
 			if Lighting.SSAOEnabled then
-				ssao.UpdateUniforms(renderer.camera, Lighting)
+				--ssao.UpdateUniforms(renderer.camera, Lighting)
+			end
+		elseif route == "RenderClouds" then
+			if Lighting.VolumetricCloudsEnabled then
+				volumetricClouds.Render()
+			end
+		elseif route == "PreGuiRender" then
+			local blurEffect = Lighting:FindFirstChildOfClass("BlurEffect")
+
+			if blurEffect then
+				renderer.blur.blurRadius = blurEffect.Size
+				renderer.blur:DrawFullBlur(const.WHITE)
 			end
 		end
 	end)
@@ -135,14 +144,14 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 		renderer.skybox.Draw(camera, 50)
 
-		if Lighting.VolumetricCloudsEnabled then
-			--volumetricClouds.Render()
-		end
-
 		if Lighting.SSAOEnabled then
 			-- SSAO requires depth and normal textures from G-buffers
 			-- for now, placeholder; integrate with deferred renderer
 			-- ssao.Render(depthTex, normalTex)
+		end
+
+		if Lighting.VolumetricCloudsEnabled then
+			volumetricClouds.Render()
 		end
 	end)
 end

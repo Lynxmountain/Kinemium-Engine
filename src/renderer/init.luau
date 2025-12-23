@@ -16,6 +16,7 @@ local freecam = require("./renderer/freecam")
 local Enum = require("@EnumMap")
 local CFrame = require("@CFrame")
 local meshlib = require("./renderer/mesh")
+local blurmod = require("./renderer/guiblur")
 local Instance = require("@Instance")
 local bufferUtils = require("@bufferutils")
 local Camera = require("@Camera")
@@ -59,7 +60,7 @@ Kinemium_camera.FieldOfView = FOV
 local cameraPos = vector.create(0.0, 5.0, 10.0)
 
 -- RAYLIB INIT
-lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
+--lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 
@@ -70,10 +71,15 @@ local engineIcon = lib.LoadImage("./src/assets/icon/icon.png")
 lib.SetWindowIcon(engineIcon)
 lib.InitAudioDevice()
 
+local guiBlur = blurmod.Init(lib.GetRenderWidth(), lib.GetRenderHeight())
+
 -- SHADOWS
 local shadowSystem = shadowmap.new(lib, structs, const, 2048)
 local lightPosition = vector.create(30, 50.0, 0)
 shadowSystem:UpdateLightPosition(lightPosition)
+
+-- TEXTURES
+local UI_TEXTURE = raylib.lib.LoadRenderTexture(lib.GetRenderWidth(), lib.GetRenderHeight())
 
 -- LOAD MATERIALS
 local camera = structs.Camera3D:new({
@@ -309,6 +315,10 @@ local function step(time)
 
 	time += delta
 
+	if raylib.lib.IsWindowResized() == 1 then
+		UI_TEXTURE = raylib.lib.LoadRenderTexture(lib.GetRenderWidth(), lib.GetRenderHeight())
+	end
+
 	local cameraPosition = freecam.Update(camera, delta, Kinemium_camera)
 
 	shadowSystem:BeginShadowMapRender()
@@ -352,6 +362,7 @@ local function step(time)
 	end
 
 	if game and game.Dimension == Enum.Dimension["3D"] then
+		guiBlur:BeginCapture()
 		lib.BeginMode3D(camera)
 		lib.ClearBackground(const.BLUE)
 		lib.rlEnableBackfaceCulling()
@@ -381,20 +392,33 @@ local function step(time)
 
 		shadowSystem:EndShadows()
 
+		mainSignal:Fire("RenderClouds")
+
 		lib.rlDisableBackfaceCulling()
 		lib.EndMode3D()
+		guiBlur:EndCapture()
 	end
 	--lib.EndTextureMode()
+
+	lib.ClearBackground(const.BLACK)
+
+	guiBlur:ApplyBlur()
+	guiBlur:DrawUnblurred(const.WHITE)
+	mainSignal:Fire("PreGuiRender")
 
 	for _, gui in pairs(guiRegistry) do
 		-- {render = function(), object = function()}
 		gui.render(lib, gui.object(), time, structs, runtimelib)
-		lib.EndShaderMode()
 	end
 
 	for _, v in pairs(renderPool2d) do
+		lib.BeginTextureMode(UI_TEXTURE)
+		lib.ClearBackground(const.BLANK)
 		v(runtimelib)
+		lib.EndTextureMode()
 	end
+
+	mainSignal:Fire("GuiRender")
 
 	table.clear(activeLights)
 
@@ -404,6 +428,12 @@ local function step(time)
 		lib.DrawFPS(10, 170)
 	end
 
+	lib.DrawTextureRec(
+		bufferUtils.extract.texture(UI_TEXTURE),
+		structs.Rectangle:new({ x = 0, y = 0, width = lib.GetRenderWidth(), height = -lib.GetRenderHeight() }),
+		vector.create(0, 0),
+		const.WHITE
+	)
 	lib.EndDrawing()
 	mainSignal:Fire("Heartbeat", delta)
 
@@ -477,6 +507,9 @@ return {
 
 	shader = shader,
 	materialList = materialList,
+
+	-- graphics
+	blur = guiBlur,
 
 	-- Font
 	LoadFont = function(name, fontPath)

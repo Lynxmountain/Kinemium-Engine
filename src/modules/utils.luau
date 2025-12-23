@@ -1,5 +1,8 @@
 local bufferUtils = {}
 
+local raylib = require("@raylib")
+local const, structs, lib = raylib.const, raylib.structs, raylib.lib
+
 -- Unsigned integers
 function bufferUtils:u8(number)
 	local buf = buffer.create(1)
@@ -65,6 +68,25 @@ function bufferUtils:vector3_32(x, y, z)
 	buffer.writef32(buf, 4, y)
 	buffer.writef32(buf, 8, z)
 	return buf
+end
+
+--Textures
+bufferUtils.extract = {}
+
+function bufferUtils.extract.texture(v)
+	local texture = zune.mem.slice(v, structs.RenderTexture:offset("texture"), structs.Texture:size())
+	return texture
+end
+
+function bufferUtils.extract.maps(model, texture)
+	local materials = zune.ffi.ptrFromAddress(zune.mem.slice(model, structs.Model:offset("materials"), 8))
+
+	local maps = materials:readptr(structs.Material:offset("maps"))
+	return maps
+end
+
+function bufferUtils.extract.setModelTexture(maps, texture)
+	maps:write(0, texture, 0, structs.Texture:size())
 end
 
 return bufferUtils

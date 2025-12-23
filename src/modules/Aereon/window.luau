@@ -270,7 +270,10 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				rect,
 				window.rounded,
 				30,
-				Color3ToRaylib(window_theme_config.BackgroundColor, window_theme_config.BackgroundTransparency)
+				Color3ToRaylib(
+					window_theme_config.BackgroundColor,
+					window.transparency or window_theme_config.BackgroundTransparency
+				)
 			)
 			module.backgroundDrawed(window)
 			raylib.DrawRectangleRoundedLinesEx(rect, window.rounded, 30, 1, Color3ToRaylib(Color3.new(1, 1, 1), 0.9))

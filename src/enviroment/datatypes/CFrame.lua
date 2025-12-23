@@ -342,4 +342,29 @@ function CFrame.FromTable(tbl)
 	return cf
 end
 
+function CFrame:ToRaylibMatrix()
+	local raylib = require("@raylib")
+	local structs = raylib.structs
+	local r = self.Rotation
+	local p = self.Position
+	return {
+		m0 = r[1][1],
+		m4 = r[1][2],
+		m8 = r[1][3],
+		m12 = p.X,
+		m1 = r[2][1],
+		m5 = r[2][2],
+		m9 = r[2][3],
+		m13 = p.Y,
+		m2 = r[3][1],
+		m6 = r[3][2],
+		m10 = r[3][3],
+		m14 = p.Z,
+		m3 = 0,
+		m7 = 0,
+		m11 = 0,
+		m15 = 1,
+	}
+end
+
 return CFrame

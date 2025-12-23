@@ -2,20 +2,35 @@ local shadowmap = {}
 
 local rl = require("@raylib")
 
+local LIGHT_TYPE = {
+	DIRECTIONAL = "directional",
+	POINT = "point",
+	SURFACE = "surface",
+}
+
+local pointLightDirs = {
+	{ dir = { 1, 0, 0 }, up = { 0, -1, 0 } }, -- +X
+	{ dir = { -1, 0, 0 }, up = { 0, -1, 0 } }, -- -X
+	{ dir = { 0, 1, 0 }, up = { 0, 0, 1 } }, -- +Y
+	{ dir = { 0, -1, 0 }, up = { 0, 0, -1 } }, -- -Y
+	{ dir = { 0, 0, 1 }, up = { 0, -1, 0 } }, -- +Z
+	{ dir = { 0, 0, -1 }, up = { 0, -1, 0 } }, -- -Z
+}
+
 function shadowmap.new(lib: typeof(rl.lib), structs: typeof(rl.structs), const: typeof(rl.const), resolution)
 	resolution = resolution or 2048
 
 	local self = {
 		resolution = resolution,
-		shadowMap = nil,
-		lightCamera = nil,
+		lights = {},
+		shadowMaps = {},
+		lightCameras = {},
 		shadowShader = nil,
 		depthShader = nil,
 		shadowMapLoc = nil,
 		lightSpaceMatrixLoc = nil,
 	}
 
-	-- Create shadow map render texture (we will write depth into the color attachment)
 	self.shadowMap = lib.LoadRenderTexture(resolution, resolution)
 
 	-- Load shaders (make sure these shader files exist)

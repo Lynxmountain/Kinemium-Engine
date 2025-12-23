@@ -24,6 +24,10 @@ Scene:SetProperties({
 	StreamingEnabled = false,
 })
 
+Scene.aliases = {
+	"workspace",
+}
+
 Scene.InitRenderer = function(renderer, signal)
 	local meshlib = renderer.meshlib
 	local runtimelib = renderer.runtimelib

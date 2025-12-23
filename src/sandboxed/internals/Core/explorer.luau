@@ -15,6 +15,7 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local rl = KinemiumRaylib.lib
 local structs = KinemiumRaylib.structs
+local renderer = KinemiumRaylib.renderer
 local EngineSignal = game.EngineSignal
 local vend = KinemiumFontService.GetDefaultFont()
 local classes = Instance.getClasses()
@@ -447,8 +448,10 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 	local temp = { value = 0 }
 	if isMouseInRect(rectData, mousePos) then
 		transparency = 0.5
+		DisplayAddIcon = true
 	else
 		transparency = 1
+		DisplayAddIcon = false
 	end
 
 	if Selection.IsSelected(instance) then
@@ -539,17 +542,33 @@ local function DrawTree(instance, indent, winX, winY, winWidth)
 
 	yOffset = yOffset + nodeHeight + 2
 
+	drawAdditionMenu(instance, mousePos, btnY, toggleX)
+
 	if expanded[instance] then
 		for _, child in ipairs(children) do
 			DrawTree(child, indent + 1, winX, winY, winWidth)
 		end
 	end
-
-	drawAdditionMenu(instance, mousePos, btnY, toggleX)
 end
+
+local windowObject
+
+RunService.GuiRender:Connect(function()
+	if not windowObject then
+		return
+	end
+	renderer.blur:DrawBlurredRegion(
+		windowObject.x,
+		windowObject.y,
+		windowObject.width,
+		windowObject.height,
+		Color3ToRaylib(Color3.new(1, 1, 1), 0)
+	)
+end)
 
 window.stepped = function(windowData)
 	if windowData.title == "Explorer" then
+		windowObject = windowData
 		yOffset = 0
 
 		if rl.IsWindowResized() == 1 then

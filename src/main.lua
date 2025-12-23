@@ -1,3 +1,10 @@
+local ffi = zune.ffi
+local c = ffi.c
+
+local pointer = ffi.types.pointer
+local void = ffi.types.void
+local float = ffi.types.float
+
 _G.warn = function(...)
 	print("[\x1b[33mWARN\x1b[0m]", ...)
 end
@@ -10,6 +17,33 @@ _G.FlagExists = function(flag)
 		end
 	end
 	return false
+end
+
+-- crun: compiles C code and returns a table of callable functions
+-- `defs` is a table: { ["functionName"] = { returns = "type", args = {"type1","type2",...} } }
+_G.crun = function(path, defs)
+	local read = zune.fs.readFile(path)
+	if not read then
+		error("Failed to read: " .. path)
+	end
+
+	local compiled = c.compile(read, {
+		includes = { "./include" },
+		sysincludes = { "user32" },
+		libraries = {},
+		library_paths = { "./libs" },
+	})
+
+	local wrapped = {}
+
+	for _, name in ipairs(compiled:listSymbols()) do
+		local ptr = compiled:getSymbol(name)
+		local def = defs and defs[name] or { returns = ffi.types.pointer, args = {} } -- default
+
+		wrapped[name] = ffi.fn(def, ptr)
+	end
+
+	return wrapped
 end
 
 local sandboxer = require("./modules/sandboxer")

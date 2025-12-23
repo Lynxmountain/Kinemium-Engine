@@ -13,6 +13,7 @@ local renderer = KinemiumRaylib.renderer
 local rl = KinemiumRaylib.lib
 local Selection = game:GetService("Selection")
 local LogService = game:GetService("LogService")
+local RunService = game:GetService("RunService")
 local structs = KinemiumRaylib.structs
 local vend = KinemiumFontService.GetDefaultFont()
 
@@ -126,13 +127,14 @@ end)
 renderer.Add2DStack(function(data)
 	local screenWidth = rl.GetRenderWidth()
 	local screenHeight = rl.GetRenderHeight()
-	local toolbarHeight = 122
+	local toolbarHeight = 160
 	local viewportX = 0
 	local viewportY = toolbarHeight
 	local viewportWidth = screenWidth - 400
 	local viewportHeight = screenHeight - toolbarHeight - screenHeight * 0.2
 	if enableIDE then
 		ide.draw(viewportX, viewportY, vector.create(viewportWidth, viewportHeight), 50)
+
 		if currentObject then
 			currentObject.Source = ide:getCode()
 		end

@@ -14,6 +14,7 @@ local uint = ffi.types.u32
 local bool = ffi.types.u8
 local float = ffi.types.float
 local cstring = ffi.types.pointer
+local double = ffi.types.double
 local long = ffi.types.i64
 type int = number
 type uint = number
@@ -574,6 +575,12 @@ return {
 		rlEnableTexture = fn(void, { uint }),
 		rlDisableTexture = fn(void, {}),
 		rlSetUniform = fn(void, { int, ffi.types.pointer, int, int }),
+		rlPushMatrix = fn(void, {}),
+		rlLoadIdentity = fn(void, {}),
+		rlMatrixMode = fn(void, { uint }),
+		rlPopMatrix = fn(void, {}),
+		rlMultMatrixf = fn(void, { ffi.types.pointer }),
+		rlOrtho = fn(void, { double, double, double, double, double, double }),
 
 		-- unsigned char *CompressData(const unsigned char *data, int dataSize, int *compDataSize);
 		CompressData = fn(ffi.types.pointer, { ffi.types.pointer, int, ffi.types.pointer }),
