@@ -46,19 +46,16 @@ local function build(placeFile)
 end
 
 KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
-	local SerializationService = datamodel:GetService("SerializationService")
-
 	KineFileService:SetProperties({
 		Save = function(path)
+			local SerializationService = datamodel:GetService("SerializationService")
 			local serialized = SerializationService.SerializeInstancesAsync({ datamodel })
-			print("got data")
 			if serialized then
 				local wrapper = {}
-				print("wrapper")
+
 				fs.createFile(path)
-				print("created")
 				fs.writeFile(path, serialized)
-				print("writed")
+
 				function wrapper:ToExe()
 					build(path)
 				end

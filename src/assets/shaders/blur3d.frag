@@ -4,38 +4,21 @@ in vec2 fragTexCoord;
 out vec4 finalColor;
 
 uniform sampler2D texture0;
-uniform vec2 resolution;   // Texture size in pixels
-uniform vec2 direction;    // Blur direction (e.g., vec2(1,0) horizontal)
-uniform float blurRadius;  // Multiplier for distance between samples
+uniform vec2 resolution;
+uniform vec2 direction;
+uniform float blurRadius;
 
-const int KERNEL_SIZE = 9;
+void main()
+{
+    vec2 texel = direction * blurRadius / resolution;
 
-// Precomputed Gaussian weights for 9-tap blur
-const float weights[KERNEL_SIZE] = float[](
-    0.19648255,  // center
-    0.29690696,
-    0.09448926,
-    0.01038184,
-    0.00386503,
-    0.00135263,
-    0.00042953,
-    0.00012239,
-    0.00003166
-);
+    vec4 color = texture(texture0, fragTexCoord) * 0.227027;
 
-void main() {
-    vec2 texelSize = 1.0 / resolution;
-    vec4 color = vec4(0.0);
+    color += texture(texture0, fragTexCoord + texel * 1.384615) * 0.316216;
+    color += texture(texture0, fragTexCoord - texel * 1.384615) * 0.316216;
 
-    // Center sample
-    color += texture(texture0, fragTexCoord) * weights[0];
-
-    // Sample along the blur direction
-    for (int i = 1; i < KERNEL_SIZE; ++i) {
-        vec2 offset = direction * texelSize * float(i) * blurRadius;
-        color += texture(texture0, fragTexCoord + offset) * weights[i];
-        color += texture(texture0, fragTexCoord - offset) * weights[i];
-    }
+    color += texture(texture0, fragTexCoord + texel * 3.230769) * 0.070270;
+    color += texture(texture0, fragTexCoord - texel * 3.230769) * 0.070270;
 
     finalColor = color;
 }

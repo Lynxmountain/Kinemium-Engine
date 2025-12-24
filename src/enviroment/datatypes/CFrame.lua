@@ -342,29 +342,67 @@ function CFrame.FromTable(tbl)
 	return cf
 end
 
-function CFrame:ToRaylibMatrix()
-	local raylib = require("@raylib")
-	local structs = raylib.structs
+function CFrame:ToRaylibMatrixScale(scale)
 	local r = self.Rotation
 	local p = self.Position
-	return {
-		m0 = r[1][1],
-		m4 = r[1][2],
-		m8 = r[1][3],
-		m12 = p.X,
-		m1 = r[2][1],
-		m5 = r[2][2],
-		m9 = r[2][3],
-		m13 = p.Y,
-		m2 = r[3][1],
-		m6 = r[3][2],
-		m10 = r[3][3],
-		m14 = p.Z,
+	scale = scale or { X = 1, Y = 1, Z = 1 }
+
+	local structs = require("@raylib").structs
+
+	local matrix = {
+		m0 = r[1][1] * scale.X,
+		m1 = r[2][1] * scale.X,
+		m2 = r[3][1] * scale.X,
 		m3 = 0,
+
+		m4 = r[1][2] * scale.Y,
+		m5 = r[2][2] * scale.Y,
+		m6 = r[3][2] * scale.Y,
 		m7 = 0,
+
+		m8 = r[1][3] * scale.Z,
+		m9 = r[2][3] * scale.Z,
+		m10 = r[3][3] * scale.Z,
 		m11 = 0,
+
+		m12 = p.X,
+		m13 = p.Y,
+		m14 = p.Z,
 		m15 = 1,
 	}
+
+	return structs.Matrix:new(matrix)
+end
+
+function CFrame:ToRaylibMatrix()
+	local r = self.Rotation
+	local p = self.Position
+
+	local structs = require("@raylib").structs
+
+	local matrix = {
+		m0 = r[1][1],
+		m1 = r[2][1],
+		m2 = r[3][1],
+		m3 = 0,
+
+		m4 = r[1][2],
+		m5 = r[2][2],
+		m6 = r[3][2],
+		m7 = 0,
+
+		m8 = r[1][3],
+		m9 = r[2][3],
+		m10 = r[3][3],
+		m11 = 0,
+
+		m12 = p.X,
+		m13 = p.Y,
+		m14 = p.Z,
+		m15 = 1,
+	}
+
+	return structs.Matrix:new(matrix)
 end
 
 return CFrame

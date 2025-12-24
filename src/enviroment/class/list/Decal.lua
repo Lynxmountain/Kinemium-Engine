@@ -30,31 +30,23 @@ local function getFaceCFrame(cf, size, face)
 	local padding = 0.005 -- offset to prevent Z-fighting
 
 	if face == Enum.NormalId.Front then
-		return cf * CFrame.new(0, 0, -half.Z - padding)
+		return cf * CFrame.new(0, 0, -half.Z - padding) * CFrame.Angles(math.rad(90), math.rad(180), 0)
 	elseif face == Enum.NormalId.Back then
-		return cf * CFrame.new(0, 0, half.Z + padding) * CFrame.Angles(0, math.pi, 0)
+		return cf * CFrame.new(0, 0, half.Z + padding) * CFrame.Angles(math.rad(90), math.rad(180), 0)
 	elseif face == Enum.NormalId.Left then
-		return cf * CFrame.new(-half.X - padding, 0, 0) * CFrame.Angles(0, math.pi / 2, 0)
+		return cf * CFrame.new(-half.X - padding, 0, 0) * CFrame.Angles(0, math.rad(-90), math.rad(90))
 	elseif face == Enum.NormalId.Right then
-		return cf * CFrame.new(half.X + padding, 0, 0) * CFrame.Angles(0, -math.pi / 2, 0)
+		return cf * CFrame.new(half.X + padding, 0, 0) * CFrame.Angles(0, math.rad(-90), math.rad(90))
 	elseif face == Enum.NormalId.Top then
-		return cf * CFrame.new(0, half.Y + padding, 0) * CFrame.Angles(-math.pi / 2, 0, 0)
+		return cf * CFrame.new(0, half.Y + padding, 0) * CFrame.Angles(math.rad(180), 0, 0)
 	elseif face == Enum.NormalId.Bottom then
-		return cf * CFrame.new(0, -half.Y - padding, 0) * CFrame.Angles(math.pi / 2, 0, 0)
+		return cf * CFrame.new(0, -half.Y - padding, 0) * CFrame.Angles(math.rad(-180), 0, 0)
 	end
 end
 
 local function DrawModelExCFrame(model, cf, scaleVec, color)
 	scaleVec = scaleVec or vector.create(1, 1, 1)
 	color = color or raylib.const.WHITE
-
-	local mat = cf:ToRaylibMatrix()
-
-	raylib.lib.rlPushMatrix()
-	raylib.lib.rlMultMatrixf(mat) -- apply CFrame transform
-	raylib.lib.rlScale(scaleVec.X, scaleVec.Y, scaleVec.Z) -- apply scaling
-	raylib.lib.DrawModel(model, vector.create(0, 0, 0), 1, color)
-	raylib.lib.rlPopMatrix()
 end
 
 return {
@@ -114,19 +106,8 @@ return {
 				currentTexturePath = instance.Texture
 			end
 
-			local x, y, z = cf:ToEulerAnglesXYZ()
-			local degX, degY, degZ = math.deg(x), math.deg(y), math.deg(z)
-
-			-- DrawModelEx only rotates around one axis, so you need to pick the dominant rotation
-			-- Usually Y (up) for models
-			raylib.lib.DrawModelEx(
-				model,
-				vector.create(cf.Position.X, cf.Position.Y, cf.Position.Z),
-				vector.create(0, 1, 0), -- up axis
-				degY, -- rotation in degrees around Y
-				vector.create(1, 1, 1), -- scale
-				raylib.const.WHITE
-			)
+			local mat = cf:ToRaylibMatrix()
+			raylib.lib.DrawMesh(mesh, default, mat)
 		end
 
 		return instance

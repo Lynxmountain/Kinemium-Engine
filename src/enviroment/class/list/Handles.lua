@@ -75,7 +75,8 @@ return {
 				local size = part.Size
 				local scale = math.max(size.X, size.Y, size.Z) * 1.2
 
-				DrawGridAt(part.Position, 10, 2, const.GRAY)
+				DrawGridAt(part.Position, 5, 2, const.GRAY)
+
 				local pos1, size1 = arrow(pos, Vector3.new(1, 0, 0), scale, const.RED)
 				local bb2 = arrow(pos, Vector3.new(-1, 0, 0), scale, const.RED)
 				local bb3 = arrow(pos, Vector3.new(0, 1, 0), scale, const.GREEN)

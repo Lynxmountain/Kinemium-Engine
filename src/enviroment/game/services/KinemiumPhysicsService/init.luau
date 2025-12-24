@@ -134,8 +134,6 @@ local function createBody(bodyInterface, part)
 	rotation:writef32(8, 0) -- z
 	rotation:writef32(12, 1) -- w (identity quaternion)
 
-	-- FIX: Use proper motion type enum values
-	-- 0 = Static, 1 = Kinematic, 2 = Dynamic
 	local motionType = part.Anchored and 0 or 2
 	local layer = part.Anchored and LAYER_NON_MOVING or LAYER_MOVING
 
@@ -239,7 +237,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	end
 	print("[Physics] Body interface obtained")
 
-	-- Store these for later use
 	local physicsState = {
 		system = physicsSystem,
 		bodyInterface = bodyInterface,
@@ -250,7 +247,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		LAYER_NON_MOVING = LAYER_NON_MOVING,
 	}
 
-	print("config")
 	local config = structs.JPH_JobSystemConfig:new({
 		context = 0,
 		queueJob = ffi.null, -- Use Jolt's default
@@ -264,10 +260,8 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	end
 	print("[Physics] Job system created")
 
-	-- Get body interface for creating/managing bodies
 	local bodyInterface = lib.JPH_PhysicsSystem_GetBodyInterface(physicsSystem)
 
-	-- Properties
 	local propTable = {
 		GetBody = function(part)
 			return bodiesMap[part]
@@ -290,6 +284,9 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			local jVel = structs.JPH_Vec3:new(ToJoltVec3(velocity))
 			lib.JPH_BodyInterface_SetLinearVelocity(bodyInterface, bodyID, jVel)
 		end,
+		GetBodies = function()
+			return bodiesMap
+		end,
 		GetVelocity = function(part)
 			local bodyID = bodiesMap[part]
 			if not bodyID then
@@ -303,7 +300,6 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 	}
 	KinemiumPhysicsService:SetProperties(propTable)
 
-	-- Handle part creation
 	renderer_signal:Connect(function(route, data)
 		if route == "AddedPartToRenderPool" then
 			if not data.CanCollide then
@@ -322,12 +318,9 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 		elseif route == "RenderStepped" then
 			local dt = data
 
-			-- Step physics
 			lib.JPH_PhysicsSystem_Update(physicsSystem, dt, 1, jobSystem)
 
-			-- Sync physics back to parts
 			for part, bodyID in pairs(bodiesMap) do
-				-- FIX: Skip anchored parts properly
 				if part.Anchored then
 					continue
 				end
@@ -337,14 +330,12 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 				lib.JPH_BodyInterface_GetPositionAndRotation(bodyInterface, bodyID, position, rotation)
 
-				-- Read position (double precision)
 				local posX = position:readf64(0)
 				local posY = position:readf64(8)
 				local posZ = position:readf64(16)
 
 				part.Position = Vector3.new(posX, posY, posZ)
 
-				-- Get velocity (single precision)
 				local velocity = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
 				lib.JPH_BodyInterface_GetLinearVelocity(bodyInterface, bodyID, velocity)
 
@@ -354,13 +345,12 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 
 				part.AssemblyLinearVelocity = Vector3.new(velX, velY, velZ)
 
-				-- Read quaternion rotation (single precision)
 				local rotX = rotation:readf32(0)
 				local rotY = rotation:readf32(4)
 				local rotZ = rotation:readf32(8)
 				local rotW = rotation:readf32(12)
 
-				-- TODO: Convert quaternion to CFrame rotation
+				-- TODO: convert quaternion to CFrame rotation
 
 				continue
 			end

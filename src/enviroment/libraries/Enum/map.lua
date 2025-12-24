@@ -184,7 +184,7 @@ enumTable.UserInputType = {
 
 enumTable.PartType = {
 	Block = "block",
-	Sphere = "sphere",
+	Ball = "sphere",
 	Cylinder = "cylinder",
 	Wedge = "wedge",
 	Torus = "torus",

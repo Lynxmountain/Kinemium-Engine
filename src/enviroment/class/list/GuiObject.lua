@@ -70,6 +70,7 @@ local propTable = {
 	BorderTransparency = 0,
 	Rotation = 0,
 	AbsolutePosition = nil,
+	BaseClass = "GuiObject",
 	AbsoluteSize = nil,
 	ClipsDescendants = false,
 	ZIndex = 1,
@@ -122,10 +123,24 @@ local propTable = {
 		local corner = object:FindFirstChildOfClass("UICorner")
 		local stroke = object:FindFirstChildOfClass("UIStroke")
 		local gradient = object:FindFirstChildOfClass("UIGradient")
+		local blur = object:FindFirstChild("BlurEffect")
 
 		local rec = structs.Rectangle:new({ x = drawPos.X, y = drawPos.Y, width = size.X, height = size.Y })
 
 		local origin = vector.create(0, 0)
+
+		if blur then
+			if object.AbsolutePosition and object.AbsoluteSize then
+				renderer.blur.blurRadius = blur.Size
+				renderer.blur:DrawBlurredRegion(
+					object.AbsolutePosition.X,
+					object.AbsolutePosition.Y,
+					object.AbsoluteSize.X,
+					object.AbsoluteSize.Y,
+					Color3ToRaylib(Color3.new(1, 1, 1), 0)
+				)
+			end
+		end
 
 		if corner then
 			local minDim = math.min(size.X, size.Y)

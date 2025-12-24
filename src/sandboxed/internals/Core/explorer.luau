@@ -111,18 +111,6 @@ local aereon = import("@Kinemium.Aereon")
 local window = aereon.window(game)
 local arect = aereon.rect()
 
-aereon.gui
-	.frame({ 0, 0, 100, 100 })
-	.setTransparency(0).modifers
-	.outline(10, Color3.new(0, 0, 1), 0)
-	.clicked(function()
-		print("clicked")
-	end).modifers
-	.mouseIsIn(function(wrapper: typeof(aereon.gui.frame({})))
-		wrapper.setTransparency(0.5)
-		print("true")
-	end)
-
 local function create_window(title, frame)
 	repeat
 		task.wait()

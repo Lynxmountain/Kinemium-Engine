@@ -42,6 +42,8 @@ KinemiumIconLoader.new("Play", "src/assets/images/icons/vanilla3/general/32x/200
 local png = KinemiumIconLoader.Get("Play")
 local PlayIcon = KinemiumIconLoader.ToTexture(png)
 
+local IsPlaytesting = true
+
 local categoryRegistry = {
 	Category = {
 		elements = {
@@ -51,7 +53,11 @@ local categoryRegistry = {
 				callback = function()
 					local playtestService = game:GetService("PlaytestService")
 					print("playtesting..")
+					if IsPlaytesting then
+						return
+					end
 					playtestService.CreatePlaytestAsync()
+					IsPlaytesting = true
 				end,
 				hoverTransparency = 0.5,
 				hoverColor = Color3.new(0, 0, 0),
@@ -65,7 +71,11 @@ local categoryRegistry = {
 					local playtestService = game:GetService("PlaytestService")
 
 					print("Stopping the simulation")
+					if not IsPlaytesting then
+						return
+					end
 					playtestService.StopCurrentPlaytest()
+					IsPlaytesting = false
 				end,
 				hoverTransparency = 0.5,
 				hoverColor = Color3.new(1, 0, 0),

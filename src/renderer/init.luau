@@ -11,7 +11,6 @@ local texture = require("./renderer/texture")
 local signal = require("@Kinemium.signal")
 local Vector2 = require("@Vector2")
 local shader = require("./renderer/shader")
-local shadowmap = require("./renderer/shadowmap")
 local freecam = require("./renderer/freecam")
 local Enum = require("@EnumMap")
 local CFrame = require("@CFrame")
@@ -60,7 +59,7 @@ Kinemium_camera.FieldOfView = FOV
 local cameraPos = vector.create(0.0, 5.0, 10.0)
 
 -- RAYLIB INIT
---lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
+lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 
@@ -72,11 +71,6 @@ lib.SetWindowIcon(engineIcon)
 lib.InitAudioDevice()
 
 local guiBlur = blurmod.Init(lib.GetRenderWidth(), lib.GetRenderHeight())
-
--- SHADOWS
-local shadowSystem = shadowmap.new(lib, structs, const, 2048)
-local lightPosition = vector.create(30, 50.0, 0)
-shadowSystem:UpdateLightPosition(lightPosition)
 
 -- TEXTURES
 local UI_TEXTURE = raylib.lib.LoadRenderTexture(lib.GetRenderWidth(), lib.GetRenderHeight())
@@ -262,6 +256,7 @@ runtimelib = {
 	LoadShader = shader.LoadShader,
 	structs = structs,
 	const = const,
+	blur = guiBlur,
 	time = time,
 	GetFont = function(name)
 		if fontRegistry[name] then
@@ -321,14 +316,6 @@ local function step(time)
 
 	local cameraPosition = freecam.Update(camera, delta, Kinemium_camera)
 
-	shadowSystem:BeginShadowMapRender()
-
-	for _, v in pairs(renderPool3d) do
-		v(runtimelib)
-	end
-
-	shadowSystem:EndShadowMapRender()
-
 	for name, keycode in pairs(const.KeyboardKey) do
 		if lib.IsKeyPressed(keycode) == 1 then
 			mainSignal:Fire("Pressed", keycode)
@@ -366,36 +353,18 @@ local function step(time)
 		lib.BeginMode3D(camera)
 		lib.ClearBackground(const.BLUE)
 		lib.rlEnableBackfaceCulling()
-
-		shadowSystem:ApplyShadows()
-
-		local viewPosLoc = lib.GetShaderLocation(shadowSystem.shadowShader, "viewPos")
-		local lightPosLoc = lib.GetShaderLocation(shadowSystem.shadowShader, "lightPos")
-
-		lib.SetShaderValue(
-			shadowSystem.shadowShader,
-			viewPosLoc,
-			vector.create(cameraPosition.x, cameraPosition.y, cameraPosition.z),
-			const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
-		)
-
-		lib.SetShaderValue(
-			shadowSystem.shadowShader,
-			lightPosLoc,
-			lightPosition,
-			const.ShaderUniformDataType.SHADER_UNIFORM_VEC3
-		)
+		mainSignal:Fire("Begin3D")
 
 		for _, v in pairs(renderPool3d) do
 			v(runtimelib)
 		end
 
-		shadowSystem:EndShadows()
-
 		mainSignal:Fire("RenderClouds")
 
 		lib.rlDisableBackfaceCulling()
 		lib.EndMode3D()
+		mainSignal:Fire("End3D")
+
 		guiBlur:EndCapture()
 	end
 	--lib.EndTextureMode()
@@ -421,12 +390,6 @@ local function step(time)
 	mainSignal:Fire("GuiRender")
 
 	table.clear(activeLights)
-
-	if FlagExists("client") then
-		lib.DrawFPS(10, 40)
-	else
-		lib.DrawFPS(10, 170)
-	end
 
 	lib.DrawTextureRec(
 		bufferUtils.extract.texture(UI_TEXTURE),

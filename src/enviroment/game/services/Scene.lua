@@ -8,6 +8,10 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 local structs = raylib.structs
 
+local Kilights = require("@Kilights")
+local utils = require("@bufferutils")
+local default = lib.LoadMaterialDefault()
+
 local allowed_to_render = {
 	["Part"] = "Part",
 	["MeshPart"] = "MeshPart",
@@ -36,6 +40,25 @@ Scene.InitRenderer = function(renderer, signal)
 	local materialList = renderer.materialList
 	local loadedMaterials = {}
 
+	local default_shadow_shader = Kilights.getDefaultShader()
+
+	Kilights.SetAmbientColor({
+		r = 0.5,
+		g = 0.5,
+		b = 0.5,
+		a = 1.0,
+	}, default_shadow_shader)
+
+	local light = Kilights.CreateLight(
+		Kilights.LIGHT_POINT,
+		vector.create(0, 20, 0),
+		vector.create(0, -5, 0),
+		{ r = 255, g = 255, b = 255, a = 255 },
+		default_shadow_shader
+	)
+
+	light.attenuation = 0.001
+
 	local preloadedMeshes
 	if not IsHeadless then
 		preloadedMeshes = meshlib.PreloadStandardMeshes()
@@ -45,6 +68,9 @@ Scene.InitRenderer = function(renderer, signal)
 			local texture = lib.LoadTexture(material_path)
 			local default = lib.LoadMaterialDefault()
 			lib.SetMaterialTexture(default, 0, texture)
+
+			local material_shader_buffer = utils.extract.material_shader(structs.Material, default)
+			buffer.copy(material_shader_buffer, 0, default_shadow_shader, 0, structs.Shader:size())
 
 			loadedMaterials[material_name] = {
 				index = material_index,
@@ -60,13 +86,6 @@ Scene.InitRenderer = function(renderer, signal)
 
 	local function isRenderable(obj)
 		return obj:IsA("Part") or obj:IsA("MeshPart")
-	end
-
-	for _, child in pairs(Scene:GetDescendants()) do
-		pool[#pool + 1] = child
-		if isRenderable(v) then
-			signal:Fire("AddedPartToRenderPool", v)
-		end
 	end
 
 	Scene.DescendantAdded:Connect(function(v)
@@ -92,7 +111,8 @@ Scene.InitRenderer = function(renderer, signal)
 		if part.ClassName == "MeshPart" then
 			mesh = meshlib.GetModelRegistry()[part.MeshId]
 		else
-			mesh = preloadedMeshes[part.Shape.Value][1]
+			-- second value: Mesh
+			mesh = preloadedMeshes[part.Shape.Value][2]
 		end
 
 		if not mesh then
@@ -101,14 +121,27 @@ Scene.InitRenderer = function(renderer, signal)
 
 		part._mesh = mesh
 
-		meshlib.drawModel(mesh, part, loadedMaterials)
+		local data = loadedMaterials[part.Material.Value]
+		local matrix = part.CFrame:ToRaylibMatrixScale(part.Size)
 
+		raylib.lib.DrawMesh(mesh, data.material, matrix)
 		signal:Fire("Rendered", part)
+	end
+
+	for _, child in pairs(Scene:GetDescendants()) do
+		pool[#pool + 1] = child
+		if isRenderable(child) then
+			signal:Fire("AddedPartToRenderPool", child)
+		end
 	end
 
 	if not IsHeadless then
 		renderer.Add3DStack(function()
 			-- Main render pass
+			Kilights:Begin(default_shadow_shader)
+			Kilights.UpdateLightValues(default_shadow_shader, light)
+			Kilights.SetCameraPos(default_shadow_shader, renderer.camera)
+
 			for i = 1, #pool do
 				local object = pool[i]
 				if isRenderable(pool[i]) then
@@ -123,6 +156,8 @@ Scene.InitRenderer = function(renderer, signal)
 					end
 				end
 			end
+
+			Kilights:End()
 		end)
 	end
 end

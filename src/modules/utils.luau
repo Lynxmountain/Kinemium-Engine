@@ -85,6 +85,16 @@ function bufferUtils.extract.maps(model, texture)
 	return maps
 end
 
+function bufferUtils.extract.material_shader(mainstruct, v)
+	local Shader = zune.mem.slice(v, mainstruct:offset("shader"), structs.Shader:size())
+
+	return Shader
+end
+
+function bufferUtils.extract.set(object, value, struct)
+	object:write(0, value, 0, struct:size())
+end
+
 function bufferUtils.extract.setModelTexture(maps, texture)
 	maps:write(0, texture, 0, structs.Texture:size())
 end

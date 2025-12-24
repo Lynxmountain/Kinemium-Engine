@@ -46,6 +46,8 @@ _G.crun = function(path, defs)
 	return wrapped
 end
 
+--require("@manifold")
+
 local sandboxer = require("./modules/sandboxer")
 local Instance = require("@Instance")
 local filesystem = require("./modules/filesystem")

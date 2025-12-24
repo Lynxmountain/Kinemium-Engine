@@ -8,8 +8,6 @@ local Vector2 = require("@Vector2")
 
 local logic = require("@Kinemium.2dbutton")
 
-local signal = require("@Kinemium.signal")
-
 local Frame = require("@Frame")
 local TextLabel = require("@TextLabel")
 

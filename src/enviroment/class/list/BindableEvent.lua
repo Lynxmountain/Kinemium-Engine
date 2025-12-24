@@ -15,7 +15,7 @@ return {
 
 		propTable = {
 			Fire = bindableSignal.Fire,
-			Connect = bindableSignal.Connect,
+			Event = bindableSignal.Connect,
 			Name = "BindableEvent",
 		}
 		object.SetProperties(propTable)

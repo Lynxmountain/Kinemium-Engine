@@ -579,6 +579,7 @@ return {
 		rlLoadIdentity = fn(void, {}),
 		rlMatrixMode = fn(void, { uint }),
 		rlPopMatrix = fn(void, {}),
+		rlScalef = fn(void, { double, double, double }),
 		rlMultMatrixf = fn(void, { ffi.types.pointer }),
 		rlOrtho = fn(void, { double, double, double, double, double, double }),
 
