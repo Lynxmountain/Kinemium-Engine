@@ -20,7 +20,7 @@ local allowed_to_render = {
 }
 
 Scene:SetProperties({
-	Gravity = 196.2,
+	Gravity = -9.81,
 	GlobalWind = Vector3.new(0, 0, 0),
 	FallenPartsDestroyHeight = 90,
 	AirTurbulenceIntensity = 0,
@@ -32,7 +32,7 @@ Scene.aliases = {
 	"workspace",
 }
 
-Scene.InitRenderer = function(renderer, signal)
+Scene.InitRenderer = function(renderer, signal, game)
 	local meshlib = renderer.meshlib
 	local runtimelib = renderer.runtimelib
 	local camera = renderer.camera
@@ -122,7 +122,7 @@ Scene.InitRenderer = function(renderer, signal)
 		part._mesh = mesh
 
 		local data = loadedMaterials[part.Material.Value]
-		local matrix = part.CFrame:ToRaylibMatrixScale(part.Size)
+		local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
 
 		raylib.lib.DrawMesh(mesh, data.material, matrix)
 		signal:Fire("Rendered", part)
@@ -137,7 +137,6 @@ Scene.InitRenderer = function(renderer, signal)
 
 	if not IsHeadless then
 		renderer.Add3DStack(function()
-			-- Main render pass
 			Kilights:Begin(default_shadow_shader)
 			Kilights.UpdateLightValues(default_shadow_shader, light)
 			Kilights.SetCameraPos(default_shadow_shader, renderer.camera)
@@ -158,6 +157,9 @@ Scene.InitRenderer = function(renderer, signal)
 			end
 
 			Kilights:End()
+
+			local KinemiumPhysicsService = game:GetService("KinemiumPhysicsService")
+			KinemiumPhysicsService.setGravity(Scene.Gravity, Scene.GlobalWind)
 		end)
 	end
 end

@@ -113,6 +113,16 @@ function Instance:FindFirstAncestor(className)
 	return nil
 end
 
+function Instance:GetChildrenOfClass(className)
+	local children = {}
+	for _, child in pairs(self.Children) do
+		if child.ClassName == className then
+			table.insert(children, child)
+		end
+	end
+	return children
+end
+
 function Instance:FindFirstChildOfClass(className)
 	for _, child in ipairs(self.Children) do
 		if child.ClassName == className then

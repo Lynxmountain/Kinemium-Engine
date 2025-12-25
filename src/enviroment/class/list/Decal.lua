@@ -106,7 +106,7 @@ return {
 				currentTexturePath = instance.Texture
 			end
 
-			local mat = cf:ToRaylibMatrix()
+			local mat = cf:ToRaylibMatrix(raylib.structs)
 			raylib.lib.DrawMesh(mesh, default, mat)
 		end
 

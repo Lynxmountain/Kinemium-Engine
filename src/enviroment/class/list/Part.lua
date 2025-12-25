@@ -6,7 +6,7 @@ local raylib = require("@raylib")
 
 local propTable = {
 	Position = Vector3.new(0, 10, 0),
-	Size = Vector3.new(1, 1, 1),
+	Size = Vector3.new(4, 4, 4),
 	Color = Color3.new(1, 1, 1),
 	Material = Enum.Material.debug,
 	Transparency = 0,

@@ -68,3 +68,16 @@ part.Parent = game.Scene
 local arcHandles = Instance.new("ArcHandles")
 arcHandles.Adornee = part
 arcHandles.Parent = part
+
+--[[
+while true do
+	local unanchored = Instance.new("Part")
+	unanchored.Size = Vector3.new(math.random(1, 10), math.random(1, 10), math.random(1, 10))
+	unanchored.Anchored = false
+	unanchored.Transparency = 0
+	unanchored.Color = Color3.new(0, 1, 1)
+	unanchored.Position = Vector3.new(math.random(1, 50) / 2, 50, math.random(1, 50) / 2)
+	unanchored.Parent = game.Scene
+	task.wait(0.05)
+end
+--]]

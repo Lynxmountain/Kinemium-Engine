@@ -342,14 +342,18 @@ function CFrame.FromTable(tbl)
 	return cf
 end
 
-function CFrame:ToRaylibMatrixScale(scale)
+function CFrame:ToRaylibMatrixScale(scale, structs)
 	local r = self.Rotation
 	local p = self.Position
 	scale = scale or { X = 1, Y = 1, Z = 1 }
 
-	local structs = require("@raylib").structs
+	-- i love when i require raylib just to get the structs every frame
+	-- isnt that right quaded
+	-- Yes, that is very right
+	-- Do i look like dumbass?
+	-- Yes
 
-	local matrix = {
+	return structs.Matrix:new({
 		m0 = r[1][1] * scale.X,
 		m1 = r[2][1] * scale.X,
 		m2 = r[3][1] * scale.X,
@@ -369,18 +373,41 @@ function CFrame:ToRaylibMatrixScale(scale)
 		m13 = p.Y,
 		m14 = p.Z,
 		m15 = 1,
-	}
-
-	return structs.Matrix:new(matrix)
+	})
 end
 
-function CFrame:ToRaylibMatrix()
+function CFrame.fromQuaternion(x, y, z, w, pos)
+	local len = math.sqrt(x * x + y * y + z * z + w * w)
+	x, y, z, w = x / len, y / len, z / len, w / len
+
+	local xx, yy, zz = x * x, y * y, z * z
+	local xy, xz, yz = x * y, x * z, y * z
+	local wx, wy, wz = w * x, w * y, w * z
+
+	local m00 = 1 - 2 * (yy + zz)
+	local m01 = 2 * (xy - wz)
+	local m02 = 2 * (xz + wy)
+
+	local m10 = 2 * (xy + wz)
+	local m11 = 1 - 2 * (xx + zz)
+	local m12 = 2 * (yz - wx)
+
+	local m20 = 2 * (xz - wy)
+	local m21 = 2 * (yz + wx)
+	local m22 = 1 - 2 * (xx + yy)
+
+	local right = Vector3.new(m00, m10, m20)
+	local up = Vector3.new(m01, m11, m21)
+	local look = Vector3.new(m02, m12, m22)
+
+	return CFrame.fromMatrix(pos, right, up, look)
+end
+
+function CFrame:ToRaylibMatrix(structs)
 	local r = self.Rotation
 	local p = self.Position
 
-	local structs = require("@raylib").structs
-
-	local matrix = {
+	return structs.Matrix:new({
 		m0 = r[1][1],
 		m1 = r[2][1],
 		m2 = r[3][1],
@@ -400,9 +427,7 @@ function CFrame:ToRaylibMatrix()
 		m13 = p.Y,
 		m14 = p.Z,
 		m15 = 1,
-	}
-
-	return structs.Matrix:new(matrix)
+	})
 end
 
 return CFrame

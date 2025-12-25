@@ -38,11 +38,15 @@ if FlagExists("client") then
 end
 
 KinemiumIconLoader.new("Play", "src/assets/images/icons/vanilla3/general/32x/200/Play.png")
+KinemiumIconLoader.new("Stop", "src/assets/images/icons/vanilla3/general/32x/200/Stop.png")
 
 local png = KinemiumIconLoader.Get("Play")
-local PlayIcon = KinemiumIconLoader.ToTexture(png)
+local stop = KinemiumIconLoader.Get("Stop")
 
-local IsPlaytesting = true
+local PlayIcon = KinemiumIconLoader.ToTexture(png)
+local StopIcon = KinemiumIconLoader.ToTexture(stop)
+
+local IsPlaytesting = false
 
 local categoryRegistry = {
 	Category = {
@@ -52,17 +56,18 @@ local categoryRegistry = {
 				text = "Playtest",
 				callback = function()
 					local playtestService = game:GetService("PlaytestService")
-					print("playtesting..")
 					if IsPlaytesting then
 						return
 					end
+					print("playtesting..")
+
 					playtestService.CreatePlaytestAsync()
 					IsPlaytesting = true
 				end,
 				hoverTransparency = 0.5,
 				hoverColor = Color3.new(0, 0, 0),
 				roundness = 0.2,
-				texture = PlayIcon,
+				texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Play.png"),
 			},
 			{
 				type = "ImageButton",
@@ -70,171 +75,19 @@ local categoryRegistry = {
 				callback = function()
 					local playtestService = game:GetService("PlaytestService")
 
-					print("Stopping the simulation")
 					if not IsPlaytesting then
 						return
 					end
+					print("Stopping the simulation")
+
 					playtestService.StopCurrentPlaytest()
 					IsPlaytesting = false
 				end,
 				hoverTransparency = 0.5,
+				text = "Stop",
 				hoverColor = Color3.new(1, 0, 0),
 				roundness = 0.2,
-			},
-		},
-	},
-
-	Category2 = {
-		elements = {
-			{
-				type = "ImageButton",
-				text = "Playtest",
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-					print("playtesting..")
-					playtestService.CreatePlaytestAsync()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				texture = PlayIcon,
-			},
-			{
-				type = "ImageButton",
-
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-
-					print("Stopping the simulation")
-					playtestService.StopCurrentPlaytest()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(1, 0, 0),
-				roundness = 0.2,
-			},
-		},
-	},
-
-	Category3 = {
-		elements = {
-			{
-				type = "ImageButton",
-				text = "Playtest",
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-					print("playtesting..")
-					playtestService.CreatePlaytestAsync()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				texture = PlayIcon,
-			},
-			{
-				type = "ImageButton",
-
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-
-					print("Stopping the simulation")
-					playtestService.StopCurrentPlaytest()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(1, 0, 0),
-				roundness = 0.2,
-			},
-		},
-	},
-
-	Category4 = {
-		elements = {
-			{
-				type = "ImageButton",
-				text = "Playtest",
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-					print("playtesting..")
-					playtestService.CreatePlaytestAsync()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				texture = PlayIcon,
-			},
-			{
-				type = "ImageButton",
-
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-
-					print("Stopping the simulation")
-					playtestService.StopCurrentPlaytest()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(1, 0, 0),
-				roundness = 0.2,
-			},
-		},
-	},
-
-	Category5 = {
-		elements = {
-			{
-				type = "ImageButton",
-				text = "Playtest",
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-					print("playtesting..")
-					playtestService.CreatePlaytestAsync()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				texture = PlayIcon,
-			},
-			{
-				type = "ImageButton",
-
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-
-					print("Stopping the simulation")
-					playtestService.StopCurrentPlaytest()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(1, 0, 0),
-				roundness = 0.2,
-			},
-		},
-	},
-
-	Category6 = {
-		elements = {
-			{
-				type = "ImageButton",
-				text = "Playtest",
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-					print("playtesting..")
-					playtestService.CreatePlaytestAsync()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(0, 0, 0),
-				roundness = 0.2,
-				texture = PlayIcon,
-			},
-			{
-				type = "ImageButton",
-
-				callback = function()
-					local playtestService = game:GetService("PlaytestService")
-
-					print("Stopping the simulation")
-					playtestService.StopCurrentPlaytest()
-				end,
-				hoverTransparency = 0.5,
-				hoverColor = Color3.new(1, 0, 0),
-				roundness = 0.2,
+				texture = KinemiumIconLoader.ToTexture("src/assets/images/icons/vanilla3/general/32x/200/Stop.png"),
 			},
 		},
 	},

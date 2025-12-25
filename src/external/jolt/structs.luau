@@ -31,24 +31,6 @@ local JPH_QueueJobsCallback = ffi.types.pointer
 local JPH_GroupFilter = ffi.types.pointer
 local JPH_PhysicsSystem = ffi.types.pointer
 
--- JPH_CollideSettingsBase (base struct)
-local JPH_CollideSettingsBase = ffi.struct({
-	{ activeEdgeMode = ffi.types.u32 },
-	{ collectFacesMode = ffi.types.u32 },
-	{ collisionTolerance = float },
-	{ penetrationTolerance = float },
-	{ activeEdgeMovementDirection = ffi.types.vector3_32 },
-})
-export type JPH_CollideSettingsBase = typeof(JPH_CollideSettingsBase:new({}))
-
--- JPH_RayCastSettings
-local JPH_RayCastSettings = ffi.struct({
-	{ backFaceModeTriangles = ffi.types.u32 },
-	{ backFaceModeConvex = ffi.types.u32 },
-	{ treatConvexAsSolid = bool },
-})
-export type JPH_RayCastSettings = typeof(JPH_RayCastSettings:new({}))
-
 local JPH_Vec3 = ffi.struct({
 	{ x = float },
 	{ y = float },
@@ -63,6 +45,24 @@ local JPH_Vec4 = ffi.struct({
 	{ w = float },
 })
 export type JPH_Vec4 = typeof(JPH_Vec4:new({}))
+
+-- JPH_CollideSettingsBase (base struct)
+local JPH_CollideSettingsBase = ffi.struct({
+	{ activeEdgeMode = ffi.types.u32 },
+	{ collectFacesMode = ffi.types.u32 },
+	{ collisionTolerance = float },
+	{ penetrationTolerance = float },
+	{ activeEdgeMovementDirection = JPH_Vec3 },
+})
+export type JPH_CollideSettingsBase = typeof(JPH_CollideSettingsBase:new({}))
+
+-- JPH_RayCastSettings
+local JPH_RayCastSettings = ffi.struct({
+	{ backFaceModeTriangles = ffi.types.u32 },
+	{ backFaceModeConvex = ffi.types.u32 },
+	{ treatConvexAsSolid = bool },
+})
+export type JPH_RayCastSettings = typeof(JPH_RayCastSettings:new({}))
 
 local JPH_Quat = ffi.struct({
 	{ x = float },
@@ -85,8 +85,8 @@ local JPH_RVec3 = ffi.struct({
 export type JPH_RVec3 = typeof(JPH_RVec3:new({}))
 
 local JPH_RMat4 = ffi.struct({
-	{ column = JPH_Vec4:array(3) },
-	{ column3 = JPH_RVec3 },
+	{ column = JPH_Vec4:array(3) }, -- still float columns
+	{ column3 = JPH_RVec3 }, -- now double
 })
 export type JPH_RMat4 = typeof(JPH_RMat4:new({}))
 

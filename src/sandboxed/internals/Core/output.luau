@@ -103,7 +103,7 @@ window.stepped = function(windowData)
 		local winX, winY = windowData.x, windowData.y + 30
 		local winWidth, winHeight = windowData.width, windowData.height
 		local cellHeight = 25
-		local padding = 0
+		local padding = 5
 
 		if rl.IsWindowResized() == 1 then
 			window.dragspring:target(windowData, {

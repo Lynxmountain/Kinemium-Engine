@@ -721,12 +721,22 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer },
 	},
+
 	JPH_FixedConstraintSettings_Init = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	JPH_FixedConstraint_GetSettings = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	JPH_FixedConstraint_GetTotalLambdaPosition = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer },
 	},
+	JPH_FixedConstraint_Create = {
+		returns = ffi.types.pointer, -- JPH_FixedConstraint*
+		args = {
+			ffi.types.pointer, -- JPH_FixedConstraintSettings*
+			ffi.types.pointer, -- JPH_Body*
+			ffi.types.pointer, -- JPH_Body*
+		},
+	},
+
 	JPH_FixedConstraint_GetTotalLambdaRotation = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer },

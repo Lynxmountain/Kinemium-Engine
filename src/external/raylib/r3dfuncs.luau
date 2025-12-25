@@ -11,7 +11,9 @@ local bool = ffi.types.u8
 local float = ffi.types.float
 local double = ffi.types.double
 
--- Struct definitions
+-- Struct definitions (ordered by dependencies)
+-- NOTE: Some structs may have FIXME comments for array sizes that need manual definition
+
 local R3D_AnimationTrack = ffi.struct({
 	{ times = ffi.types.pointer },
 	{ values = ffi.types.pointer },
@@ -33,7 +35,7 @@ local R3D_Animation = ffi.struct({
 	{ ticksPerSecond = ffi.types.float },
 	{ duration = ffi.types.float },
 	{ boneCount = ffi.types.i32 },
-	{ name = ffi.types.pointer:array(32) },
+	{ name = ffi.types.i8:array(32) },
 })
 export type R3D_Animation = typeof(R3D_Animation:new({}))
 
@@ -75,6 +77,111 @@ local R3D_Decal = ffi.struct({
 	{ material = ffi.types.pointer },
 })
 export type R3D_Decal = typeof(R3D_Decal:new({}))
+
+local R3D_EnvBackground = ffi.struct({
+	{ color = ffi.types.pointer },
+	{ energy = ffi.types.float },
+	{ sky = ffi.types.pointer },
+	{ rotation = ffi.types.pointer },
+})
+export type R3D_EnvBackground = typeof(R3D_EnvBackground:new({}))
+
+local R3D_EnvAmbient = ffi.struct({
+	{ color = ffi.types.pointer },
+	{ energy = ffi.types.float },
+	{ reflect = ffi.types.float },
+})
+export type R3D_EnvAmbient = typeof(R3D_EnvAmbient:new({}))
+
+local R3D_EnvSSAO = ffi.struct({
+	{ intensity = ffi.types.float },
+	{ power = ffi.types.float },
+	{ radius = ffi.types.float },
+	{ bias = ffi.types.float },
+	{ lightAffect = ffi.types.float },
+	{ enabled = ffi.types.u8 },
+})
+export type R3D_EnvSSAO = typeof(R3D_EnvSSAO:new({}))
+
+local R3D_EnvSSIL = ffi.struct({
+	{ sampleCount = ffi.types.i32 },
+	{ sliceCount = ffi.types.i32 },
+	{ sampleRadius = ffi.types.float },
+	{ hitThickness = ffi.types.float },
+	{ aoPower = ffi.types.float },
+	{ energy = ffi.types.float },
+	{ enabled = ffi.types.u8 },
+})
+export type R3D_EnvSSIL = typeof(R3D_EnvSSIL:new({}))
+
+local R3D_EnvBloom = ffi.struct({
+	{ mode = ffi.types.pointer },
+	{ levels = ffi.types.float },
+	{ intensity = ffi.types.float },
+	{ threshold = ffi.types.float },
+	{ softThreshold = ffi.types.float },
+	{ filterRadius = ffi.types.float },
+})
+export type R3D_EnvBloom = typeof(R3D_EnvBloom:new({}))
+
+local R3D_EnvSSR = ffi.struct({
+	{ maxRaySteps = ffi.types.i32 },
+	{ binarySearchSteps = ffi.types.i32 },
+	{ rayMarchLength = ffi.types.float },
+	{ depthThickness = ffi.types.float },
+	{ depthTolerance = ffi.types.float },
+	{ edgeFadeStart = ffi.types.float },
+	{ edgeFadeEnd = ffi.types.float },
+	{ enabled = ffi.types.u8 },
+})
+export type R3D_EnvSSR = typeof(R3D_EnvSSR:new({}))
+
+local R3D_EnvFog = ffi.struct({
+	{ mode = ffi.types.pointer },
+	{ color = ffi.types.pointer },
+	{ start = ffi.types.float },
+	{ ["end"] = ffi.types.float },
+	{ density = ffi.types.float },
+	{ skyAffect = ffi.types.float },
+})
+export type R3D_EnvFog = typeof(R3D_EnvFog:new({}))
+
+local R3D_EnvDoF = ffi.struct({
+	{ mode = ffi.types.pointer },
+	{ focusPoint = ffi.types.float },
+	{ focusScale = ffi.types.float },
+	{ maxBlurSize = ffi.types.float },
+	{ debugMode = ffi.types.u8 },
+})
+export type R3D_EnvDoF = typeof(R3D_EnvDoF:new({}))
+
+local R3D_EnvTonemap = ffi.struct({
+	{ mode = ffi.types.pointer },
+	{ exposure = ffi.types.float },
+	{ white = ffi.types.float },
+})
+export type R3D_EnvTonemap = typeof(R3D_EnvTonemap:new({}))
+
+local R3D_EnvColor = ffi.struct({
+	{ brightness = ffi.types.float },
+	{ contrast = ffi.types.float },
+	{ saturation = ffi.types.float },
+})
+export type R3D_EnvColor = typeof(R3D_EnvColor:new({}))
+
+local R3D_Environment = ffi.struct({
+	{ background = R3D_EnvBackground },
+	{ ambient = R3D_EnvAmbient },
+	{ ssao = R3D_EnvSSAO },
+	{ ssil = R3D_EnvSSIL },
+	{ bloom = R3D_EnvBloom },
+	{ ssr = R3D_EnvSSR },
+	{ fog = R3D_EnvFog },
+	{ dof = R3D_EnvDoF },
+	{ tonemap = R3D_EnvTonemap },
+	{ color = R3D_EnvColor },
+})
+export type R3D_Environment = typeof(R3D_Environment:new({}))
 
 local albedo = ffi.struct({
 	{ texture = ffi.types.pointer },
@@ -134,7 +241,7 @@ local R3D_Particle = ffi.struct({
 	{ baseScale = ffi.types.pointer },
 	{ baseVelocity = ffi.types.pointer },
 	{ baseAngularVelocity = ffi.types.pointer },
-	{ baseOpacity = ffi.types.pointer },
+	{ baseOpacity = ffi.types.i8 },
 })
 export type R3D_Particle = typeof(R3D_Particle:new({}))
 
@@ -169,7 +276,7 @@ local R3D_ParticleSystem = ffi.struct({
 export type R3D_ParticleSystem = typeof(R3D_ParticleSystem:new({}))
 
 local R3D_BoneInfo = ffi.struct({
-	{ name = ffi.types.pointer:array(32) },
+	{ name = ffi.types.i8:array(32) },
 	{ parent = ffi.types.i32 },
 })
 export type R3D_BoneInfo = typeof(R3D_BoneInfo:new({}))
@@ -207,12 +314,11 @@ local funcs = {
 	R3D_UpdateAnimationPlayer = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.float } },
 	R3D_Init = { returns = ffi.types.void, args = { ffi.types.i32, ffi.types.i32, ffi.types.u32 } },
 	R3D_Close = { returns = ffi.types.void, args = {} },
-	R3D_HasState = { returns = ffi.types.u8, args = { ffi.types.u32 } },
-	R3D_SetState = { returns = ffi.types.void, args = { ffi.types.u32 } },
-	R3D_ClearState = { returns = ffi.types.void, args = { ffi.types.u32 } },
+	R3D_HasState = { returns = ffi.types.u8, args = { ffi.types.pointer } },
+	R3D_SetState = { returns = ffi.types.void, args = { ffi.types.pointer } },
+	R3D_ClearState = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_GetResolution = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	R3D_UpdateResolution = { returns = ffi.types.void, args = { ffi.types.i32, ffi.types.i32 } },
-	R3D_SetSceneBounds = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_SetTextureFilter = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_GetActiveLayers = { returns = ffi.types.pointer, args = {} },
 	R3D_SetActiveLayers = { returns = ffi.types.void, args = { ffi.types.pointer } },
@@ -288,91 +394,8 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
 	},
-	R3D_SetBackgroundColor = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	R3D_SetAmbientColor = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	R3D_SetAmbientEnergy = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_EnableSkybox = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	R3D_DisableSkybox = { returns = ffi.types.void, args = {} },
-	R3D_SetSkyboxRotation = { returns = ffi.types.void, args = { ffi.types.float, ffi.types.float, ffi.types.float } },
-	R3D_GetSkyboxRotation = { returns = ffi.types.pointer, args = {} },
-	R3D_SetSkyboxIntensity = { returns = ffi.types.void, args = { ffi.types.float, ffi.types.float, ffi.types.float } },
-	R3D_GetSkyboxIntensity = {
-		returns = ffi.types.void,
-		args = { ffi.types.pointer, ffi.types.pointer, ffi.types.pointer },
-	},
-	R3D_SetSSAO = { returns = ffi.types.void, args = { ffi.types.u8 } },
-	R3D_SetSSAORadius = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSSAORadius = { returns = ffi.types.float, args = {} },
-	R3D_SetSSAOBias = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSSAOBias = { returns = ffi.types.float, args = {} },
-	R3D_SetSSAOIterations = { returns = ffi.types.void, args = { ffi.types.i32 } },
-	R3D_GetSSAOIterations = { returns = ffi.types.i32, args = {} },
-	R3D_SetSSAOIntensity = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSSAOIntensity = { returns = ffi.types.float, args = {} },
-	R3D_SetSSAOPower = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSSAOPower = { returns = ffi.types.float, args = {} },
-	R3D_SetSSAOLightAffect = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSSAOLightAffect = { returns = ffi.types.float, args = {} },
-	R3D_SetBloomMode = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	R3D_GetBloomMode = { returns = ffi.types.pointer, args = {} },
-	R3D_SetBloomLevels = { returns = ffi.types.void, args = { ffi.types.i32 } },
-	R3D_GetBloomLevels = { returns = ffi.types.i32, args = {} },
-	R3D_SetBloomIntensity = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetBloomIntensity = { returns = ffi.types.float, args = {} },
-	R3D_SetBloomFilterRadius = { returns = ffi.types.void, args = { ffi.types.i32 } },
-	R3D_GetBloomFilterRadius = { returns = ffi.types.i32, args = {} },
-	R3D_SetBloomThreshold = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetBloomThreshold = { returns = ffi.types.float, args = {} },
-	R3D_SetBloomSoftThreshold = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetBloomSoftThreshold = { returns = ffi.types.float, args = {} },
-	R3D_SetSSR = { returns = ffi.types.void, args = { ffi.types.u8 } },
-	R3D_GetSSR = { returns = ffi.types.u8, args = {} },
-	R3D_SetSSRMaxRaySteps = { returns = ffi.types.void, args = { ffi.types.i32 } },
-	R3D_GetSSRMaxRaySteps = { returns = ffi.types.i32, args = {} },
-	R3D_SetSSRBinarySearchSteps = { returns = ffi.types.void, args = { ffi.types.i32 } },
-	R3D_GetSSRBinarySearchSteps = { returns = ffi.types.i32, args = {} },
-	R3D_SetSSRRayMarchLength = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSSRRayMarchLength = { returns = ffi.types.float, args = {} },
-	R3D_SetSSRDepthThickness = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSSRDepthThickness = { returns = ffi.types.float, args = {} },
-	R3D_SetSSRDepthTolerance = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSSRDepthTolerance = { returns = ffi.types.float, args = {} },
-	R3D_SetSSRScreenEdgeFade = { returns = ffi.types.void, args = { ffi.types.float, ffi.types.float } },
-	R3D_GetSSRScreenEdgeFade = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
-	R3D_SetFogMode = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	R3D_GetFogMode = { returns = ffi.types.pointer, args = {} },
-	R3D_SetFogColor = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	R3D_GetFogColor = { returns = ffi.types.pointer, args = {} },
-	R3D_SetFogStart = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetFogStart = { returns = ffi.types.float, args = {} },
-	R3D_SetFogEnd = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetFogEnd = { returns = ffi.types.float, args = {} },
-	R3D_SetFogDensity = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetFogDensity = { returns = ffi.types.float, args = {} },
-	R3D_SetFogSkyAffect = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetFogSkyAffect = { returns = ffi.types.float, args = {} },
-	R3D_SetDofMode = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	R3D_GetDofMode = { returns = ffi.types.pointer, args = {} },
-	R3D_SetDofFocusPoint = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetDofFocusPoint = { returns = ffi.types.float, args = {} },
-	R3D_SetDofFocusScale = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetDofFocusScale = { returns = ffi.types.float, args = {} },
-	R3D_SetDofMaxBlurSize = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetDofMaxBlurSize = { returns = ffi.types.float, args = {} },
-	R3D_SetDofDebugMode = { returns = ffi.types.void, args = { ffi.types.u8 } },
-	R3D_GetDofDebugMode = { returns = ffi.types.u8, args = {} },
-	R3D_SetTonemapMode = { returns = ffi.types.void, args = { ffi.types.pointer } },
-	R3D_GetTonemapMode = { returns = ffi.types.pointer, args = {} },
-	R3D_SetTonemapExposure = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetTonemapExposure = { returns = ffi.types.float, args = {} },
-	R3D_SetTonemapWhite = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetTonemapWhite = { returns = ffi.types.float, args = {} },
-	R3D_SetBrightness = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetBrightness = { returns = ffi.types.float, args = {} },
-	R3D_SetContrast = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetContrast = { returns = ffi.types.float, args = {} },
-	R3D_SetSaturation = { returns = ffi.types.void, args = { ffi.types.float } },
-	R3D_GetSaturation = { returns = ffi.types.float, args = {} },
+	R3D_GetEnvironment = { returns = ffi.types.pointer, args = {} },
+	R3D_SetEnvironment = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_CreateLight = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
 	R3D_DestroyLight = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_IsLightExist = { returns = ffi.types.u8, args = { ffi.types.pointer } },
@@ -402,9 +425,8 @@ local funcs = {
 	R3D_GetLightOuterCutOff = { returns = ffi.types.float, args = { ffi.types.pointer } },
 	R3D_SetLightOuterCutOff = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.float } },
 	R3D_EnableShadow = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.i32 } },
-	R3D_DisableShadow = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u8 } },
+	R3D_DisableShadow = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_IsShadowEnabled = { returns = ffi.types.u8, args = { ffi.types.pointer } },
-	R3D_HasShadowMap = { returns = ffi.types.u8, args = { ffi.types.pointer } },
 	R3D_GetShadowUpdateMode = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
 	R3D_SetShadowUpdateMode = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.pointer } },
 	R3D_GetShadowUpdateFrequency = { returns = ffi.types.i32, args = { ffi.types.pointer } },
@@ -525,7 +547,6 @@ local funcs = {
 	R3D_GetWhiteTexture = { returns = ffi.types.pointer, args = {} },
 	R3D_GetBlackTexture = { returns = ffi.types.pointer, args = {} },
 	R3D_GetNormalTexture = { returns = ffi.types.pointer, args = {} },
-	R3D_GetBufferColor = { returns = ffi.types.pointer, args = {} },
 	R3D_GetBufferNormal = { returns = ffi.types.pointer, args = {} },
 	R3D_GetBufferDepth = { returns = ffi.types.pointer, args = {} },
 	R3D_GetMatrixView = { returns = ffi.types.pointer, args = {} },
@@ -536,23 +557,11 @@ local funcs = {
 		returns = ffi.types.void,
 		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.float },
 	},
-	R3D_DrawBufferEmission = {
-		returns = ffi.types.void,
-		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.float },
-	},
 	R3D_DrawBufferNormal = {
 		returns = ffi.types.void,
 		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.float },
 	},
 	R3D_DrawBufferORM = {
-		returns = ffi.types.void,
-		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.float },
-	},
-	R3D_DrawBufferSSAO = {
-		returns = ffi.types.void,
-		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.float },
-	},
-	R3D_DrawBufferBloom = {
 		returns = ffi.types.void,
 		args = { ffi.types.float, ffi.types.float, ffi.types.float, ffi.types.float },
 	},
@@ -568,6 +577,17 @@ local structs = {
 	R3D_Keyframe = R3D_Keyframe,
 	R3D_InterpolationCurve = R3D_InterpolationCurve,
 	R3D_Decal = R3D_Decal,
+	R3D_EnvBackground = R3D_EnvBackground,
+	R3D_EnvAmbient = R3D_EnvAmbient,
+	R3D_EnvSSAO = R3D_EnvSSAO,
+	R3D_EnvSSIL = R3D_EnvSSIL,
+	R3D_EnvBloom = R3D_EnvBloom,
+	R3D_EnvSSR = R3D_EnvSSR,
+	R3D_EnvFog = R3D_EnvFog,
+	R3D_EnvDoF = R3D_EnvDoF,
+	R3D_EnvTonemap = R3D_EnvTonemap,
+	R3D_EnvColor = R3D_EnvColor,
+	R3D_Environment = R3D_Environment,
 	albedo = albedo,
 	R3D_Mesh = R3D_Mesh,
 	R3D_Vertex = R3D_Vertex,

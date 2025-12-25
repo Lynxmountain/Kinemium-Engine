@@ -24,6 +24,10 @@ main.Size = UDim2.new(0, 200, 0, 100)
 main.BackgroundTransparency = 0.3
 main.Parent = MainGui
 
+local UITooltip = Instance.new("UITooltip")
+UITooltip.Text = "Kinemium"
+UITooltip.Parent = logo
+
 local corner = Instance.new("UICorner")
 corner.Parent = main
 
@@ -51,5 +55,5 @@ blur.Parent = main
 RunService.RenderStepped:Connect(function(dt: number)
 	mainFps = 1 / dt
 	fpsText.Text = `FPS: {math.round(mainFps)}`
-	bodiesText.Text = `Bodies: {#KinemiumPhysicsService.GetBodies()}`
+	bodiesText.Text = `Bodies: {KinemiumPhysicsService.GetPhysicsBodyCount()}`
 end)

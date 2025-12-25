@@ -60,6 +60,7 @@ local function IsMouseInGuiRecursive(object, mousePos, lib)
 end
 
 local propTable = {
+	BaseClass = "GuiObject",
 	Position = UDim2.new(0, 0, 0, 0),
 	Size = UDim2.new(0, 100, 0, 100),
 	BackgroundColor3 = Color3.new(1, 1, 1),
@@ -70,12 +71,11 @@ local propTable = {
 	BorderTransparency = 0,
 	Rotation = 0,
 	AbsolutePosition = nil,
-	BaseClass = "GuiObject",
+	Anchored = true,
 	AbsoluteSize = nil,
 	ClipsDescendants = false,
 	ZIndex = 1,
 	AnchorPoint = Vector2.new(0, 0),
-	Name = "KinemiumGui",
 	MouseIsInObject = false,
 
 	render = function(lib, object, dt, structs, renderer)

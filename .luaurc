@@ -22,6 +22,7 @@
         "AnchorUtils": "./src/modules/anchor",
         "RayguiLerp": "./src/modules/raysmooth",
         "Instance": "./src/enviroment/class/Instance",
+        "box2d": "./src/external/box2d/wrapper",
         "Mouse": "./src/enviroment/class/list/Mouse",
         "ModuleScript": "./src/enviroment/class/list/ModuleScript",
         "Player": "./src/enviroment/class/list/Player",

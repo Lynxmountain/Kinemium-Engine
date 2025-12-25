@@ -46,8 +46,8 @@ local const = raylib.const
 local structs = raylib.structs
 
 -- W&H
-local screenWidth = raylib.lib.GetMonitorWidth(1)
-local screenHeight = raylib.lib.GetMonitorHeight(1)
+local screenWidth = raylib.lib.GetMonitorWidth(0)
+local screenHeight = raylib.lib.GetMonitorHeight(0)
 
 -- MATERIALS
 local txtureMethods = texture(lib)
@@ -65,11 +65,13 @@ lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 
 lib.InitWindow(screenWidth, screenHeight, "Kinemium Engine")
 lib.SetTargetFPS(0)
+--raylib.r3d.lib.R3D_Init(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight(), 0)
+-- R3D CMAKE
+--cmake .. -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER=cl -DCMAKE_BUILD_TYPE=Release -DR3D_RAYLIB_VENDORED=ON -DR3D_ASSIMP_VENDORED=ON -DR3D_BUILD_EXAMPLES=ON -DR3D_BUILD_DOCS=OFF
 
 local engineIcon = lib.LoadImage("./src/assets/icon/icon.png")
 lib.SetWindowIcon(engineIcon)
 lib.InitAudioDevice()
-
 local guiBlur = blurmod.Init(lib.GetRenderWidth(), lib.GetRenderHeight())
 
 -- TEXTURES
