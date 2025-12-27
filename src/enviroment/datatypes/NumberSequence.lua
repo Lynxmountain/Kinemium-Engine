@@ -56,4 +56,24 @@ function NumberSequence:Evaluate(t)
 	end
 end
 
+function NumberSequence:ToTable()
+	local keypoints = {}
+	for _, kp in ipairs(self.Keypoints) do
+		table.insert(keypoints, kp:ToTable())
+	end
+	return {
+		type = "NumberSequence",
+		Keypoints = keypoints,
+	}
+end
+
+function NumberSequence.FromTable(tbl)
+	assert(tbl.type == "NumberSequence")
+	local keypoints = {}
+	for _, kp in ipairs(tbl.Keypoints) do
+		table.insert(keypoints, NumberSequenceKeypoint.FromTable(kp))
+	end
+	return NumberSequence.new(keypoints)
+end
+
 return NumberSequence

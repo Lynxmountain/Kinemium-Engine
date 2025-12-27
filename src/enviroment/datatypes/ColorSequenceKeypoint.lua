@@ -33,4 +33,17 @@ function ColorSequenceKeypoint:__tostring()
 	)
 end
 
+function ColorSequenceKeypoint:ToTable()
+	return {
+		type = "ColorSequenceKeypoint",
+		Position = self.Position,
+		Color = self.Color:ToTable(),
+	}
+end
+
+function ColorSequenceKeypoint.FromTable(tbl)
+	assert(tbl.type == "ColorSequenceKeypoint")
+	return ColorSequenceKeypoint.new(tbl.Position, Color3.FromTable(tbl.Color))
+end
+
 return ColorSequenceKeypoint

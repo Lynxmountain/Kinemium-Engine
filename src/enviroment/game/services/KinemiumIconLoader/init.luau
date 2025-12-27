@@ -58,6 +58,13 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			end
 			registry[name] = newPath
 		end,
+		LoadAutoTexture = function(name, path)
+			local texture = renderer.lib.LoadTexture(path)
+
+			registry[name] = path
+
+			return texture
+		end,
 	})
 
 	reload()

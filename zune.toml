@@ -11,14 +11,14 @@ game = "src/main.lua"
 # Compiling settings
 #  This affects all required files and the main file.
 [runtime.luau.options]
-debug_level = 2
+debug_level = 10
 optimization_level = 1
 native_code_gen = true
 
 # Formatter settings
 #  This affects the output of the formatter while printing.
 [resolvers.formatter]
-max_depth = 4
+max_depth = 6
 use_color = true
 table_address = true
 recursive_Table = false

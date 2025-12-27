@@ -19,66 +19,66 @@ local propTable = {
 	Name = "ImageLabel",
 	Visible = true,
 	ZIndex = 1,
-
-	render = function(lib, object, dt, structs, renderer)
-		local framePos, frameSize = Frame.render(lib, object, dt, structs, renderer)
-
-		local cached = renderer.gbGet(object.Image)
-		if cached then
-			local size = vector.create(buffer.readi32(cached, 4), buffer.readi32(cached, 8))
-
-			local rec = structs.Rectangle:new({
-				x = 0,
-				y = 0,
-				width = size.x,
-				height = size.y,
-			})
-
-			local dest = structs.Rectangle:new({
-				x = framePos.X,
-				y = framePos.Y,
-				width = frameSize.X,
-				height = frameSize.Y,
-			})
-
-			local function Color3ToRaylib(c, transparency)
-				local r, g, b = c:ToRGB()
-				return structs.Color:new({
-					r = r,
-					g = g,
-					b = b,
-					a = math.floor(255 * (1 - transparency)),
-				})
-			end
-
-			lib.DrawTexturePro(
-				cached,
-				rec,
-				dest,
-				vector.create(0, 0), -- origin top-left
-				object.Rotation or 0,
-				Color3ToRaylib(object.ImageColor3, object.ImageTransparency)
-			)
-		end
-
-		return framePos, frameSize, cached
-	end,
 }
 
 Frame.inherit(propTable)
 
 return {
 	class = "ImageLabel",
-	render = propTable.render,
 	callback = function(instance, renderer)
 		-- includes lib
 		instance:SetProperties(propTable)
 
+		local cached = renderer.lib.LoadTexture(instance.Image)
+
 		instance.Changed:Connect(function(property)
 			if property == "Image" then
-				renderer.gbSet(instance.Image, renderer.lib.LoadTexture(instance.Image))
+				cached = renderer.lib.LoadTexture(instance.Image)
 			end
 		end)
+
+		instance.render = function(lib, object, dt, structs, renderer)
+			local framePos, frameSize = Frame.render(lib, object, dt, structs, renderer)
+
+			if cached then
+				local size = vector.create(buffer.readi32(cached, 4), buffer.readi32(cached, 8))
+
+				local rec = structs.Rectangle:new({
+					x = 0,
+					y = 0,
+					width = size.x,
+					height = size.y,
+				})
+
+				local dest = structs.Rectangle:new({
+					x = framePos.X,
+					y = framePos.Y,
+					width = frameSize.X,
+					height = frameSize.Y,
+				})
+
+				local function Color3ToRaylib(c, transparency)
+					local r, g, b = c:ToRGB()
+					return structs.Color:new({
+						r = r,
+						g = g,
+						b = b,
+						a = math.floor(255 * (1 - transparency)),
+					})
+				end
+
+				lib.DrawTexturePro(
+					cached,
+					rec,
+					dest,
+					vector.create(0, 0), -- origin top-left
+					object.Rotation or 0,
+					Color3ToRaylib(object.ImageColor3, object.ImageTransparency)
+				)
+			end
+
+			return framePos, frameSize, cached
+		end
 
 		return instance
 	end,

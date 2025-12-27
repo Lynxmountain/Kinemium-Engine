@@ -6,7 +6,7 @@ local raylib = require("@raylib")
 
 local propTable = {
 	Position = Vector3.new(0, 10, 0),
-	Size = Vector3.new(1, 1, 1),
+	Size = Vector3.new(4, 4, 4),
 	Color = Color3.new(1, 1, 1),
 	Material = Enum.Material.debug,
 	Transparency = 0,
@@ -24,19 +24,32 @@ local propTable = {
 	Orientation = Vector3.new(0, 0, 0),
 	Rotation = Vector3.new(0, 0, 0),
 	MouseOverObject = false,
-	CFrame = CFrame.new(0, 0, 0),
+	CFrame = CFrame.new(0, 10, 0),
 	ElapsedTime = 0,
 	Name = "Part",
 	_mesh = nil,
+
+	-- Velocity
+	AssemblyAngularVelocity = Vector3.new(0, 0, 0),
+	AssemblyCenterOfMass = Vector3.new(0, 0, 0),
+	AssemblyLinearVelocity = Vector3.new(0, 0, 0),
+	AssemblyMass = 0,
+	AssemblyRootPart = nil,
 }
 
 return {
 	class = "Part",
 
-	callback = function(instance)
+	callback = function(instance, renderer)
 		propTable.render = function(part, camera, lib) end
 
 		instance:SetProperties(propTable)
+
+		instance.Changed:Connect(function(property)
+			if property == "Anchored" then
+				renderer.Signal:Fire("UpdatePart", instance)
+			end
+		end)
 
 		return instance
 	end,

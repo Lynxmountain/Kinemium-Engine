@@ -90,12 +90,31 @@ function sandboxer.thread.new(path, entry, env)
 	end
 
 	function wrapper.get()
-		wrapper.info = sandboxer.thread.active[path][prop]
-
 		return sandboxer.thread.active[path]
 	end
 
-	wrapper.info = sandboxer.thread.active[path][prop]
+	return wrapper
+end
+
+function sandboxer.thread.fromCode(id, code, env)
+	local thread = task.spawn(function()
+		sandboxer.run(code, id, env)
+	end)
+	local info = { thread = thread, flags = { running = true } }
+	sandboxer.thread.active[id] = info
+
+	local wrapper = {}
+
+	function wrapper.set(prop, val)
+		sandboxer.thread.active[id][prop] = val
+		wrapper.info = sandboxer.thread.active[id][prop]
+
+		return wrapper
+	end
+
+	function wrapper.get()
+		return sandboxer.thread.active[id]
+	end
 
 	return wrapper
 end

@@ -18,6 +18,7 @@ return {
 		local pos, size = GuiObject.render(lib, object, dt, structs, renderer)
 		object.AbsolutePosition = pos
 		object.AbsoluteSize = size
+
 		return pos, size
 	end,
 	callback = function(instance, renderer)

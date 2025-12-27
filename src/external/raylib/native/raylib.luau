@@ -772,6 +772,10 @@ local export = {
 		CAMERA_PERSPECTIVE = 0, -- Perspective projection
 		CAMERA_ORTHOGRAPHIC = 1, -- Orthographic projection
 	},
+
+	RL_PROJECTION = 0x1701,
+	RL_MODELVIEW = 0x1700,
+	RL_TEXTURE = 0x1702,
 }
 
 return export

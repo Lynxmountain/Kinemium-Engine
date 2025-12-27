@@ -6,6 +6,11 @@ local propTable = {
 	CornerRadius = UDim.new(0, 15),
 	Name = "UICorner",
 	BaseClass = "Kinemium.uimodifier",
+
+	BottomLeftRadius = UDim.new(0, 15),
+	BottomRightRadius = UDim.new(0, 15),
+	TopLeftRadius = UDim.new(0, 15),
+	TopRightRadius = UDim.new(0, 15),
 }
 
 return {

@@ -13,7 +13,7 @@ return function(renderer)
 
 	data.Instance = {
 		new = function(class)
-			return Registry.new(class, renderer)
+			return Registry.new(class, renderer, mainDatamodel)
 		end,
 		getClasses = Registry.getClasses,
 	}
@@ -26,7 +26,7 @@ return function(renderer)
 		wait = zune.task.wait,
 	}
 	data.game = mainDatamodel
-	data.workspace = mainDatamodel:GetService("Workspace")
+	data.Workspace = mainDatamodel:GetService("Workspace")
 	data.shared = shared
 	data._VERSION = "Kilang 1.0.1"
 	data.wait = zune.task.wait
@@ -46,7 +46,6 @@ return function(renderer)
 
 	data.kinemium = {
 		version = 1.0,
-		window = require("@Kinemium.window")(renderer.lib),
 
 		--jolt = require("@Kinemium.jolt"),
 	}
@@ -63,22 +62,21 @@ return function(renderer)
 
 	local LogService = mainDatamodel:GetService("LogService")
 
-	data.print = function(message)
-		print("RUNTIME", message)
+	data.print = function(...)
+		print("RUNTIME", ...)
 
-		return LogService.CreateLog("print", tostring(message))
+		return LogService.CreateLog("print", tostring(...))
+	end
+	data.warn = function(...)
+		print("RUNTIME", ...)
+
+		return LogService.CreateLog("warn", tostring(...))
 	end
 
-	data.warn = function(message)
-		print("RUNTIME", message)
+	data.error = function(...)
+		warn("RUNTIME", ...)
 
-		return LogService.CreateLog("warn", tostring(message))
-	end
-
-	data.error = function(message)
-		print("RUNTIME", message)
-
-		return LogService.CreateLog("error", tostring(message))
+		return LogService.CreateLog("error", tostring(...))
 	end
 
 	data.require = function(Instance)

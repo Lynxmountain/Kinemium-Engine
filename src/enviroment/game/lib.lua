@@ -7,6 +7,8 @@ DataModel.__index = DataModel
 
 local fs = zune.fs
 
+local aliases = {}
+
 function DataModel.new(RENDERER, ...)
 	local self = setmetatable({}, DataModel)
 
@@ -21,21 +23,45 @@ function DataModel.new(RENDERER, ...)
 	local services = fs.entries("./src/enviroment/game/services")
 	for _, service in pairs(services) do
 		local name = service.name:gsub(".lua", "")
-		local success, returnedData = pcall(require, "./services/" .. name)
+		local path = "./services/" .. name
+		local success, returnedData = pcall(require, path)
+
 		if success then
 			local success2, returnedData2 = pcall(function()
 				self.Services[name] = returnedData
 				if returnedData.InitRenderer then
 					returnedData.InitRenderer(RENDERER, RENDERER.Signal, self)
+					if returnedData.aliases then
+						aliases[name] = returnedData.aliases
+					end
 				end
 			end)
+
 			if success2 then
-				print("Added service " .. name)
+				print("Added service: " .. name)
 			else
-				warn("Error initializing service " .. name .. ": " .. tostring(returnedData2))
+				warn(
+					"Error initializing service '"
+						.. name
+						.. "' at path '"
+						.. path
+						.. "':\n"
+						.. tostring(returnedData2)
+						.. "\n"
+						.. debug.traceback("", 2)
+				)
 			end
 		else
-			warn("Failed to get service " .. name .. ": " .. tostring(returnedData))
+			warn(
+				"Failed to require service '"
+					.. name
+					.. "' at path '"
+					.. path
+					.. "':\n"
+					.. tostring(returnedData)
+					.. "\n"
+					.. debug.traceback("", 2)
+			)
 		end
 	end
 
@@ -45,6 +71,12 @@ function DataModel.new(RENDERER, ...)
 	end
 
 	function self:GetService(v)
+		for found, data in pairs(aliases) do
+			local lower = string.lower(v)
+			if table.find(data, lower) then
+				return found
+			end
+		end
 		return self.Services[v]
 	end
 

@@ -55,4 +55,17 @@ function BoundingBox:__tostring()
 	return string.format("BoundingBox(Min=%s, Max=%s)", tostring(self.Min), tostring(self.Max))
 end
 
+function BoundingBox:ToTable()
+	return {
+		type = "BoundingBox",
+		Min = self.Min:ToTable(),
+		Max = self.Max:ToTable(),
+	}
+end
+
+function BoundingBox.FromTable(tbl)
+	assert(tbl.type == "BoundingBox")
+	return BoundingBox.new(Vector3.FromTable(tbl.Min), Vector3.FromTable(tbl.Max))
+end
+
 return BoundingBox

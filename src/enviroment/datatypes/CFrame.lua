@@ -327,4 +327,107 @@ function CFrame:__tostring()
 	return ("CFrame.new(%s, %s, %s)"):format(self.Position.X, self.Position.Y, self.Position.Z)
 end
 
+function CFrame:ToTable()
+	return {
+		type = "CFrame",
+		Position = self.Position:ToTable(),
+		Rotation = self.Rotation,
+	}
+end
+
+function CFrame.FromTable(tbl)
+	assert(tbl.type == "CFrame")
+	local cf = CFrame.new(Vector3.FromTable(tbl.Position))
+	cf.Rotation = tbl.Rotation
+	return cf
+end
+
+function CFrame:ToRaylibMatrixScale(scale, structs)
+	local r = self.Rotation
+	local p = self.Position
+	scale = scale or { X = 1, Y = 1, Z = 1 }
+
+	-- i love when i require raylib just to get the structs every frame
+	-- isnt that right quaded
+	-- Yes, that is very right
+	-- Do i look like dumbass?
+	-- Yes
+
+	return structs.Matrix:new({
+		m0 = r[1][1] * scale.X,
+		m1 = r[2][1] * scale.X,
+		m2 = r[3][1] * scale.X,
+		m3 = 0,
+
+		m4 = r[1][2] * scale.Y,
+		m5 = r[2][2] * scale.Y,
+		m6 = r[3][2] * scale.Y,
+		m7 = 0,
+
+		m8 = r[1][3] * scale.Z,
+		m9 = r[2][3] * scale.Z,
+		m10 = r[3][3] * scale.Z,
+		m11 = 0,
+
+		m12 = p.X,
+		m13 = p.Y,
+		m14 = p.Z,
+		m15 = 1,
+	})
+end
+
+function CFrame.fromQuaternion(x, y, z, w, pos)
+	local len = math.sqrt(x * x + y * y + z * z + w * w)
+	x, y, z, w = x / len, y / len, z / len, w / len
+
+	local xx, yy, zz = x * x, y * y, z * z
+	local xy, xz, yz = x * y, x * z, y * z
+	local wx, wy, wz = w * x, w * y, w * z
+
+	local m00 = 1 - 2 * (yy + zz)
+	local m01 = 2 * (xy - wz)
+	local m02 = 2 * (xz + wy)
+
+	local m10 = 2 * (xy + wz)
+	local m11 = 1 - 2 * (xx + zz)
+	local m12 = 2 * (yz - wx)
+
+	local m20 = 2 * (xz - wy)
+	local m21 = 2 * (yz + wx)
+	local m22 = 1 - 2 * (xx + yy)
+
+	local right = Vector3.new(m00, m10, m20)
+	local up = Vector3.new(m01, m11, m21)
+	local look = Vector3.new(m02, m12, m22)
+
+	return CFrame.fromMatrix(pos, right, up, look)
+end
+
+function CFrame:ToRaylibMatrix(structs)
+	local r = self.Rotation
+	local p = self.Position
+
+	return structs.Matrix:new({
+		m0 = r[1][1],
+		m1 = r[2][1],
+		m2 = r[3][1],
+		m3 = 0,
+
+		m4 = r[1][2],
+		m5 = r[2][2],
+		m6 = r[3][2],
+		m7 = 0,
+
+		m8 = r[1][3],
+		m9 = r[2][3],
+		m10 = r[3][3],
+		m11 = 0,
+
+		m12 = p.X,
+		m13 = p.Y,
+		m14 = p.Z,
+		m15 = 1,
+	})
+end
+
 return CFrame

@@ -8,4 +8,17 @@ function NumberSequenceKeypoint.new(t, v)
 	}, NumberSequenceKeypoint)
 end
 
+function NumberSequenceKeypoint:ToTable()
+	return {
+		type = "NumberSequenceKeypoint",
+		Time = self.Time,
+		Value = self.Value,
+	}
+end
+
+function NumberSequenceKeypoint.FromTable(tbl)
+	assert(tbl.type == "NumberSequenceKeypoint")
+	return NumberSequenceKeypoint.new(tbl.Time, tbl.Value)
+end
+
 return NumberSequenceKeypoint

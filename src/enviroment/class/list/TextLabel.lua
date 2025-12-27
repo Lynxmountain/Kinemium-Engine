@@ -9,7 +9,7 @@ local propTable = {
 	Position = UDim2.new(0, 0, 0, 0),
 	Size = UDim2.new(0, 200, 0, 50),
 	Text = "Hello Kinemium!",
-	TextColor = Color3.new(0, 0, 0),
+	TextColor3 = Color3.new(0, 0, 0),
 	TextSize = 24,
 	Font = Enum.Font.DefaultEngineFont,
 	TextXAlignment = Enum.TextXAlignment.Center,
@@ -110,7 +110,7 @@ propTable.render = function(lib, object, dt, structs, renderer)
 		offsetY = frameSize.Y - totalHeight
 	end
 
-	local tint = Color3ToRaylib(object.TextColor, object.TextTransparency)
+	local tint = Color3ToRaylib(object.TextColor3, object.TextTransparency)
 	for i, line in ipairs(lines) do
 		-- Calculate line-specific X offset based on alignment
 		local lineWidth = lib.MeasureTextEx(font, line, fontSize, 0).x

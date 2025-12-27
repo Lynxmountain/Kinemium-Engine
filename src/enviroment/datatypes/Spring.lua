@@ -224,4 +224,26 @@ function Spring:step(dt)
 	return self.value
 end
 
+function Spring:ToTable()
+	return {
+		type = "Spring",
+		d = self.d,
+		f = self.f,
+		value = self.value:ToTable(),
+		velocity = self.velocity:ToTable(),
+		target = self.target:ToTable(),
+		running = self.running,
+		typeName = self.typeName,
+	}
+end
+
+function Spring.FromTable(tbl)
+	assert(tbl.type == "Spring")
+	local spring = Spring.new(tbl.d, tbl.f, tbl.typeName, tbl.value)
+	spring.velocity = tbl.velocity
+	spring.target = tbl.target
+	spring.running = tbl.running
+	return spring
+end
+
 return Spring

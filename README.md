@@ -3,8 +3,11 @@
 [<img width="50" height="50" alt="image" src="https://github.com/user-attachments/assets/83c3a863-d290-487f-b073-fed9caa6832f" />
 ](https://discord.gg/7byuxfYtAP)
 ## Introduction
-Kinemium Engine is an engine (duh) that imitates roblox's API Surface, this means you can develop roblox-style syntax in this engine and it will work normally!<br>
-It was originally to test zune's capabilities on raylib, but now, it has expanded to a full on independent engine.
+Kinemium is a sandbox engine written in Luau (Zune Runtime). It includes a custom scripting language called Kilang, with Luau-style syntax and additional features.
+
+# Notice
+Kinemium is an independent project not affiliated with, endorsed by, 
+or connected to Roblox Corporation. Roblox is a trademark of Roblox Corporation
 
 # Features
 ## Datatypes
@@ -50,7 +53,7 @@ It was originally to test zune's capabilities on raylib, but now, it has expande
 
 ## Kinemium Custom Services
 *(All custom services start with Kinemium.)*
-- KinemiumFFI
+- KinemiumFFIService
 - KinemiumFontService
 - KinemiumIconLoader
 - KinemiumModService
@@ -71,9 +74,22 @@ https://zune.sh/guides/install
 ```zune run game```<br>
 *This tutorial works with both Linux and Windows, MacOS support is coming soon.*
 
+# Commands
+Kinemium provides with several flags you can run with ```zune run game```<br>
+- headless (lets you run the engine without the graphics or renderer)<br>
+- server (lets you run a server version of the engine, this is used for games and such)<br>
+- client (lets you run a client, it removes all the core UI only (for now))<br>
+- kilang (lets you run kilang code in the terminal, you can add this flag with any other flag and it will still work (headless not working yet))<br>
+
+example command with a flag:<br>
+```zune run game --client```<br>
+```zune run game --client --kilang```<br>
+```zune run game --server --kilang```<br>
+```zune run game --headless```<br>
+
 # Preview
-<img width="1919" height="1018" alt="image" src="https://github.com/user-attachments/assets/65e18ea9-eb2b-4ab8-8836-cce0ae00236f" />
-*yes that is 500 fps*
+<img width="1919" height="1019" alt="image" src="https://github.com/user-attachments/assets/5b4e7608-7f20-4e10-b7bb-1c9e67b2d74b" /><br>
+<img width="1293" height="865" alt="Screenshot 2025-12-20 004117" src="https://github.com/user-attachments/assets/20d0ca16-ebfa-4f0a-bf2f-084fde6f67db" />
 
 # How do I add scripts?
 Once you clone the github repo, you will find a folder called ```sandboxed``` inside the engine *(src)*<br>
@@ -83,19 +99,10 @@ There are a set of predefined scripts in there as examples, but you can change a
 Yes! there is a modding service called KinemiumModService (said up there)<br>
 This lets you add mods to your game, and you can set the enviroment of your said mods!
 
-# I want to get more updates about this project, is there a reliable source?
-You can join our [discord server](https://discord.gg/7byuxfYtAP) to get more updates.
-
-# Can I code in another code editor instead of the native code editor?
-Yes, there will be a menu where you can choose your preferred code editor, this will be added soon.
-
-# Are you gonna disappear like Lunar Engine's developer?
-No?
-
 # How do I spell Kinemium?
 Ki-nem-yum!!
 
-# Open-sourced projects used in the engine
+# This project uses
 - Raylib
 - Lua
 - LuaJIT
@@ -104,8 +111,9 @@ Ki-nem-yum!!
 - lua-discordrpc
 - lua-webview
 - jolt
-- r3d
+- red
 - moonode
+- and most importantly.. Zune
 
 # Do you like cats?
 <img width="444" height="200" alt="Cat...." src="https://github.com/user-attachments/assets/21672df2-d59e-4a6d-aee1-3b89c9263627" />

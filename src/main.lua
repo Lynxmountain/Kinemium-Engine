@@ -1,26 +1,74 @@
+local ffi = zune.ffi
+local c = ffi.c
+
+local pointer = ffi.types.pointer
+local void = ffi.types.void
+local float = ffi.types.float
+
 _G.warn = function(...)
 	print("[\x1b[33mWARN\x1b[0m]", ...)
 end
 
+_G.log = function(...)
+	print("[\x1b[94mLOG\x1b[0m]", ...)
+end
+
+_G.debugPart = function(data)
+	_G.log(`Created body to part {data.Name}`)
+	_G.log(`{data.Name}       Property       Value`)
+	for k, v in pairs(data._props) do
+		_G.log(`{data.Name}       {k}       {tostring(v)}`)
+	end
+end
+
+_G.FlagExists = function(flag)
+	local args = zune.process.args
+	for _, v in pairs(args) do
+		if v == "--" .. flag then
+			return true
+		end
+	end
+	return false
+end
+
+--require("@manifold")
+require("@fmod")
+
 local sandboxer = require("./modules/sandboxer")
-local filesystem = require("./modules/filesystem")
 local Instance = require("@Instance")
-local ModuleScript = require("@ModuleScript")
-local Kinemium_env = require("./enviroment/get")
+local filesystem = require("./modules/filesystem")
+local Enum = require("@EnumMap")
+local kilang = require("@kilang")
 local task = zune.task
-local threads = { internals = {}, game = {} }
 local Kinemium = {}
 
-local renderer = require("@Kinemium.3d")
-Kinemium_env = Kinemium_env(renderer)
+local dummy = require("./renderer/dummy")
 
---local raygui = require("@raygui")
+local renderer
 
-sandboxer.enviroment = Kinemium_env
+if FlagExists("client") then
+	_G.IsClient = true
+	_G.IsServer = false
+elseif FlagExists("server") then
+	kilang.renderer = dummy
 
-local game = Kinemium_env.game
+	_G.IsServer = true
+	_G.IsClient = false
 
-renderer.DatamodelObject(game)
+	print("Running engine headless mode (Server).")
+end
+
+if FlagExists("headless") or FlagExists("cli") then
+	kilang.renderer = dummy
+	_G.IsHeadless = true
+else
+	kilang.renderer = require("@Kinemium.3d")
+end
+
+kilang:init()
+
+local game = kilang.env.game
+kilang.renderer.DatamodelObject(game)
 
 local function loop(base, callback)
 	base = base or "src/sandboxed"
@@ -30,39 +78,50 @@ local function loop(base, callback)
 		if entry.kind == "directory" then
 			loop(path, callback)
 		else
-			-- Call your callback for this file
 			callback(path, entry)
 		end
 	end)
 end
 
+local Folder = Instance.new("Folder")
+Folder.Name = "Studio"
+Folder.Parent = kilang.env.game.CoreGui
+
 loop("src/sandboxed/internals", function(path, entry)
-	if threads.internals[path] then
+	if kilang.threads[path] then
 		return
 	end
-	if threads.game[path] then
-		return
-	end
-	sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.Internals
-	print("Running internal:", path)
-	threads.internals[path] = sandboxer.thread.new(path, entry, sandboxer.enviroment)
+
+	local code = zune.fs.readFile(path)
+	kilang:execute(code, {
+		SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+		StackId = path,
+	})
+
+	local luauCleaned = string.gsub(entry.name, ".luau", "")
+	local luaCleaned = string.gsub(luauCleaned, ".lua", "")
+
+	local object = Instance.new("LocalScript")
+	object.Source = filesystem.read(path)
+	object.Name = luaCleaned
+	object.Parent = Folder
 end)
 
 function Kinemium:playtest()
 	loop("src/sandboxed", function(path, entry)
-		if threads.internals[path] then
+		if kilang.threads[path] then
 			return
 		end
-		if threads.game[path] then
-			return
-		end
-		sandboxer.enviroment.SecurityCapabilities = sandboxer.enviroment.Enum.SecurityCapabilities.UserScript
-		print("Running game:", path)
-		threads.game[path] = sandboxer.thread.new(path, entry, sandboxer.enviroment)
+
+		local code = filesystem.read(path)
+		kilang:execute(code, {
+			SecurityCapabilities = Enum.SecurityCapabilities.UserScript,
+			StackId = path,
+		})
 	end)
 end
 
-renderer.Kinemium_camera.Parent = sandboxer.enviroment.workspace
+kilang.renderer.Kinemium_camera.Parent = sandboxer.enviroment.Workspace
 
 game.EngineSignal:Connect(function(route)
 	if route == "playtest" then
@@ -70,5 +129,18 @@ game.EngineSignal:Connect(function(route)
 	end
 end)
 
+if FlagExists("kilang") then
+	require("./repl"):init(function(line)
+		task.spawn(function()
+			local success, result = pcall(function(...)
+				kilang:execute(line, {
+					SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+				})
+			end)
+		end)
+	end)
+end
+
 Kinemium:playtest()
-renderer.Run()
+
+kilang.renderer.Run()

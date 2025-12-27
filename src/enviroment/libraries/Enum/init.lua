@@ -16,7 +16,6 @@ function Enum.new(api)
 		enumType.__index = enumType
 		enumType.EnumType = enumType
 
-		-- add items
 		for itemName, itemValue in pairs(items) do
 			local item = setmetatable({}, EnumItem)
 			item.Name = itemName

@@ -6,20 +6,17 @@ local task = zune.task
 local instance_mt = {}
 
 function instance_mt.__index(self, key)
-	-- 1. properties
 	local props = rawget(self, "_props")
 	if props and props[key] ~= nil then
 		return props[key]
 	end
 
-	-- 2. children by name (Roblox behavior)
 	for _, child in ipairs(self.Children) do
 		if child.Name == key then
 			return child
 		end
 	end
 
-	-- 3. class methods
 	return Instance[key]
 end
 
@@ -75,6 +72,7 @@ function Instance.new(className)
 	self.ChildAdded = Signal.new()
 	self.Changed = Signal.new()
 	self.DescendantAdded = Signal.new()
+	self.tags = {}
 
 	self._props = {
 		ClassName = className,
@@ -113,6 +111,16 @@ function Instance:FindFirstAncestor(className)
 		ancestor = ancestor.Parent
 	end
 	return nil
+end
+
+function Instance:GetChildrenOfClass(className)
+	local children = {}
+	for _, child in pairs(self.Children) do
+		if child.ClassName == className then
+			table.insert(children, child)
+		end
+	end
+	return children
 end
 
 function Instance:FindFirstChildOfClass(className)

@@ -127,4 +127,23 @@ function PhysicsUtils.ClampMagnitude(vec, maxMagnitude)
 	return vec
 end
 
+function PhysicsUtils.Reflect(velocity, normal)
+	return velocity - normal * (2 * (velocity:Dot(normal)))
+end
+
+function PhysicsUtils.SweepAABB(box, moveVec, other)
+	local expandedBox = { pos = box.pos + moveVec / 2, size = box.size + moveVec:Abs() }
+	return PhysicsUtils.AABBOverlap(expandedBox, other)
+end
+
+function PhysicsUtils.ApplyTorque(body, torque, dt)
+	body.angularVelocity += torque * dt
+end
+
+function PhysicsUtils.ResolveFriction(body, other, normal, dt)
+	local tangent = (body.velocity - normal * body.velocity:Dot(normal))
+	local frictionCoefficient = 0.5
+	body.velocity -= tangent * frictionCoefficient * dt
+end
+
 return PhysicsUtils

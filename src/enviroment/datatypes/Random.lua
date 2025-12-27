@@ -42,4 +42,15 @@ function Random:NextUnitVector()
 	end
 end
 
+function Random:ToTable()
+	return {
+		type = "Random",
+	}
+end
+
+function Random.FromTable(tbl)
+	assert(tbl.type == "Random")
+	return Random.new()
+end
+
 return Random

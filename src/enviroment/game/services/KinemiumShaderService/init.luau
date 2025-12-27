@@ -9,6 +9,9 @@ local ShaderRemoved = signal.new()
 local loaded = {}
 
 KinemiumShaderService.InitRenderer = function(renderer, renderer_signal)
+	if IsHeadless == true then
+		return KinemiumShaderService:SetProperties({})
+	end
 	KinemiumShaderService:SetProperties({
 		ShaderAdded = ShaderAdded,
 		ShaderRemoved = ShaderRemoved,

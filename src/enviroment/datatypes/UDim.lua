@@ -47,4 +47,17 @@ function UDim:ToPixels(total)
 	return self.Scale * total + self.Offset
 end
 
+function UDim:ToTable()
+	return {
+		type = "UDim",
+		Scale = self.Scale,
+		Offset = self.Offset,
+	}
+end
+
+function UDim.FromTable(tbl)
+	assert(tbl.type == "UDim")
+	return UDim.new(tbl.Scale, tbl.Offset)
+end
+
 return UDim

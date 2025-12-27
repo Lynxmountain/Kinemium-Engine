@@ -71,4 +71,18 @@ function Vector3.__unm(a)
 	return Vector3.new(-a.X, -a.Y, -a.Z)
 end
 
+function Vector3:ToTable()
+	return {
+		type = "Vector3",
+		X = self.X,
+		Y = self.Y,
+		Z = self.Z,
+	}
+end
+
+function Vector3.FromTable(tbl)
+	assert(tbl.type == "Vector3")
+	return Vector3.new(tbl.X, tbl.Y, tbl.Z)
+end
+
 return Vector3

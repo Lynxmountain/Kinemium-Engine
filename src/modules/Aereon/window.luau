@@ -5,6 +5,38 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local dragOffset = { x = 0, y = 0 }
 	local Color3 = require("@Color3")
 	local Enum = require("@EnumMap")
+	local const = require("@raylib").const
+
+	local resizingWindow = nil
+	local resizeSide = nil
+	local resizeStart = vector.create(0, 0)
+	local resizeMinSize = vector.create(100, 60)
+	local resizeThreshold = 15
+
+	local function getResizeSide(window, mousePos)
+		local sides = {}
+
+		if math.abs(mousePos.x - window.x) <= resizeThreshold then
+			table.insert(sides, "left")
+		elseif math.abs(mousePos.x - (window.x + window.width)) <= resizeThreshold then
+			table.insert(sides, "right")
+		end
+
+		if math.abs(mousePos.y - window.y) <= resizeThreshold then
+			table.insert(sides, "top")
+		elseif math.abs(mousePos.y - (window.y + window.height)) <= resizeThreshold then
+			table.insert(sides, "bottom")
+		end
+
+		if #sides > 0 then
+			return sides
+		end
+	end
+
+	local spring = require("@kispring")
+
+	local dragSpring = spring.new(1, 5)
+
 	local KinemiumFontService = game:GetService("KinemiumFontService")
 	local vend = KinemiumFontService.GetDefaultFont()
 
@@ -30,6 +62,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	module.dragged = function() end
 	module.stepped = function() end
 	module.dragEnd = function() end
+	module.backgroundDrawed = function() end
 
 	function module.create(data: {
 		headerRender: boolean?,
@@ -48,10 +81,26 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			headerRender = data.headerRender,
 			height = data.height,
 			id = #windowRegistry + 1,
+			rounded = 0,
 			stepped = data.step,
 			scrollOffset = vector.create(0, 0),
 		}
 		table.insert(windowRegistry, window)
+
+		function window:MoveTo(x, y)
+			dragSpring:target(window, {
+				x = x,
+				y = y,
+			})
+		end
+
+		function window:Resize(x, y)
+			dragSpring:target(window, {
+				width = x,
+				height = y,
+			})
+		end
+
 		return window
 	end
 
@@ -91,27 +140,75 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			local targetX = mousePos.x - dragOffset.x
 			local targetY = mousePos.y - dragOffset.y
 
-			local smoothing = 0.5 -- 0 = instant, 1 = very slow
-			draggedWindow.x = lerp(draggedWindow.x, targetX, smoothing)
-			draggedWindow.y = lerp(draggedWindow.y, targetY, smoothing)
+			dragSpring:target(draggedWindow, {
+				x = targetX,
+				y = targetY,
+			})
 
 			draggedWindow.IsDragging = true
 			module.dragged(draggedWindow)
 		end
 
+		if mousePressed == 1 and not draggedWindow then
+			for i = #windowRegistry, 1, -1 do
+				local window = windowRegistry[i]
+				local sides = getResizeSide(window, mousePos)
+				if sides then
+					resizingWindow = window
+					resizeSide = sides
+					resizeStart = vector.create(mousePos.x, mousePos.y)
+					break
+				end
+			end
+		end
+
+		if mouseDown == 1 and resizingWindow then
+			local dx = mousePos.x - resizeStart.x
+			local dy = mousePos.y - resizeStart.y
+
+			for _, side in ipairs(resizeSide) do
+				if side == "left" then
+					resizingWindow.x = resizingWindow.x + dx
+					resizingWindow.width = resizingWindow.width - dx
+					raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_EW.Value)
+				elseif side == "right" then
+					resizingWindow.width = resizingWindow.width + dx
+					raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_EW.Value)
+				elseif side == "top" then
+					resizingWindow.y = resizingWindow.y + dy
+					resizingWindow.height = resizingWindow.height - dy
+					raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NS.Value)
+				elseif side == "bottom" then
+					resizingWindow.height = resizingWindow.height + dy
+					raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NS.Value)
+				end
+			end
+
+			-- clamp minimum size
+			resizingWindow.width = math.max(resizingWindow.width, resizeMinSize.x)
+			resizingWindow.height = math.max(resizingWindow.height, resizeMinSize.y)
+
+			resizeStart = vector.create(mousePos.x, mousePos.y)
+		end
+
 		if mouseReleased == 1 then
+			raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
+
 			if draggedWindow then
-				raylib.SetMouseCursor(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
 				draggedWindow.IsDragging = false
 
 				module.dragEnd(draggedWindow)
 			end
 
 			draggedWindow = nil
+			resizingWindow = nil
+			resizeSide = nil
 		end
 	end
 
-	function module.draw()
+	function module.draw(dt)
+		dragSpring:step(dt)
+
 		local window_theme_config = theme().window
 
 		for _, window in pairs(windowRegistry) do
@@ -171,10 +268,15 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 			raylib.DrawRectangleRounded(
 				rect,
-				0,
+				window.rounded,
 				30,
-				Color3ToRaylib(window_theme_config.BackgroundColor, window_theme_config.BackgroundTransparency)
+				Color3ToRaylib(
+					window_theme_config.BackgroundColor,
+					window.transparency or window_theme_config.BackgroundTransparency
+				)
 			)
+			module.backgroundDrawed(window)
+			raylib.DrawRectangleRoundedLinesEx(rect, window.rounded, 30, 1, Color3ToRaylib(Color3.new(1, 1, 1), 0.9))
 
 			-- title
 			if window.headerRender ~= false then
@@ -225,6 +327,8 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			end
 		end
 	end
+
+	module.dragspring = dragSpring
 
 	return module
 end

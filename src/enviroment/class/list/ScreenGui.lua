@@ -12,9 +12,13 @@ return {
 
 	callback = function(instance, renderer)
 		local lib = renderer.lib
+
 		instance:SetProperties({
 			Name = "ScreenGui",
 			Enabled = true,
+			GravityY = -9.81,
+			GravityX = 0,
+			PhysicsEnabled = false,
 			ZIndexBehavior = "Sibling",
 			render = function(lib, object)
 				object.Size = UDim2.new(0, lib.GetRenderWidth(), 0, lib.GetRenderHeight())

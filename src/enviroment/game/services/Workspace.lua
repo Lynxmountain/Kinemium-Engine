@@ -8,6 +8,9 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 local structs = raylib.structs
 
+local utils = require("@bufferutils")
+local default = lib.LoadMaterialDefault()
+
 local allowed_to_render = {
 	["Part"] = "Part",
 	["MeshPart"] = "MeshPart",
@@ -16,15 +19,25 @@ local allowed_to_render = {
 }
 
 Workspace:SetProperties({
-	Gravity = 196.2,
+	Gravity = -9.81,
 	GlobalWind = Vector3.new(0, 0, 0),
 	FallenPartsDestroyHeight = 90,
 	AirTurbulenceIntensity = 0,
 	AirDensity = 0,
 	StreamingEnabled = false,
+
+	-- debugging
+	IsInPool = function(part)
+		for i, v in pairs(pool) do
+			if v == part then
+				return true
+			end
+		end
+		return false
+	end,
 })
 
-Workspace.InitRenderer = function(renderer, signal)
+Workspace.InitRenderer = function(renderer, signal, game)
 	local meshlib = renderer.meshlib
 	local runtimelib = renderer.runtimelib
 	local camera = renderer.camera
@@ -32,21 +45,54 @@ Workspace.InitRenderer = function(renderer, signal)
 	local materialList = renderer.materialList
 	local loadedMaterials = {}
 
-	local preloadedMeshes = meshlib.PreloadStandardMeshes()
+	local descendants = {}
 
-	local material_index = 0
-	for material_name, material_path in pairs(materialList) do
-		local texture = lib.LoadTexture(material_path)
-		local default = lib.LoadMaterialDefault()
-		lib.SetMaterialTexture(default, 0, texture)
+	local Kilights = require("@Kilights")
 
-		loadedMaterials[material_name] = {
-			index = material_index,
-			material = default,
-			texture = texture,
-		}
-		material_index += 1
-		print(`Loaded custom material: {material_name}`)
+	local default_shadow_shader
+	local light
+
+	if not IsHeadless then
+		default_shadow_shader = Kilights.getDefaultShader()
+		Kilights.SetAmbientColor({
+			r = 0.5,
+			g = 0.5,
+			b = 0.5,
+			a = 1.0,
+		}, default_shadow_shader)
+
+		light = Kilights.CreateLight(
+			Kilights.LIGHT_POINT,
+			vector.create(0, 20, 0),
+			vector.create(0, -5, 0),
+			{ r = 255, g = 255, b = 255, a = 255 },
+			default_shadow_shader
+		)
+
+		light.attenuation = 0.001
+	end
+
+	local preloadedMeshes
+	if not IsHeadless then
+		preloadedMeshes = meshlib.PreloadStandardMeshes()
+
+		local material_index = 0
+		for material_name, material_path in pairs(materialList) do
+			local texture = lib.LoadTexture(material_path)
+			local default = lib.LoadMaterialDefault()
+			lib.SetMaterialTexture(default, 0, texture)
+
+			local material_shader_buffer = utils.extract.material_shader(structs.Material, default)
+			buffer.copy(material_shader_buffer, 0, default_shadow_shader, 0, structs.Shader:size())
+
+			loadedMaterials[material_name] = {
+				index = material_index,
+				material = default,
+				texture = texture,
+			}
+			material_index += 1
+			print(`Loaded custom material: {material_name}`)
+		end
 	end
 
 	signal:Connect(function(route, data) end)
@@ -55,18 +101,12 @@ Workspace.InitRenderer = function(renderer, signal)
 		return obj:IsA("Part") or obj:IsA("MeshPart")
 	end
 
-	for _, child in pairs(Workspace:GetDescendants()) do
-		pool[#pool + 1] = child
-		if isRenderable(v) then
-			signal:Fire("AddedPartToRenderPool", v)
-		end
-	end
-
 	Workspace.DescendantAdded:Connect(function(v)
 		pool[#pool + 1] = v
 		if isRenderable(v) then
-			signal:Fire("AddedPartToRenderPool", v)
+			signal:Fire("UpdatePart", v)
 		end
+		log(`Added {v.Name} to render pool!`)
 	end)
 
 	--[[
@@ -85,7 +125,8 @@ Workspace.InitRenderer = function(renderer, signal)
 		if part.ClassName == "MeshPart" then
 			mesh = meshlib.GetModelRegistry()[part.MeshId]
 		else
-			mesh = preloadedMeshes[part.Shape.Value][1]
+			-- second value: Mesh
+			mesh = preloadedMeshes[part.Shape.Value][2]
 		end
 
 		if not mesh then
@@ -94,28 +135,53 @@ Workspace.InitRenderer = function(renderer, signal)
 
 		part._mesh = mesh
 
-		meshlib.drawModel(mesh, part, loadedMaterials)
+		local data = loadedMaterials[part.Material.Value]
+		local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
 
+		--log(`{part.Name} : {part.CFrame}`)
+
+		raylib.lib.DrawMesh(mesh, data.material, matrix)
 		signal:Fire("Rendered", part)
 	end
 
-	renderer.Add3DStack(function()
-		-- Main render pass
-		for i = 1, #pool do
-			local object = pool[i]
-			if isRenderable(pool[i]) then
-				drawPart(object)
+	for _, child in pairs(Workspace:GetDescendants()) do
+		pool[#pool + 1] = child
+		if isRenderable(child) then
+			signal:Fire("UpdatePart", child)
+		end
+	end
 
-				if object.Position.Y <= 300 then
-					--object:Destroy()
-				end
-			else
-				if object.render then
-					object.render(object, renderer)
+	if not IsHeadless then
+		renderer.Add3DStack(function()
+			if not IsHeadless then
+				Kilights:Begin(default_shadow_shader)
+				Kilights.UpdateLightValues(default_shadow_shader, light)
+				Kilights.SetCameraPos(default_shadow_shader, renderer.camera)
+			end
+
+			for i = 1, #pool do
+				local object = pool[i]
+				if isRenderable(pool[i]) then
+					drawPart(object)
+
+					if object.Position.Y <= 300 then
+						--object:Destroy()
+					end
+				else
+					if object.render then
+						object.render(object, renderer, game)
+					end
 				end
 			end
-		end
-	end)
+
+			if not IsHeadless then
+				Kilights:End()
+			end
+
+			local KinemiumPhysicsService = game:GetService("KinemiumPhysicsService")
+			KinemiumPhysicsService.setGravity(Workspace.Gravity, Workspace.GlobalWind)
+		end)
+	end
 end
 
 return Workspace

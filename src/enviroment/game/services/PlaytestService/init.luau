@@ -12,10 +12,8 @@ PlaytestService.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 			ScriptRunnerService.Clear()
 
-			-- ## run Server scripts
 			for _, script in pairs(datamodel:GetDescendants()) do
 				if script:IsA("Script") then
-					print("FOUND SCRIPT! " .. script.Name)
 					ScriptRunnerService.RunScript(script)
 				end
 			end

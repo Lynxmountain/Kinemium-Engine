@@ -24,8 +24,8 @@ local stepcallbacks = {}
 local themes = {
 	default = {
 		window = {
-			BackgroundColor = Color3.new(0.07, 0.07, 0.07),
-			BackgroundTransparency = 0.015,
+			BackgroundColor = Color3.new(0, 0, 0),
+			BackgroundTransparency = 0.05,
 			TextColor = Color3.new(1, 1, 1),
 			SecondaryBackgroundColor = Color3.new(0.05, 0.05, 0.05),
 			DragColor = Color3.new(0.02, 0.5, 1),
@@ -63,6 +63,7 @@ local themes = {
 
 -- data
 Aereon.raylib = raylib
+Aereon.gui = require("./Aereon/component/lib")
 
 function Aereon.theme(name, new)
 	themes[name] = new
@@ -99,13 +100,14 @@ function Aereon.include(game)
 	callerEnv.window = Aereon.window(game, themes.default)
 end
 
-function Aereon.step()
+function Aereon.step(dt)
+	Aereon.gui:step(dt)
 	table.sort(stepcallbacks, function(a, b)
 		return a.priority > b.priority
 	end)
 
 	for _, v in ipairs(stepcallbacks) do
-		v.callback(game)
+		v.callback(dt)
 	end
 end
 

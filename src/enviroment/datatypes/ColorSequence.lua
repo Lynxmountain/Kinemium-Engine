@@ -64,4 +64,24 @@ function ColorSequence:__tostring()
 	return str
 end
 
+function ColorSequence:ToTable()
+	local keypoints = {}
+	for _, kp in ipairs(self.Keypoints) do
+		table.insert(keypoints, kp:ToTable())
+	end
+	return {
+		type = "ColorSequence",
+		Keypoints = keypoints,
+	}
+end
+
+function ColorSequence.FromTable(tbl)
+	assert(tbl.type == "ColorSequence")
+	local keypoints = {}
+	for _, kp in ipairs(tbl.Keypoints) do
+		table.insert(keypoints, ColorSequenceKeypoint.FromTable(kp))
+	end
+	return ColorSequence.new(keypoints)
+end
+
 return ColorSequence
