@@ -60,11 +60,12 @@ local cameraPos = vector.create(0.0, 5.0, 10.0)
 
 -- RAYLIB INIT
 lib.SetTraceLogLevel(const.TraceLogLevel.LOG_ERROR)
-lib.SetConfigFlags(const.ConfigFlags.FLAG_WINDOW_RESIZABLE)
 lib.SetConfigFlags(const.ConfigFlags.FLAG_MSAA_4X_HINT)
 
 lib.InitWindow(screenWidth, screenHeight, "Kinemium Engine")
 lib.SetTargetFPS(0)
+lib.SetWindowState(const.ConfigFlags.FLAG_WINDOW_MAXIMIZED)
+lib.SetWindowState(const.ConfigFlags.FLAG_BORDERLESS_WINDOWED_MODE)
 --raylib.r3d.lib.R3D_Init(raylib.lib.GetRenderWidth(), raylib.lib.GetRenderHeight(), 0)
 -- R3D CMAKE
 --cmake .. -DCMAKE_CXX_COMPILER=cl -DCMAKE_C_COMPILER=cl -DCMAKE_BUILD_TYPE=Release -DR3D_RAYLIB_VENDORED=ON -DR3D_ASSIMP_VENDORED=ON -DR3D_BUILD_EXAMPLES=ON -DR3D_BUILD_DOCS=OFF

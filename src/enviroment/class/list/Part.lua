@@ -24,7 +24,7 @@ local propTable = {
 	Orientation = Vector3.new(0, 0, 0),
 	Rotation = Vector3.new(0, 0, 0),
 	MouseOverObject = false,
-	CFrame = CFrame.new(0, 0, 0),
+	CFrame = CFrame.new(0, 10, 0),
 	ElapsedTime = 0,
 	Name = "Part",
 	_mesh = nil,
@@ -40,10 +40,16 @@ local propTable = {
 return {
 	class = "Part",
 
-	callback = function(instance)
+	callback = function(instance, renderer)
 		propTable.render = function(part, camera, lib) end
 
 		instance:SetProperties(propTable)
+
+		instance.Changed:Connect(function(property)
+			if property == "Anchored" then
+				renderer.Signal:Fire("UpdatePart", instance)
+			end
+		end)
 
 		return instance
 	end,

@@ -17,7 +17,6 @@ local b2Vec2 = ffi.struct({
 })
 export type b2Vec2 = typeof(b2Vec2:new({}))
 
--- b2Rot
 local b2Rot = ffi.struct({
 	{ s = ffi.types.float }, -- sin(angle)
 	{ c = ffi.types.float }, -- cos(angle)
@@ -218,6 +217,12 @@ local b2Manifold = ffi.struct({
 })
 export type b2Manifold = typeof(b2Manifold:new({}))
 
+local b2MotionLocks = ffi.struct({
+	{ linearX = bool },
+	{ linearY = bool },
+	{ angularZ = bool },
+})
+
 local b2DynamicTree = ffi.struct({
 	{ nodes = ffi.types.pointer },
 	{ root = ffi.types.i32 },
@@ -335,6 +340,7 @@ local b2WorldDef = ffi.struct({
 	{ hitEventThreshold = ffi.types.float },
 	{ contactHertz = ffi.types.float },
 	{ contactDampingRatio = ffi.types.float },
+	{ contactSpeed = ffi.types.float },
 	{ maxContactPushSpeed = ffi.types.float },
 	{ maximumLinearSpeed = ffi.types.float },
 	{ frictionCallback = ffi.types.pointer },
@@ -351,7 +357,7 @@ local b2WorldDef = ffi.struct({
 export type b2WorldDef = typeof(b2WorldDef:new({}))
 
 local b2BodyDef = ffi.struct({
-	{ type = ffi.types.pointer },
+	{ type = ffi.types.u8 },
 	{ position = ffi.types.pointer },
 	{ rotation = ffi.types.pointer },
 	{ linearVelocity = ffi.types.pointer },
@@ -362,6 +368,7 @@ local b2BodyDef = ffi.struct({
 	{ sleepThreshold = ffi.types.float },
 	{ name = ffi.types.pointer },
 	{ userData = ffi.types.pointer },
+	{ motionLocks = ffi.types.pointer },
 	{ enableSleep = ffi.types.u8 },
 	{ isAwake = ffi.types.u8 },
 	{ fixedRotation = ffi.types.u8 },
@@ -1141,6 +1148,7 @@ local funcs = {
 	b2MakeSquare = { returns = ffi.types.pointer, args = { ffi.types.float } },
 	b2MakeBox = { returns = ffi.types.pointer, args = { ffi.types.float, ffi.types.float } },
 	b2MakeRoundedBox = { returns = ffi.types.pointer, args = { ffi.types.float, ffi.types.float, ffi.types.float } },
+
 	b2MakeOffsetBox = {
 		returns = ffi.types.pointer,
 		args = { ffi.types.float, ffi.types.float, ffi.types.pointer, ffi.types.pointer },
@@ -1319,6 +1327,7 @@ local structs = {
 	b2MassData = b2MassData,
 	b2Circle = b2Circle,
 	b2Capsule = b2Capsule,
+	b2Rot = b2Rot,
 	b2Polygon = b2Polygon,
 	b2Segment = b2Segment,
 	b2ChainSegment = b2ChainSegment,
@@ -1365,6 +1374,7 @@ local structs = {
 	b2MouseJointDef = b2MouseJointDef,
 	b2FilterJointDef = b2FilterJointDef,
 	b2PrismaticJointDef = b2PrismaticJointDef,
+	b2MotionLocks = b2MotionLocks,
 	b2RevoluteJointDef = b2RevoluteJointDef,
 	b2WeldJointDef = b2WeldJointDef,
 	b2WheelJointDef = b2WheelJointDef,

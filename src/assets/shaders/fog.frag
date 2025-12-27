@@ -1,4 +1,4 @@
-/* bloom.frag -- Fragment shader for applying fog to the scene
+/* bloom.frag -- Fragment shader for applying fog to the Workspace
  *
  * Copyright (c) 2025 Le Juez Victor
  *
@@ -74,7 +74,7 @@ float FogFactor(float dist, int mode, float density, float start, float end)
 
 void main()
 {
-    // Sampling scene color texture
+    // Sampling Workspace color texture
     vec3 result = texture(uTexColor, vTexCoord).rgb;
 
     // Depth retrieval and distance calculation

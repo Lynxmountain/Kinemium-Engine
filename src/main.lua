@@ -9,6 +9,18 @@ _G.warn = function(...)
 	print("[\x1b[33mWARN\x1b[0m]", ...)
 end
 
+_G.log = function(...)
+	print("[\x1b[94mLOG\x1b[0m]", ...)
+end
+
+_G.debugPart = function(data)
+	_G.log(`Created body to part {data.Name}`)
+	_G.log(`{data.Name}       Property       Value`)
+	for k, v in pairs(data._props) do
+		_G.log(`{data.Name}       {k}       {tostring(v)}`)
+	end
+end
+
 _G.FlagExists = function(flag)
 	local args = zune.process.args
 	for _, v in pairs(args) do
@@ -19,34 +31,8 @@ _G.FlagExists = function(flag)
 	return false
 end
 
--- crun: compiles C code and returns a table of callable functions
--- `defs` is a table: { ["functionName"] = { returns = "type", args = {"type1","type2",...} } }
-_G.crun = function(path, defs)
-	local read = zune.fs.readFile(path)
-	if not read then
-		error("Failed to read: " .. path)
-	end
-
-	local compiled = c.compile(read, {
-		includes = { "./include" },
-		sysincludes = { "user32" },
-		libraries = {},
-		library_paths = { "./libs" },
-	})
-
-	local wrapped = {}
-
-	for _, name in ipairs(compiled:listSymbols()) do
-		local ptr = compiled:getSymbol(name)
-		local def = defs and defs[name] or { returns = ffi.types.pointer, args = {} } -- default
-
-		wrapped[name] = ffi.fn(def, ptr)
-	end
-
-	return wrapped
-end
-
 --require("@manifold")
+require("@fmod")
 
 local sandboxer = require("./modules/sandboxer")
 local Instance = require("@Instance")
@@ -135,7 +121,7 @@ function Kinemium:playtest()
 	end)
 end
 
-kilang.renderer.Kinemium_camera.Parent = sandboxer.enviroment.Scene
+kilang.renderer.Kinemium_camera.Parent = sandboxer.enviroment.Workspace
 
 game.EngineSignal:Connect(function(route)
 	if route == "playtest" then

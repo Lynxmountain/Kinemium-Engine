@@ -40,7 +40,7 @@ local function DoubleClicked(instance)
 end
 
 local serviceOrder = {
-	"Scene",
+	"Workspace",
 	"Players",
 	"Lighting",
 	"MaterialService",

@@ -4,7 +4,7 @@
  * Feature adaptation and extension by Jens Roth.
  *
  * Provides a post-processing effect that simulates camera focus,
- * blending sharp and blurred regions according to scene depth.
+ * blending sharp and blurred regions according to Workspace depth.
  *
  * Copyright (c) 2025 Victor Le Juez, Jens Roth
  *

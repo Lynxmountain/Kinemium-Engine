@@ -1,6 +1,8 @@
 local bufferUtils = {}
 
 local raylib = require("@raylib")
+local box2d = require("@box2d")
+local box2d_structs = box2d.structs
 local const, structs, lib = raylib.const, raylib.structs, raylib.lib
 
 -- Unsigned integers
@@ -89,6 +91,11 @@ function bufferUtils.extract.material_shader(mainstruct, v)
 	local Shader = zune.mem.slice(v, mainstruct:offset("shader"), structs.Shader:size())
 
 	return Shader
+end
+
+function bufferUtils.extract.box2d_body_position(object, mainstruct)
+	local pos = zune.mem.slice(object, mainstruct:offset("position"), box2d_structs.b2Vec2:size())
+	return pos
 end
 
 function bufferUtils.extract.set(object, value, struct)

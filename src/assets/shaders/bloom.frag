@@ -1,4 +1,4 @@
-/* bloom.frag -- Fragment shader for applying bloom to the scene
+/* bloom.frag -- Fragment shader for applying bloom to the Workspace
  *
  * Copyright (c) 2025 Le Juez Victor
  *
@@ -34,7 +34,7 @@ out vec3 FragColor;
 
 void main()
 {
-    // Sampling scene color texture
+    // Sampling Workspace color texture
     vec3 color = texture(uTexColor, vTexCoord).rgb;
 
     // Apply bloom

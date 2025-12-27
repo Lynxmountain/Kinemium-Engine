@@ -49,7 +49,7 @@ or connected to Roblox Corporation. Roblox is a trademark of Roblox Corporation
 - StarterGui
 - TweenService
 - UserInputService
-- Scene
+- Workspace
 
 ## Kinemium Custom Services
 *(All custom services start with Kinemium.)*

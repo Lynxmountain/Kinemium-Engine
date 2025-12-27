@@ -1,4 +1,4 @@
-/* ssr.frag -- Fragment shader for applying SSR to the scene
+/* ssr.frag -- Fragment shader for applying SSR to the Workspace
  *
  * Copyright (c) 2025 Le Juez Victor
  *
@@ -146,13 +146,13 @@ vec3 TraceReflectionRay(vec3 startPos, vec3 reflectionDir)
 
 void main()
 {
-    /* --- Texture sampling and scene property extraction --- */
+    /* --- Texture sampling and Workspace property extraction --- */
 
-    vec3 sceneColor = texture(uTexColor, vTexCoord).rgb;
+    vec3 WorkspaceColor = texture(uTexColor, vTexCoord).rgb;
     float depth = texture(uTexDepth, vTexCoord).r;
 
     if (depth > 1.0 - 1e-5) {
-        FragColor = vec4(sceneColor, 1.0);
+        FragColor = vec4(WorkspaceColor, 1.0);
         return;
     }
 
@@ -173,7 +173,7 @@ void main()
     vec3 reflectionDir = reflect(viewDir, worldNormal);
 
     if (dot(reflectionDir, worldNormal) < 0.0) {
-        FragColor = vec4(sceneColor, 1.0);
+        FragColor = vec4(WorkspaceColor, 1.0);
         return;
     }
 
@@ -182,8 +182,8 @@ void main()
     vec3 reflectionColor = TraceReflectionRay(worldPos, reflectionDir);
 
     float reflectionLuminance = dot(reflectionColor, vec3(0.299, 0.587, 0.114));
-    float sceneLuminance = dot(sceneColor, vec3(0.299, 0.587, 0.114));
-    float maxReflectionLuminance = sceneLuminance * 4.0;
+    float WorkspaceLuminance = dot(WorkspaceColor, vec3(0.299, 0.587, 0.114));
+    float maxReflectionLuminance = WorkspaceLuminance * 4.0;
 
     if (reflectionLuminance > maxReflectionLuminance) {
         reflectionColor *= maxReflectionLuminance / reflectionLuminance;
@@ -206,5 +206,5 @@ void main()
 
     /* --- Final mix --- */
 
-    FragColor = vec4(sceneColor + specular, 1.0);
+    FragColor = vec4(WorkspaceColor + specular, 1.0);
 }

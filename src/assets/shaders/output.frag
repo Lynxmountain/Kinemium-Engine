@@ -1,4 +1,4 @@
-/* output.frag -- Scene output fragment shader
+/* output.frag -- Workspace output fragment shader
  *
  * Performs tone mapping, debanding, color adjustments, and
  * converts from linear color space to sRGB.
@@ -29,7 +29,7 @@ noperspective in vec2 vTexCoord;
 
 /* === Uniforms === */
 
-uniform sampler2D uTexColor;        //< Scene color texture
+uniform sampler2D uTexColor;        //< Workspace color texture
 uniform float uTonemapExposure;     //< Tonemap exposure
 uniform float uTonemapWhite;        //< Tonemap white point, not used with AGX
 uniform float uBrightness;          //< Brightness adjustment

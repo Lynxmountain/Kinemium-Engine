@@ -1,4 +1,4 @@
-/* fxaa.frag -- Fragment shader for applying FXAA to the scene
+/* fxaa.frag -- Fragment shader for applying FXAA to the Workspace
  *
  * Copyright (c) 2025 Le Juez Victor
  *

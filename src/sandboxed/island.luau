@@ -9,7 +9,7 @@ local function createTerrain()
 	island.Material = Enum.Material.Grass
 	island.Color = Color3.fromRGB(76, 143, 68)
 	island.Anchored = true
-	island.Parent = Scene
+	island.Parent = Workspace
 
 	-- Sandy beach around the edges
 	for i = 0, 7 do
@@ -21,7 +21,7 @@ local function createTerrain()
 		beach.Material = Enum.Material.Sand
 		beach.Color = Color3.fromRGB(227, 207, 159)
 		beach.Anchored = true
-		beach.Parent = Scene
+		beach.Parent = Workspace
 	end
 end
 
@@ -40,7 +40,7 @@ local function createHills()
 		part.Material = Enum.Material.Grass
 		part.Color = Color3.fromRGB(67, 120, 55)
 		part.Anchored = true
-		part.Parent = Scene
+		part.Parent = Workspace
 	end
 end
 
@@ -58,7 +58,7 @@ local function createCliffs()
 		part.Material = Enum.Material.Slate
 		part.Color = Color3.fromRGB(90, 90, 95)
 		part.Anchored = true
-		part.Parent = Scene
+		part.Parent = Workspace
 	end
 end
 
@@ -71,7 +71,7 @@ local function createTree(position)
 	trunk.Material = Enum.Material.Wood
 	trunk.Color = Color3.fromRGB(120, 80, 50)
 	trunk.Anchored = true
-	trunk.Parent = Scene
+	trunk.Parent = Workspace
 
 	-- Leaves (canopy)
 	local leaves = Instance.new("Part")
@@ -80,7 +80,7 @@ local function createTree(position)
 	leaves.Material = Enum.Material.Grass
 	leaves.Color = Color3.fromRGB(40, 120, 30)
 	leaves.Anchored = true
-	leaves.Parent = Scene
+	leaves.Parent = Workspace
 end
 
 local function createForest()
@@ -108,7 +108,7 @@ local function createWater()
 	water.Color = Color3.fromRGB(30, 80, 150)
 	water.Transparency = 0.3
 	water.Anchored = true
-	water.Parent = Scene
+	water.Parent = Workspace
 end
 
 -- Create some rocks scattered around
@@ -128,7 +128,7 @@ local function createRocks()
 		part.Color = Color3.fromRGB(100, 100, 105)
 		part.Rotation = Vector3.new(math.random(-15, 15), math.random(0, 360), math.random(-15, 15))
 		part.Anchored = true
-		part.Parent = Scene
+		part.Parent = Workspace
 	end
 end
 
@@ -141,7 +141,7 @@ local function createDock()
 	dock.Material = Enum.Material.Wood
 	dock.Color = Color3.fromRGB(140, 100, 60)
 	dock.Anchored = true
-	dock.Parent = Scene
+	dock.Parent = Workspace
 
 	-- Dock posts
 	for i = -1, 1 do
@@ -151,7 +151,7 @@ local function createDock()
 		post.Material = Enum.Material.Wood
 		post.Color = Color3.fromRGB(100, 70, 40)
 		post.Anchored = true
-		post.Parent = Scene
+		post.Parent = Workspace
 	end
 end
 
@@ -160,23 +160,23 @@ local function createLights()
 	campfireLight.Position = Vector3.new(-5, 2, -5)
 	campfireLight.Color = Color3.fromRGB(255, 120, 40)
 	campfireLight.Range = 25
-	campfireLight.Parent = Scene
+	campfireLight.Parent = Workspace
 
 	local lanternLight = Instance.new("PointLight")
 	lanternLight.Position = Vector3.new(0, 0, 48)
 	lanternLight.Color = Color3.fromRGB(255, 200, 100)
 	lanternLight.Range = 20
-	lanternLight.Parent = Scene
+	lanternLight.Parent = Workspace
 
 	local moonLight = Instance.new("PointLight")
 	moonLight.Position = Vector3.new(30, 40, -30)
 	moonLight.Color = Color3.fromRGB(150, 160, 200)
 	moonLight.Range = 80
-	moonLight.Parent = Scene
+	moonLight.Parent = Workspace
 end
 
 --[[
-print("Building island scene...")
+print("Building island Workspace...")
 createWater()
 createTerrain()
 createHills()
@@ -186,5 +186,5 @@ createRocks()
 createDock()
 createLights()
 
-print("Island scene complete! Move around to test the shader lighting.")
+print("Island Workspace complete! Move around to test the shader lighting.")
 --]]

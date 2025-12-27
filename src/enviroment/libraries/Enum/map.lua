@@ -189,8 +189,13 @@ enumTable.PartType = {
 	Wedge = "wedge",
 	Torus = "torus",
 	CornerWedge = "cornerwedge",
-	Mesh = "Kinemiummesh", -- Custom mesh
-	Terrain = "Kinemiumterrain",
+	Mesh = "kmesh",
+	Terrain = "kterrain",
+}
+
+enumTable.ActuatorRelativeTo = {
+	World = 0,
+	Attachment0 = 1,
 }
 
 enumTable.Material = {
@@ -372,6 +377,71 @@ enumTable.VerticalAlignment = {
 	Bottom = 2,
 }
 
+enumTable.EasingStyle = {
+	Linear = 0,
+	Sine = 1,
+	Quad = 2,
+	Cubic = 3,
+	Quart = 4,
+	Quint = 5,
+	Expo = 6,
+	Circular = 7,
+	Back = 8,
+	Bounce = 9,
+	Elastic = 10,
+}
+
+enumTable.EasingDirection = {
+	In = 0,
+	Out = 1,
+	InOut = 2,
+}
+
+enumTable.CameraType = {
+	Custom = 0,
+	Fixed = 1,
+	Attach = 2,
+	Watch = 3,
+	Track = 4,
+	Follow = 5,
+	Scriptable = 6,
+}
+
+enumTable.Axis = {
+	X = 0,
+	Y = 1,
+	Z = 2,
+}
+
+enumTable.Face = {
+	Top = 0,
+	Bottom = 1,
+	Left = 2,
+	Right = 3,
+	Front = 4,
+	Back = 5,
+}
+
+enumTable.AutomaticSize = {
+	None = 0,
+	X = 1,
+	Y = 2,
+	XY = 3,
+}
+
+enumTable.PlaybackState = {
+	Stopped = 0,
+	Playing = 1,
+	Paused = 2,
+}
+
+enumTable.AnimationPriority = {
+	Core = 0,
+	Idle = 1,
+	Movement = 2,
+	Action = 3,
+}
+
 enumTable.GameContext = {
 	Game = 1,
 	Editor = 2,
@@ -383,6 +453,125 @@ enumTable.RunContext = {
 	Client = 2,
 	Plugin = 3,
 	Editor = 4,
+}
+
+enumTable.HumanoidStateType = {
+	None = 0,
+	Running = 1,
+	Jumping = 2,
+	Freefall = 3,
+	Landed = 4,
+	Swimming = 5,
+	Climbing = 6,
+	Dead = 7,
+}
+
+enumTable.ZIndexBehavior = {
+	Global = 0,
+	Sibling = 1,
+}
+
+enumTable.ScaleType = {
+	Stretch = 0,
+	Fit = 1,
+	Crop = 2,
+}
+
+enumTable.ConstraintType = {
+	Weld = 0,
+	BallSocket = 1,
+	Hinge = 2,
+	Prismatic = 3,
+	Spring = 4,
+	Rope = 5,
+}
+
+enumTable.SurfaceType = {
+	Smooth = 0,
+	Studs = 1,
+	Inlet = 2,
+	Universal = 3,
+}
+
+enumTable.CollisionGroup = {
+	Default = 0,
+	Player = 1,
+	World = 2,
+	Sensor = 3,
+}
+
+enumTable.BodyType2D = {
+	Static = 0,
+	Kinematic = 1,
+	Dynamic = 2,
+}
+
+enumTable.ShapeType2D = {
+	Circle = 0,
+	Box = 1,
+	Polygon = 2,
+	Edge = 3,
+	Chain = 4,
+}
+
+enumTable.JointType2D = {
+	Revolute = 0,
+	Prismatic = 1,
+	Distance = 2,
+	Pulley = 3,
+	Mouse = 4,
+	Gear = 5,
+	Wheel = 6,
+	Weld = 7,
+	Friction = 8,
+	Motor = 9,
+}
+
+enumTable.RaycastMode2D = {
+	Closest = 0,
+	Any = 1,
+	All = 2,
+}
+
+enumTable.CollisionDetection2D = {
+	Discrete = 0,
+	Continuous = 1,
+}
+
+enumTable.ContactState2D = {
+	Begin = 0,
+	Persist = 1,
+	End = 2,
+}
+
+enumTable.BodySleepState2D = {
+	Awake = 0,
+	Sleeping = 1,
+}
+
+enumTable.RigidbodyConstraints2D = {
+	None = 0,
+	FreezePositionX = 1,
+	FreezePositionY = 2,
+	FreezeRotation = 4,
+	FreezeAll = 7,
+}
+
+enumTable.ForceMode2D = {
+	Force = 0,
+	Impulse = 1,
+}
+
+enumTable.PhysicsMaterialCombine = {
+	Average = 0,
+	Min = 1,
+	Multiply = 2,
+	Max = 3,
+}
+
+enumTable.AudioBackend = {
+	Raudio = 0,
+	FMOD = 1,
 }
 
 enumTable.SecurityCapabilities = {

@@ -25,12 +25,12 @@ function blurmod.Init(width, height)
 	local directionLoc = lib.GetShaderLocation(blurShader, "direction")
 	local radiusLoc = lib.GetShaderLocation(blurShader, "blurRadius")
 
-	local sceneCapture = lib.LoadRenderTexture(width, height)
+	local WorkspaceCapture = lib.LoadRenderTexture(width, height)
 	local blurH = lib.LoadRenderTexture(width, height)
 	local blurV = lib.LoadRenderTexture(width, height)
 
 	wrapper.enabled = true
-	wrapper.sceneCapture = sceneCapture
+	wrapper.WorkspaceCapture = WorkspaceCapture
 	wrapper.blurRadius = 15.0
 	wrapper.blurV = blurV
 
@@ -39,7 +39,7 @@ function blurmod.Init(width, height)
 	end
 
 	function wrapper:BeginCapture()
-		lib.BeginTextureMode(sceneCapture)
+		lib.BeginTextureMode(WorkspaceCapture)
 		lib.ClearBackground(const.BLANK)
 	end
 
@@ -76,7 +76,7 @@ function blurmod.Init(width, height)
 		)
 
 		lib.DrawTextureRec(
-			extract_texture(sceneCapture),
+			extract_texture(WorkspaceCapture),
 			structs.Rectangle:new({ x = 0, y = 0, width = width, height = -height }),
 			vector.create(0, 0),
 			const.WHITE
@@ -131,7 +131,7 @@ function blurmod.Init(width, height)
 		tint = tint or const.WHITE
 
 		lib.DrawTextureRec(
-			extract_texture(sceneCapture),
+			extract_texture(WorkspaceCapture),
 			structs.Rectangle:new({ x = 0, y = 0, width = width, height = -height }),
 			vector.create(0, 0),
 			tint
@@ -170,9 +170,9 @@ function blurmod.Init(width, height)
 		end
 		tint = tint or const.WHITE
 
-		-- Draw from the captured scene texture, not a new render
+		-- Draw from the captured Workspace texture, not a new render
 		lib.DrawTextureRec(
-			extract_texture(sceneCapture),
+			extract_texture(WorkspaceCapture),
 			structs.Rectangle:new({ x = 0, y = 0, width = width, height = -height }),
 			vector.create(0, 0),
 			tint
@@ -188,7 +188,7 @@ function blurmod.Init(width, height)
 	end
 
 	function wrapper:Cleanup()
-		lib.UnloadRenderTexture(sceneCapture)
+		lib.UnloadRenderTexture(WorkspaceCapture)
 		lib.UnloadRenderTexture(blurH)
 		lib.UnloadRenderTexture(blurV)
 		lib.UnloadShader(blurShader)

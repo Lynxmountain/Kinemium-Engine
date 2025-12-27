@@ -11,7 +11,6 @@ return {
 	class = "ScreenGui",
 
 	callback = function(instance, renderer)
-		local box2d = require("@box2d")
 		local lib = renderer.lib
 
 		instance:SetProperties({
@@ -30,21 +29,6 @@ return {
 			BackgroundColor3 = Color3.new(1, 1, 1),
 			BackgroundTransparency = 1,
 		})
-
-		instance.Changed:Connect(function(prop)
-			if prop == "PhysicsEnabled" and instance.PhysicsEnabled == true then
-				print("Physics is Enabled!")
-				local wdef = box2d.lib.b2DefaultWorldDef()
-
-				local grav = box2d.structs.b2Vec2:new({ x = instance.GravityX, y = instance.GravityY })
-				local worldId = box2d.lib.b2CreateWorld(grav)
-
-				-- INCOMPLETE
-				-- will do 12/26/2025 or 12/27
-				-- why is it exact? uhhh
-				-- TODO TODO TODO!!!!!!!!!!!!!!!!!!!
-			end
-		end)
 
 		return instance
 	end,

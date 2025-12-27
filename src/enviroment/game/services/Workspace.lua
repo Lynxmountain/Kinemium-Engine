@@ -1,6 +1,6 @@
 local Instance = require("@Instance")
 local Vector3 = require("@Vector3")
-local Scene = Instance.new("Scene")
+local Workspace = Instance.new("Workspace")
 
 local pool = {}
 
@@ -8,7 +8,6 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 local structs = raylib.structs
 
-local Kilights = require("@Kilights")
 local utils = require("@bufferutils")
 local default = lib.LoadMaterialDefault()
 
@@ -19,20 +18,26 @@ local allowed_to_render = {
 	["Model"] = "Model",
 }
 
-Scene:SetProperties({
+Workspace:SetProperties({
 	Gravity = -9.81,
 	GlobalWind = Vector3.new(0, 0, 0),
 	FallenPartsDestroyHeight = 90,
 	AirTurbulenceIntensity = 0,
 	AirDensity = 0,
 	StreamingEnabled = false,
+
+	-- debugging
+	IsInPool = function(part)
+		for i, v in pairs(pool) do
+			if v == part then
+				return true
+			end
+		end
+		return false
+	end,
 })
 
-Scene.aliases = {
-	"workspace",
-}
-
-Scene.InitRenderer = function(renderer, signal, game)
+Workspace.InitRenderer = function(renderer, signal, game)
 	local meshlib = renderer.meshlib
 	local runtimelib = renderer.runtimelib
 	local camera = renderer.camera
@@ -40,24 +45,32 @@ Scene.InitRenderer = function(renderer, signal, game)
 	local materialList = renderer.materialList
 	local loadedMaterials = {}
 
-	local default_shadow_shader = Kilights.getDefaultShader()
+	local descendants = {}
 
-	Kilights.SetAmbientColor({
-		r = 0.5,
-		g = 0.5,
-		b = 0.5,
-		a = 1.0,
-	}, default_shadow_shader)
+	local Kilights = require("@Kilights")
 
-	local light = Kilights.CreateLight(
-		Kilights.LIGHT_POINT,
-		vector.create(0, 20, 0),
-		vector.create(0, -5, 0),
-		{ r = 255, g = 255, b = 255, a = 255 },
-		default_shadow_shader
-	)
+	local default_shadow_shader
+	local light
 
-	light.attenuation = 0.001
+	if not IsHeadless then
+		default_shadow_shader = Kilights.getDefaultShader()
+		Kilights.SetAmbientColor({
+			r = 0.5,
+			g = 0.5,
+			b = 0.5,
+			a = 1.0,
+		}, default_shadow_shader)
+
+		light = Kilights.CreateLight(
+			Kilights.LIGHT_POINT,
+			vector.create(0, 20, 0),
+			vector.create(0, -5, 0),
+			{ r = 255, g = 255, b = 255, a = 255 },
+			default_shadow_shader
+		)
+
+		light.attenuation = 0.001
+	end
 
 	local preloadedMeshes
 	if not IsHeadless then
@@ -88,15 +101,16 @@ Scene.InitRenderer = function(renderer, signal, game)
 		return obj:IsA("Part") or obj:IsA("MeshPart")
 	end
 
-	Scene.DescendantAdded:Connect(function(v)
+	Workspace.DescendantAdded:Connect(function(v)
 		pool[#pool + 1] = v
 		if isRenderable(v) then
-			signal:Fire("AddedPartToRenderPool", v)
+			signal:Fire("UpdatePart", v)
 		end
+		log(`Added {v.Name} to render pool!`)
 	end)
 
 	--[[
-	Scene.DescendantRemoving:Connect(function(v)
+	Workspace.DescendantRemoving:Connect(function(v)
 		for i = #pool, 1, -1 do
 			if pool[i] == v then
 				table.remove(pool, i)
@@ -124,22 +138,26 @@ Scene.InitRenderer = function(renderer, signal, game)
 		local data = loadedMaterials[part.Material.Value]
 		local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, raylib.structs)
 
+		--log(`{part.Name} : {part.CFrame}`)
+
 		raylib.lib.DrawMesh(mesh, data.material, matrix)
 		signal:Fire("Rendered", part)
 	end
 
-	for _, child in pairs(Scene:GetDescendants()) do
+	for _, child in pairs(Workspace:GetDescendants()) do
 		pool[#pool + 1] = child
 		if isRenderable(child) then
-			signal:Fire("AddedPartToRenderPool", child)
+			signal:Fire("UpdatePart", child)
 		end
 	end
 
 	if not IsHeadless then
 		renderer.Add3DStack(function()
-			Kilights:Begin(default_shadow_shader)
-			Kilights.UpdateLightValues(default_shadow_shader, light)
-			Kilights.SetCameraPos(default_shadow_shader, renderer.camera)
+			if not IsHeadless then
+				Kilights:Begin(default_shadow_shader)
+				Kilights.UpdateLightValues(default_shadow_shader, light)
+				Kilights.SetCameraPos(default_shadow_shader, renderer.camera)
+			end
 
 			for i = 1, #pool do
 				local object = pool[i]
@@ -151,17 +169,19 @@ Scene.InitRenderer = function(renderer, signal, game)
 					end
 				else
 					if object.render then
-						object.render(object, renderer)
+						object.render(object, renderer, game)
 					end
 				end
 			end
 
-			Kilights:End()
+			if not IsHeadless then
+				Kilights:End()
+			end
 
 			local KinemiumPhysicsService = game:GetService("KinemiumPhysicsService")
-			KinemiumPhysicsService.setGravity(Scene.Gravity, Scene.GlobalWind)
+			KinemiumPhysicsService.setGravity(Workspace.Gravity, Workspace.GlobalWind)
 		end)
 	end
 end
 
-return Scene
+return Workspace

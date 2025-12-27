@@ -158,18 +158,15 @@ local function debugBody(bodyInterface, bodyID, partName)
 	)
 end
 
-local function createBody(bodyInterface, part)
-	if bodiesMap[part] then
-		print("[Physics] Body already exists for part", part.Name)
-		return
-	end
-
+local function createBody(bodyInterface, part, motionType)
 	local halfSize = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
 	halfSize:writef32(0, part.Size.X / 2)
 	halfSize:writef32(4, part.Size.Y / 2)
 	halfSize:writef32(8, part.Size.Z / 2)
 
 	local boxShape = lib.JPH_BoxShape_Create(halfSize, float_ptr(0.05))
+
+	part.Position = part.CFrame.Position
 
 	local position = ffi.alloc(structs.JPH_RVec3:size(), structs.JPH_RVec3:alignment())
 	position:writef64(0, part.Position.X)
@@ -182,7 +179,6 @@ local function createBody(bodyInterface, part)
 	rotation:writef32(8, 0) -- z
 	rotation:writef32(12, 1) -- w (identity quaternion)
 
-	local motionType = part.Anchored and 0 or 2
 	local layer = part.Anchored and LAYER_NON_MOVING or LAYER_MOVING
 
 	local bodySettings = lib.JPH_BodyCreationSettings_Create3(boxShape, position, rotation, u8(motionType), u16(layer))
@@ -366,6 +362,9 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			end
 			CalculateBodyPhysics(part, bodyInterface, body)
 		end,
+		AddBody = function(part)
+			bodiesMap[part] = createBody(bodyInterface, part)
+		end,
 		Enabled = true,
 		setGravity = function(value, wind)
 			setGravity(physicsSystem, value, wind)
@@ -422,43 +421,82 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			lib.JPH_BodyInterface_GetLinearVelocity(bodyInterface, bodyID, velocity)
 			return FromJoltVec3(velocity)
 		end,
+		jolt = {
+			lib = jolt.lib,
+			structs = jolt.structs,
+			physicsSystem = physicsSystem,
+			jobSystem = jobSystem,
+			bodyInterface = bodyInterface,
+			broadPhaseLayerInterface = broadPhaseLayerInterface,
+			objectVsBroadPhaseFilter,
+			objectVsBroadPhaseFilter,
+			ToJoltVec3 = ToJoltVec3,
+			FromJoltVec3 = FromJoltVec3,
+			RVec3 = RVec3,
+		},
 	}
-	KinemiumPhysicsService:SetProperties(propTable)
-	lib.JPH_PhysicsSystem_OptimizeBroadPhase(physicsSystem)
 
 	----------------------------------------
 	-- CONSTRAINTS
 	----------------------------------------
 
-	propTable.constraints = {
-		Weld = function(part1, part2)
-			-- havent tested this yet but this must work
-			local bodyID1 = bodiesMap[part1]
-			local bodyID2 = bodiesMap[part2]
+	propTable.Weld = function(part1, part2)
+		-- havent tested this yet but this must work
+		print("real")
+		local bodyID1 = bodiesMap[part1]
+		local bodyID2 = bodiesMap[part2]
 
-			if not bodyID1 or not bodyID2 then
-				warn("[Physics] Both parts must have physics bodies")
-				return
-			end
+		print(2)
 
-			local settings = structs.JPH_FixedConstraintSettings:new({
-				mAutoDetectPoint = 1,
-				mSpace = 0,
-			})
+		if not bodyID1 or not bodyID2 then
+			warn("[Physics] Both parts must have physics bodies")
+			return
+		end
 
-			local constraint = lib.JPH_FixedConstraint_Create(settings, bodyID1, bodyID2)
-			lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
-			return constraint
-		end,
-	}
+		print(3)
+
+		local settings = structs.JPH_FixedConstraintSettings:new({
+			mAutoDetectPoint = 1,
+			mSpace = 0,
+		})
+
+		print(4)
+
+		local constraint = lib.JPH_FixedConstraint_Create(settings, bodyID1, bodyID2)
+		print(5)
+		lib.JPH_PhysicsSystem_AddConstraint(physicsSystem, constraint)
+		print(constraint)
+		return constraint
+	end
+
+	KinemiumPhysicsService:SetProperties(propTable)
 
 	renderer_signal:Connect(function(route, data)
-		if route == "AddedPartToRenderPool" then
+		if route == "UpdatePart" or route == "AddedPartToRenderPool" then
 			if not data.CanCollide then
 				return
 			end
 
-			createBody(bodyInterface, data)
+			local motion = 0
+			if not data.Anchored then
+				motion = 2
+			elseif data.isKinematic then
+				motion = 1
+			else
+				motion = 0
+			end
+
+			log(`Updated part {data.Name} with motion type {motion}`)
+
+			local oldBody = bodiesMap[data]
+			if oldBody then
+				lib.JPH_BodyInterface_RemoveAndDestroyBody(bodyInterface, oldBody)
+				bodiesMap[data] = nil
+				inverseMap[oldBody] = nil
+			end
+
+			createBody(bodyInterface, data, motion)
+			lib.JPH_PhysicsSystem_OptimizeBroadPhase(physicsSystem)
 		elseif route == "RemovedPartFromRenderPool" then
 			local bodyID = bodiesMap[data]
 			if bodyID then
@@ -471,24 +509,26 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 			if not KinemiumPhysicsService.Enabled then
 				return
 			end
+
 			local dt = data
 
 			lib.JPH_PhysicsSystem_Update(physicsSystem, dt, 1, jobSystem)
 
 			for part, bodyID in pairs(bodiesMap) do
-				task.spawn(function()
-					local cf, linear, angular = CalculateBodyPhysics(part, bodyInterface, bodyID)
-					if not cf then
-						return
-					end
-					runtime[part] = { cf, linear, angular }
-				end)
-			end
+				local cf, linear, angular = CalculateBodyPhysics(part, bodyInterface, bodyID)
 
-			for part, data in pairs(runtime) do
-				part.CFrame = data[1]
-				part.AssemblyLinearVelocity = data[2]
-				part.AssemblyAngularVelocity = data[3]
+				if not cf then
+					continue
+				end
+
+				if not part.Parent then
+					print("Cannot calculate position without 3D renderer")
+					continue
+				end
+
+				part.CFrame = cf
+				part.AssemblyLinearVelocity = linear
+				part.AssemblyAngularVelocity = angular
 			end
 		end
 	end)

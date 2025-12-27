@@ -1,6 +1,6 @@
 /* compose.frag -- Deferred pipeline composition fragment shader
  *
- * Composes the final scene by combining the outputs from
+ * Composes the final Workspace by combining the outputs from
  * the deferred rendering pipeline.
  *
  * Copyright (c) 2025 Victor Le Juez

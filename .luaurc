@@ -11,6 +11,7 @@
         "ColorSequenceKeypoint": "./src/enviroment/datatypes/ColorSequenceKeypoint",
         "ColorSequence": "./src/enviroment/datatypes/ColorSequence",
         "CustomPhysicalProperties": "./src/enviroment/datatypes/CustomPhysicalProperties",
+        "fmod": "./src/external/fmod/wrapper",
         "Vector2": "./src/enviroment/datatypes/Vector2",
         "Color3": "./src/enviroment/datatypes/Color3",
         "UDim2": "./src/enviroment/datatypes/UDim2",
@@ -67,7 +68,7 @@
         "Kinemium.bullet": "./src/external/bullet",
         "Kinemium.ode": "./src/external/odebindings/odezune",
         "StarterGui": "./src/enviroment/game/services/StarterGui",
-        "Scene": "./src/enviroment/game/services/Scene",
+        "Workspace": "./src/enviroment/game/services/Workspace",
         "RunService": "./src/enviroment/game/services/RunService",
         "Players": "./src/enviroment/game/services/Players"
     }

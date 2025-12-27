@@ -13,7 +13,7 @@ return function(renderer)
 
 	data.Instance = {
 		new = function(class)
-			return Registry.new(class, renderer)
+			return Registry.new(class, renderer, mainDatamodel)
 		end,
 		getClasses = Registry.getClasses,
 	}
@@ -26,7 +26,7 @@ return function(renderer)
 		wait = zune.task.wait,
 	}
 	data.game = mainDatamodel
-	data.Scene = mainDatamodel:GetService("Scene")
+	data.Workspace = mainDatamodel:GetService("Workspace")
 	data.shared = shared
 	data._VERSION = "Kilang 1.0.1"
 	data.wait = zune.task.wait
@@ -55,7 +55,7 @@ return function(renderer)
 	players.LocalPlayer.Parent = players
 
 	renderer.SetLightingService(mainDatamodel:GetService("Lighting"))
-	renderer.Kinemium_camera.Parent = mainDatamodel:GetService("Scene")
+	renderer.Kinemium_camera.Parent = mainDatamodel:GetService("Workspace")
 
 	local ScriptRunnerService = mainDatamodel:GetService("ScriptRunnerService")
 	ScriptRunnerService.InitEnviroment(data, mainDatamodel)

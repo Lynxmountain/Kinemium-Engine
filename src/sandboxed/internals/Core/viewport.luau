@@ -87,7 +87,7 @@ end
 --[[
 task.wait(2)
 
-renderer.renderSceneCallbackSet(function(texture, lib, size)
+renderer.renderWorkspaceCallbackSet(function(texture, lib, size)
 	lib.DrawTexturePro(
 		texture,
 		structs.Rectangle:new({ x = 0, y = 0, width = size.x, height = -size.y }),
