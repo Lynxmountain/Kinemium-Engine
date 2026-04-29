@@ -1,0 +1,44 @@
+name: Build Kinemium Engine
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    timeout-minutes: 5
+    concurrency:
+        group: build-${{ github.ref }}
+        cancel-in-progress: true
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Rokit
+        uses: CompeyDev/setup-rokit@v0.1.2
+
+      - name: Install Tools
+        run: |
+          rokit install --no-trust-check
+
+      - name: Build engine
+        run: zune run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-${{ matrix.os }}
+          path: build/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
