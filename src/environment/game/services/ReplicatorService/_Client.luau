@@ -48,7 +48,7 @@ function Client.init(context)
 	local mutedObjects = setmetatable({}, { __mode = "k" })
 	local predictionBuffer = PredictionBuffer.new(128)
 	local clientBaselineCache = {}
-	local MAX_BASELINE_CACHE_SIZE = 64  -- Limit cache size to prevent memory leaks
+	local MAX_BASELINE_CACHE_SIZE = 64 -- Limit cache size to prevent memory leaks
 	local workspace = game:GetService("Workspace")
 	local protectedWorkspaceSingletonClasses = {
 		Camera = true,
@@ -242,15 +242,10 @@ function Client.init(context)
 
 		local netIds = collectKnownNetworkIds()
 		print(`[Replicator][Client] Sending object inventory to server: {#netIds} netIds`)
-		networkService:SendToServer(
-			Protocol.Channels.Control,
-			Protocol.Kinds.ClientObjectInventoryResponse,
-			{
-				netIds = netIds,
-				blobFingerprint = game.GetMetadata and game:GetMetadata("__blobFingerprint") or nil,
-			},
-			true
-		)
+		networkService:SendToServer(Protocol.Channels.Control, Protocol.Kinds.ClientObjectInventoryResponse, {
+			netIds = netIds,
+			blobFingerprint = game.GetMetadata and game:GetMetadata("__blobFingerprint") or nil,
+		}, true)
 	end
 
 	local function withMutedObject(object, callback)
@@ -523,7 +518,9 @@ function Client.init(context)
 	end
 
 	local function assignCharacterToPlayer(player, character)
-		print(`[Replicator][Client] assignCharacterToPlayer: player=${player and player.Name or "nil"}, character=${character and character.Name or "nil"}`)
+		print(
+			`[Replicator][Client] assignCharacterToPlayer: player=${player and player.Name or "nil"}, character=${character and character.Name or "nil"}`
+		)
 		if not player or not character or player.Character == character then
 			print(`[Replicator][Client]   -> skipped`)
 			return
@@ -571,7 +568,9 @@ function Client.init(context)
 	end
 
 	local function syncPlayerCharacterBindingForModel(model)
-		print(`[Replicator][Client] syncCharBindingForModel: ${model and model.Name or "nil"} class=${model and model.ClassName or "?"}`)
+		print(
+			`[Replicator][Client] syncCharBindingForModel: ${model and model.Name or "nil"} class=${model and model.ClassName or "?"}`
+		)
 		if not model or model.ClassName ~= "Model" then
 			print(`[Replicator][Client]   -> skipped (not a Model)`)
 			return
@@ -1029,7 +1028,7 @@ function Client.init(context)
 		end
 
 		clientBaselineCache[payload.tick] = newBaselineMap
-		
+
 		-- Clean up old entries and enforce maximum cache size
 		local cacheEntries = {}
 		for t in pairs(clientBaselineCache) do
@@ -1039,7 +1038,7 @@ function Client.init(context)
 				table.insert(cacheEntries, t)
 			end
 		end
-		
+
 		-- If cache exceeds maximum size, remove oldest entries
 		if #cacheEntries > MAX_BASELINE_CACHE_SIZE then
 			table.sort(cacheEntries)

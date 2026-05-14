@@ -14,7 +14,7 @@ local zembed = require("@zembed")
 local general = zembed.IsEmbedded() and "./assets/images/icons" or "./src/assets/images/icons"
 
 KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
-	if IsServer then
+	if IsHeadless then
 		return
 	end
 	local registry = {}
@@ -147,6 +147,10 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 						path = "../" .. path
 					end
 				end
+			end
+
+			if textures[path] then
+				return textures[path]
 			end
 
 			local texture

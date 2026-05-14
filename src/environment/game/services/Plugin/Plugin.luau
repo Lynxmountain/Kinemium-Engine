@@ -42,6 +42,7 @@ local WIDGET_ALIASES = {
 	Prompt = "prompt",
 	Frame = "frame",
 	Card = "card",
+	EngineUIContainer = "engineUIContainer",
 }
 
 local FRIENDLY_WIDGET_METHODS = {
@@ -65,6 +66,7 @@ local FRIENDLY_WIDGET_METHODS = {
 	CreatePrompt = "prompt",
 	CreateFrame = "frame",
 	CreateCard = "card",
+	CreateEngineUIContainer = "engineUIContainer",
 }
 
 local function copyTable(source)
@@ -379,6 +381,12 @@ Plugin.InitRenderer = function(renderer, renderer_signal, game)
 							{ "onClick", "OnClick", "Activated", "Clicked", "Callback" }
 						)
 					)
+				elseif widgetType == "engineUIContainer" then
+					copyIfMissing(normalized, "Instance", "instance")
+					copyIfMissing(normalized, "Target", "target")
+					copyIfMissing(normalized, "DataModel", "datamodel")
+					copyIfMissing(normalized, "Game", "game")
+					copyIfMissing(normalized, "Renderer", "renderer")
 				end
 			end
 
@@ -418,6 +426,10 @@ Plugin.InitRenderer = function(renderer, renderer_signal, game)
 				component.setBodyRenderer(value)
 				return true
 			end
+			if prop == "instance" and component.setInstance then
+				component.setInstance(value)
+				return true
+			end
 
 			if component.set then
 				local ok = pcall(component.set, prop, value)
@@ -454,6 +466,9 @@ Plugin.InitRenderer = function(renderer, renderer_signal, game)
 			end
 			if prop == "alpha" and component.getAlpha then
 				return component.getAlpha()
+			end
+			if prop == "instance" and component.getInstance then
+				return component.getInstance()
 			end
 
 			if component.get then
@@ -580,6 +595,15 @@ Plugin.InitRenderer = function(renderer, renderer_signal, game)
 
 			function widget:GetProgress()
 				return self:Get("progress")
+			end
+
+			function widget:SetInstance(instance)
+				self:Set("instance", instance)
+				return self
+			end
+
+			function widget:GetInstance()
+				return self:Get("instance")
 			end
 
 			local destroySignals = {}

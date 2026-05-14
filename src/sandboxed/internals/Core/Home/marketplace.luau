@@ -9,6 +9,7 @@ local aereon = import("@Aereon")
 local gui = aereon.gui
 
 local KinemiumFontService = game:GetService("KinemiumFontService")
+local HttpService = game:GetService("HttpService")
 
 local vend = KinemiumFontService.GetDefaultFont()
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
@@ -118,6 +119,28 @@ local cards = {}
 local pages = {}
 
 local plugins
+local isLoadingPlugins = false
+
+local function getImageExt(path)
+	if type(path) ~= "string" then
+		return ".png"
+	end
+	local ext = path:match("(%.[%a%d]+)$")
+	return ext or ".png"
+end
+
+local function fetchRemoteTexture(url, ext)
+	if type(url) ~= "string" or url == "" then
+		return nil
+	end
+	local ok, body = pcall(HttpService.GetAsync, HttpService, url, {
+		["User-Agent"] = "Kinemium-Engine",
+	})
+	if not ok or type(body) ~= "string" or #body == 0 then
+		return nil
+	end
+	return KinemiumIconLoader.ToTextureBuffer(buffer.fromstring(body), ext or getImageExt(url))
+end
 
 repeat
 	task.wait()
@@ -134,29 +157,83 @@ ishared.Home.pages["Marketplace"] = function(dt, alpha, slideOffset)
 		return
 	end
 
-	if not plugins then
-		plugins = game.PluginLoader.GetPluginsMarketplace()
-		for _, plugin in pairs(plugins) do
-			local textureData
-			if plugin.icon then
-				textureData = KinemiumIconLoader.ToTextureBuffer(plugin.icon, plugin.manifest.icon or ".png")
-			end
-			if not textureData then
-				textureData = kilLogo
-			end
+	if not plugins and not isLoadingPlugins then
+		isLoadingPlugins = true
+		task.spawn(function()
+			plugins = game.PluginLoader.GetPluginsMarketplace()
+			for _, plugin in pairs(plugins) do
+				local textureData
+				if plugin.icon then
+					textureData = KinemiumIconLoader.ToTextureBuffer(plugin.icon, plugin.manifest.icon or ".png")
+				end
+				if not textureData then
+					textureData = kilLogo
+				end
 
-			local thumbnailData
-			if plugin.thumbnail then
-				thumbnailData =
-					KinemiumIconLoader.ToTextureBuffer(plugin.thumbnail, plugin.manifest.thumbnail or ".png")
-			end
+				local thumbnailData
+				if plugin.thumbnail then
+					thumbnailData =
+						KinemiumIconLoader.ToTextureBuffer(plugin.thumbnail, plugin.manifest.thumbnail or ".png")
+				end
 
-			table.insert(cards, createCard(plugin, textureData, thumbnailData))
-			pages[plugin.manifest.id] = createPage(plugin, textureData, thumbnailData)
-		end
+				local card = createCard(plugin, textureData, thumbnailData)
+				local page = createPage(plugin, textureData, thumbnailData)
+				table.insert(cards, card)
+				pages[plugin.manifest.id] = page
+
+				if not plugin.icon and plugin.iconUrl then
+					task.spawn(function()
+						local iconTexture =
+							fetchRemoteTexture(plugin.iconUrl, plugin.manifest.icon or getImageExt(plugin.iconUrl))
+						if iconTexture then
+							card.set("icon", iconTexture)
+							page.set("icon", iconTexture)
+						end
+					end)
+				end
+
+				if not plugin.thumbnail and plugin.thumbnailUrl then
+					task.spawn(function()
+						local thumbTexture = fetchRemoteTexture(
+							plugin.thumbnailUrl,
+							plugin.manifest.thumbnail or getImageExt(plugin.thumbnailUrl)
+						)
+						if thumbTexture then
+							card.set("bannerImage", thumbTexture)
+							page.set("bannerImage", thumbTexture)
+						end
+					end)
+				end
+
+				task.wait()
+			end
+			isLoadingPlugins = false
+		end)
 	end
 
 	local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
+
+	if not plugins and #cards == 0 then
+		if vend then
+			raylib.lib.DrawTextEx(
+				boldFont,
+				"Plugin Marketplace",
+				vector.create(100, 80 + slideOffset),
+				32,
+				1,
+				fade(StudioThemeService.SelectedTheme.TextColor, 1)
+			)
+			raylib.lib.DrawTextEx(
+				vend,
+				"Loading plugins...",
+				vector.create(100, 120 + slideOffset),
+				16,
+				1,
+				fade(StudioThemeService.SelectedTheme.SecondaryTextColor, 1)
+			)
+		end
+		return
+	end
 
 	if activePluginPage then
 		local page = pages[activePluginPage]

@@ -142,6 +142,9 @@ function KiRend.new(config: KiRendConf)
 	local renderer_draw_calls = {}
 	local renderer_instanced_draw_calls = {}
 	local renderer_decal_draw_calls = {}
+	local draw_calls_count = 0
+	local instanced_draw_calls_count = 0
+	local decal_draw_calls_count = 0
 	local renderer_instance_buffers_to_unload = {}
 	local renderer_meshes = {}
 	local renderer_mousedata = {}
@@ -369,24 +372,32 @@ function KiRend.new(config: KiRendConf)
 
 		MeshPool = {
 			DrawMesh = function(mesh, material, matrix, begin, End)
-				table.insert(renderer_draw_calls, {
-					mesh = mesh,
-					material = material,
-					matrix = matrix,
-					Begin = begin,
-					End = End,
-				})
+				draw_calls_count = draw_calls_count + 1
+				local drawCall = renderer_draw_calls[draw_calls_count]
+				if not drawCall then
+					drawCall = {}
+					renderer_draw_calls[draw_calls_count] = drawCall
+				end
+				drawCall.mesh = mesh
+				drawCall.material = material
+				drawCall.matrix = matrix
+				drawCall.Begin = begin
+				drawCall.End = End
 			end,
 			DrawMeshInstanced = function(mesh, material, instances, count, begin, End, unloadAfterFrame)
-				table.insert(renderer_instanced_draw_calls, {
-					mesh = mesh,
-					material = material,
-					instances = instances,
-					count = count,
-					Begin = begin,
-					End = End,
-					unloadAfterFrame = unloadAfterFrame == true,
-				})
+				instanced_draw_calls_count = instanced_draw_calls_count + 1
+				local drawCall = renderer_instanced_draw_calls[instanced_draw_calls_count]
+				if not drawCall then
+					drawCall = {}
+					renderer_instanced_draw_calls[instanced_draw_calls_count] = drawCall
+				end
+				drawCall.mesh = mesh
+				drawCall.material = material
+				drawCall.instances = instances
+				drawCall.count = count
+				drawCall.Begin = begin
+				drawCall.End = End
+				drawCall.unloadAfterFrame = unloadAfterFrame == true
 			end,
 
 			CreateMaterial = function(texture, shader)
@@ -446,12 +457,16 @@ function KiRend.new(config: KiRendConf)
 
 		DecalPool = {
 			DrawDecal = function(decal, transform, begin, End)
-				table.insert(renderer_decal_draw_calls, {
-					decal = decal,
-					transform = transform,
-					Begin = begin,
-					End = End,
-				})
+				decal_draw_calls_count = decal_draw_calls_count + 1
+				local drawCall = renderer_decal_draw_calls[decal_draw_calls_count]
+				if not drawCall then
+					drawCall = {}
+					renderer_decal_draw_calls[decal_draw_calls_count] = drawCall
+				end
+				drawCall.decal = decal
+				drawCall.transform = transform
+				drawCall.Begin = begin
+				drawCall.End = End
 			end,
 		},
 
@@ -775,23 +790,25 @@ function KiRend.new(config: KiRendConf)
 		end
 		perf_stats.render3d_update_ms = (os.clock() - render3DUpdateStart) * 1000
 
-		meshCalls = #renderer_draw_calls
-		instancedBatches = #renderer_instanced_draw_calls
+		meshCalls = draw_calls_count
+		instancedBatches = instanced_draw_calls_count
 
 		perf_stats.call3d_ms = 0
 		local callStart = os.clock()
-		if #renderer_draw_calls > 0 or #renderer_instanced_draw_calls > 0 or #renderer_decal_draw_calls > 0 then
+		if draw_calls_count > 0 or instanced_draw_calls_count > 0 or decal_draw_calls_count > 0 then
 			if Dimension == "3D" then
 				if not rendererObject.TDRT and rendererObject.Enable3DRT then
 					rendererObject.TDRT = lib.LoadRenderTexture(internalRenderWidth, internalRenderHeight)
 				end
+				--
 				if rendererObject.Enable3DRT and rendererObject.TDRT then
 					rlib.R3D_BeginEx(rendererObject.TDRT, activeCamera)
 				else
 					rlib.R3D_Begin(activeCamera)
 				end
-				
-				for _, drawCall in ipairs(renderer_draw_calls) do
+
+				for i = 1, draw_calls_count do
+					local drawCall = renderer_draw_calls[i]
 					if drawCall.Begin then
 						drawCall.Begin()
 					end
@@ -800,7 +817,8 @@ function KiRend.new(config: KiRendConf)
 						drawCall.End()
 					end
 				end
-				for _, drawCall in ipairs(renderer_instanced_draw_calls) do
+				for i = 1, instanced_draw_calls_count do
+					local drawCall = renderer_instanced_draw_calls[i]
 					instancedInstances += drawCall.count or 0
 					if drawCall.Begin then
 						drawCall.Begin()
@@ -813,7 +831,8 @@ function KiRend.new(config: KiRendConf)
 						table.insert(renderer_instance_buffers_to_unload, drawCall.instances)
 					end
 				end
-				for _, drawCall in ipairs(renderer_decal_draw_calls) do
+				for i = 1, decal_draw_calls_count do
+					local drawCall = renderer_decal_draw_calls[i]
 					if drawCall.Begin then
 						drawCall.Begin()
 					end
@@ -829,9 +848,21 @@ function KiRend.new(config: KiRendConf)
 				table.clear(renderer_instance_buffers_to_unload)
 			end
 		end
-		table.clear(renderer_draw_calls)
-		table.clear(renderer_instanced_draw_calls)
-		table.clear(renderer_decal_draw_calls)
+		for i = 1, draw_calls_count do
+			local d = renderer_draw_calls[i]
+			d.mesh = nil; d.material = nil; d.matrix = nil; d.Begin = nil; d.End = nil
+		end
+		for i = 1, instanced_draw_calls_count do
+			local d = renderer_instanced_draw_calls[i]
+			d.mesh = nil; d.material = nil; d.instances = nil; d.Begin = nil; d.End = nil
+		end
+		for i = 1, decal_draw_calls_count do
+			local d = renderer_decal_draw_calls[i]
+			d.decal = nil; d.transform = nil; d.Begin = nil; d.End = nil
+		end
+		draw_calls_count = 0
+		instanced_draw_calls_count = 0
+		decal_draw_calls_count = 0
 		perf_stats.call3d_ms = (os.clock() - callStart) * 1000
 
 		for _, item in ipairs(getSortedPool(renderer_pool.gizmos)) do

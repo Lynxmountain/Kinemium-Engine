@@ -247,19 +247,7 @@ local function matchesSearch(instance, query)
 	return false
 end
 
-task.spawn(function()
-	local classes = Instance.getClasses()
 
-	for class in pairs(classes) do
-		if not loadedIcon[class] then
-			local asset = KinemiumIconLoader.Get(class .. ".png") or KinemiumIconLoader.Get(class .. ".png")
-
-			if asset then
-				loadedIcon[class] = KinemiumIconLoader.ToTexture(asset)
-			end
-		end
-	end
-end)
 
 -- Selection menu
 local SelectionMenu = gui.menu({
@@ -839,7 +827,16 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 					addMenuSearchBox:setText("")
 				end
 
-				local iconTex = loadedIcon[class] or notfound_tex
+				local iconTex = loadedIcon[class]
+				if not iconTex then
+					local svg = KinemiumIconLoader.Get(class .. ".png") or KinemiumIconLoader.Get(class .. ".svg")
+					if svg then
+						iconTex = KinemiumIconLoader.ToTexture(svg)
+						loadedIcon[class] = iconTex
+					else
+						iconTex = notfound_tex
+					end
+				end
 				if iconTex and iconTex.texture then
 					local iconSize = ADD_MENU_ITEM_HEIGHT - 6
 					rl.DrawTexturePro(
@@ -958,6 +955,8 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 			local svg = KinemiumIconLoader.Get(instance.ClassName .. ".png")
 			if svg then
 				loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(svg)
+			else
+				loadedIcon[instance.ClassName] = notfound_tex
 			end
 		end
 
@@ -1176,6 +1175,21 @@ local explorerWindow = window.create({
 	height = frame.AbsoluteSize.Y,
 })
 
+local renderer = KinemiumRaylib.GetRenderer()
+local StudioThemeService = game:GetService("StudioThemeService")
+
+renderer.Pool.new("2d", function(data)
+	if game.Context ~= Enum.GameContext.Editor then
+		return
+	end
+
+	local dt = rl.GetFrameTime()
+	local mainTheme = StudioThemeService.SelectedTheme
+
+	window.update(dt)
+	window.draw(dt, mainTheme.aereon)
+end)
+
 explorerWindow.stepped = function(windowData)
 	if windowData.title ~= "Explorer" then
 		return
@@ -1213,16 +1227,16 @@ explorerWindow.stepped = function(windowData)
 
 	if isMouseInRect(windowRect, mousePos) and not activeAddMenu then
 		local mouseWheel = rl.GetMouseWheelMove()
-		if math.abs(mouseWheel) > 0.01 and windowData.Focused == true then
+		if math.abs(mouseWheel) > 0.01 then
 			scrollTarget -= mouseWheel * NODE_HEIGHT * SCROLL_SPEED
 		end
 	end
 
 	rl.BeginScissorMode(
 		math.floor(windowData.x),
-		math.floor(windowData.y + 30),
+		math.floor(windowData.y + 70),
 		math.floor(windowData.width),
-		math.floor(windowData.height - 30)
+		math.floor(windowData.height - 70)
 	)
 
 	local services = getServicesInOrder()

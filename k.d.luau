@@ -2693,6 +2693,51 @@ export type SoftBody = Instance & {
 	Touched: TouchedSignal,
 }
 
+export type FluidSimulation = Instance & {
+	-- Geometry
+	Position:   Vector3,
+	Size:       Vector3,
+	Resolution: number,
+
+	-- Waves
+	WaveHeight:    number,
+	WaveSpeed:     number,
+	WaveScale:     number,
+	WaveDirection: Vector2,
+	Waves:         { any }?,
+
+	-- Visual
+	Color:        Color3,
+	Roughness:    number,
+	Transparency: number,
+
+	-- Flow
+	FlowDirection: Vector2,
+	FlowSpeed:     number,
+
+	-- Physics
+	PhysicsEnabled: boolean,
+	BuoyancyFactor: number,
+	Dampening:      number,
+
+	-- Container fitting
+	Container:    any,
+	FitContainer: boolean,
+	FillLevel:    number,
+
+	Enabled: boolean,
+
+	-- Events
+	Splashed: RBXScriptSignal,
+
+	-- Methods
+	GetFluidHeight:       (self: FluidSimulation, x: number, z: number) -> number,
+	GetFluidVelocity:     (self: FluidSimulation, x: number, z: number) -> Vector3,
+	IsPointSubmerged:     (self: FluidSimulation, worldPos: Vector3) -> boolean,
+	GetSubmergedFraction: (self: FluidSimulation, part: any) -> number,
+	Rebuild:              (self: FluidSimulation) -> (),
+}
+
 export type Sound = Instance & {
 	SoundId: string,
 	Volume: number,

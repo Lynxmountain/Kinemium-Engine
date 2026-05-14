@@ -6,16 +6,15 @@ local Box2DService = Instance.new("Box2DService")
 Box2DService.ExplorerHidden = true
 
 local bufferUtils = require("@bufferUtils")
-
 local box2d = require("@box2d")
 
 local bodies = {} -- [GuiObject] = bodyData
 local worlds = {} -- array of worldData
 local worldsByObject = {} -- [World2D] = worldData
 
-local function dbg(...)
-	print("[Box2DService]", ...)
-end
+-- ============================================================================
+-- FFI helpers
+-- ============================================================================
 
 local function makeI32(value)
 	local ptr = zune.ffi.create(zune.ffi.types.i32)
@@ -35,6 +34,10 @@ local function makeRot(angleRad)
 	})
 	return rot, zune.ffi.ptrFromAddress(rot)
 end
+
+-- ============================================================================
+-- Object helpers
+-- ============================================================================
 
 local function getParentAbsPos(object)
 	local parent = object.Parent
@@ -58,44 +61,9 @@ local function getAnchor(object)
 	return anchor.X or 0, anchor.Y or 0
 end
 
-local function isBodyCandidate(object, worldObject)
-	if not object then
-		return false
-	end
-	if object == worldObject then
-		return false
-	end
-	if object.BaseClass == "UIContainer" then
-		return false
-	end
-	if object.Parent ~= worldObject then
-		return false
-	end
-	if not object.AbsoluteSize then
-		return false
-	end
-	return true
-end
-
---[[
-    /// The body simulation type.
-    /// Each body is one of these three types. The type determines how the body behaves in the simulation.
-    /// @ingroup body
-    typedef enum b2BodyType
-    {
-        /// zero mass, zero velocity, may be manually moved
-        b2_staticBody = 0,
-
-        /// zero mass, velocity set by user, moved by solver
-        b2_kinematicBody = 1,
-
-        /// positive mass, velocity determined by forces, moved by solver
-        b2_dynamicBody = 2,
-
-        /// number of body types
-        b2_bodyTypeCount,
-    } b2BodyType;
---]]
+-- ============================================================================
+-- Shape material
+-- ============================================================================
 
 local function applyShapeMaterial(object, shapeDef)
 	if not shapeDef or shapeDef == zune.ffi.null then
@@ -125,6 +93,10 @@ local function applyShapeMaterial(object, shapeDef)
 	end
 end
 
+-- ============================================================================
+-- Body lifecycle
+-- ============================================================================
+
 local function createBody(object, worldData)
 	if not object.AbsoluteSize then
 		return
@@ -132,20 +104,20 @@ local function createBody(object, worldData)
 
 	local x = object.AbsoluteSize.X
 	local y = object.AbsoluteSize.Y
-
 	local motionType = object.Anchored == false and 2 or 0
 
 	local posX = object.AbsolutePosition.X + x / 2
 	local posY = object.AbsolutePosition.Y + y / 2
 
-	local position, positionPtr = makeVec2(posX, posY)
-	local rotation, rotationPtr = makeRot(math.rad(object.Rotation or 0))
+	local _, positionPtr = makeVec2(posX, posY)
+	local _, rotationPtr = makeRot(math.rad(object.Rotation or 0))
 	local motionPtr = makeI32(motionType)
 
 	local bodyDef = box2d.lib.b2DefaultBodyDef()
 	bodyDef:writeptr(box2d.structs.b2BodyDef:offset("position"), positionPtr)
 	bodyDef:writeptr(box2d.structs.b2BodyDef:offset("rotation"), rotationPtr)
 	bodyDef:writeptr(box2d.structs.b2BodyDef:offset("type"), motionPtr)
+
 	local allowSleep = worldData.object.AllowSleep
 	if allowSleep == nil then
 		allowSleep = worldData.object.enableSleep
@@ -233,13 +205,11 @@ end
 
 local function updateObjectFromBody(bodyData)
 	local object = bodyData.object
-	print(object)
 	if not object or not object.AbsoluteSize then
 		return
 	end
 
 	local pos = box2d.lib.b2Body_GetPosition(bodyData.bodyID)
-	print(pos)
 	if pos == zune.ffi.null then
 		return
 	end
@@ -262,17 +232,19 @@ local function updateObjectFromBody(bodyData)
 	local newPosition = UDim2.new(object.Position.X.Scale, posX, object.Position.Y.Scale, posY)
 	bodyData._ignoreChanges = true
 	bodyData.world.body_update(object, newPosition)
-	print(object, newPosition)
 
 	local rot = box2d.lib.b2Body_GetRotation(bodyData.bodyID)
 	if rot ~= zune.ffi.null and object.Rotation ~= nil then
 		local s = rot:readf32(0)
 		local c = rot:readf32(4)
-		local angle = math.deg(math.atan2(s, c))
-		object.Rotation = angle
+		object.Rotation = math.deg(math.atan2(s, c))
 	end
 	bodyData._ignoreChanges = false
 end
+
+-- ============================================================================
+-- Body type & property changes
+-- ============================================================================
 
 local function setBodyType(bodyData, anchored)
 	local newType = anchored == false and 2 or 0
@@ -290,6 +262,10 @@ local function setBodyType(bodyData, anchored)
 		syncBodyFromObject(bodyData)
 	end
 end
+
+-- ============================================================================
+-- World body management
+-- ============================================================================
 
 local function destroyBody(worldData, object)
 	local bodyData = worldData.bodies[object]
@@ -320,25 +296,31 @@ local function destroyBody(worldData, object)
 end
 
 local function registerBody(worldData, object)
-	dbg("Register attempt:", object)
-
-	if not isBodyCandidate(object, worldData.object) then
-		dbg("Rejected body:", object)
-		return
+	if not object then
+		return false
+	end
+	if object == worldData.object then
+		return false
+	end
+	if object.BaseClass == "UIContainer" then
+		return false
+	end
+	if object.Parent ~= worldData.object then
+		return false
+	end
+	if worldData.bodies[object] then
+		return true
 	end
 
-	if worldData.bodies[object] then
-		dbg("Already registered:", object)
-		return
+	-- Can't register yet if AbsoluteSize hasn't been computed by the renderer
+	if not object.AbsoluteSize then
+		return false
 	end
 
 	local bodyData = createBody(object, worldData)
 	if not bodyData then
-		dbg("Failed to create body:", object)
-		return
+		return false
 	end
-
-	dbg("Body created:", object, "ID:", bodyData.bodyID)
 
 	worldData.bodies[object] = bodyData
 
@@ -350,8 +332,6 @@ local function registerBody(worldData, object)
 		if bodyData._ignoreChanges then
 			return
 		end
-
-		dbg("Property changed:", object, property)
 
 		if property == "Anchored" then
 			setBodyType(bodyData, object.Anchored)
@@ -370,10 +350,12 @@ local function registerBody(worldData, object)
 	end)
 
 	bodyData.destroyConnection = object.Destroying:Connect(function()
-		dbg("Destroying body:", object)
 		destroyBody(worldData, object)
 	end)
+
+	return true
 end
+
 local function clearWorldBodies(worldData)
 	local toRemove = {}
 	for object in pairs(worldData.bodies) do
@@ -384,21 +366,68 @@ local function clearWorldBodies(worldData)
 	end
 end
 
+-- ============================================================================
+-- Per-frame body sync (shared between manual Step and RenderStepped)
+-- ============================================================================
+
+local function processWorld(worldData)
+	-- Flush pending children whose AbsoluteSize is now available
+	if worldData.pendingChildren then
+		local stillPending = {}
+		for _, child in ipairs(worldData.pendingChildren) do
+			if child.Parent ~= worldData.object then
+				-- removed before it could be registered, skip
+			elseif not registerBody(worldData, child) then
+				table.insert(stillPending, child)
+			end
+		end
+		worldData.pendingChildren = stillPending
+	end
+
+	-- Sync registered bodies
+	for _, body in pairs(worldData.bodies) do
+		if body._shapeDirty then
+			if updateBodyShape(body) then
+				body._shapeDirty = false
+			end
+		end
+		if body._transformDirty then
+			if syncBodyFromObject(body) then
+				body._transformDirty = false
+			end
+		end
+
+		if body.object and body.object.Anchored == true then
+			syncBodyFromObject(body)
+		else
+			updateObjectFromBody(body)
+		end
+	end
+end
+
+-- ============================================================================
+-- World settings
+-- ============================================================================
+
+local function resolveAllowSleep(worldObject)
+	local allowSleep = worldObject.AllowSleep
+	if allowSleep == nil then
+		allowSleep = worldObject.enableSleep
+	end
+	return allowSleep
+end
+
 local function applyWorldSettings(worldData, property)
 	local worldObject = worldData.object
 
 	if property == "Gravity" or property == nil then
-		local _, gravPtr = makeVec2(worldObject.Gravity.X or 0, worldObject.Gravity.Y or -9.81)
+		local _, gravPtr = makeVec2(worldObject.Gravity.X or 0, worldObject.Gravity.Y or 981)
 		box2d.lib.b2World_SetGravity(worldData.worldId, gravPtr)
 	end
 
 	if property == "enableSleep" or property == "AllowSleep" or property == nil then
 		if box2d.lib.b2World_EnableSleeping then
-			local allowSleep = worldObject.AllowSleep
-			if allowSleep == nil then
-				allowSleep = worldObject.enableSleep
-			end
-			box2d.lib.b2World_EnableSleeping(worldData.worldId, allowSleep and 1 or 0)
+			box2d.lib.b2World_EnableSleeping(worldData.worldId, resolveAllowSleep(worldObject) and 1 or 0)
 		end
 	end
 
@@ -422,28 +451,29 @@ local function applyWorldSettings(worldData, property)
 
 	if property == "maximumLinearSpeed" or property == nil then
 		if box2d.lib.b2World_SetMaximumLinearSpeed then
-			box2d.lib.b2World_SetMaximumLinearSpeed(worldData.worldId, worldObject.maximumLinearSpeed or 40.0)
+			box2d.lib.b2World_SetMaximumLinearSpeed(worldData.worldId, worldObject.maximumLinearSpeed or 4000.0)
 		end
 	end
 end
+
+-- ============================================================================
+-- InitRenderer (public entry point)
+-- ============================================================================
 
 Box2DService.InitRenderer = function(renderer, renderer_signal, game)
 	Box2DService:SetProperties({
 		lib = renderer.lib,
 		const = renderer.const,
 		structs = renderer.structs,
-		init = function(World2D, body_update)
-			local grav, ptr = makeVec2(World2D.Gravity.X or 0, World2D.Gravity.Y or -9.81)
 
-			debugstep()
+		init = function(World2D, body_update)
+			local _, gravPtr = makeVec2(World2D.Gravity.X or 0, World2D.Gravity.Y or 981)
+
 			local motionLocks = World2D.MotionLocks or {}
-			local enableSleep = World2D.enableSleep
-			if enableSleep == nil then
-				enableSleep = World2D.AllowSleep
-			end
-			debugstep()
+			local enableSleep = resolveAllowSleep(World2D)
+
 			local wdef = box2d.structs.b2WorldDef:new({
-				gravity = ptr,
+				gravity = gravPtr,
 				restitutionThreshold = World2D.restitutionThreshold or 1.0,
 				hitEventThreshold = World2D.hitEventThreshold or 0.0,
 				contactHertz = World2D.contactHertz or 60.0,
@@ -466,20 +496,22 @@ Box2DService.InitRenderer = function(renderer, renderer_signal, game)
 				userData = zune.ffi.null,
 				internalValue = 0x5A55A5A5,
 			})
-			debugstep()
+
 			local worldId = box2d.lib.b2CreateWorld(wdef)
 			if worldId == zune.ffi.null then
 				error("Failed to create Box2D world")
 			end
-			debugstep()
+
 			local world_data = {
 				worldId = worldId,
 				object = World2D,
 				body_update = body_update,
 				bodies = {},
 				connections = {},
+				pendingChildren = {},
 			}
-			debugstep()
+
+			-- Replace previous world if re-initialized
 			local previous = worldsByObject[World2D]
 			if previous then
 				clearWorldBodies(previous)
@@ -500,95 +532,73 @@ Box2DService.InitRenderer = function(renderer, renderer_signal, game)
 			else
 				table.insert(worlds, world_data)
 			end
-			debugstep()
+
 			worldsByObject[World2D] = world_data
 			World2D._world = world_data
-			debugstep()
-			local function waitForAbsolute(object)
-				if object.BaseClass == "UIContainer" then
-					return false
-				end
-				if object.AbsolutePosition then
-					return true
-				end
-				repeat
-					task.wait()
-				until object.AbsolutePosition
-				return true
-			end
-			debugstep()
-			for _, object in pairs(World2D:GetChildren()) do
-				if waitForAbsolute(object) then
-					registerBody(world_data, object)
-				end
-			end
-			debugstep()
-			world_data.connections.childAdded = World2D.ChildAdded:Connect(function(child)
-				dbg("Child added:", child)
 
-				if waitForAbsolute(child) then
-					dbg("Child ready, registering:", child)
-					registerBody(world_data, child)
-				else
-					dbg("Child NOT ready:", child)
+			-- Register existing children (queue those not yet renderable)
+			for _, child in pairs(World2D:GetChildren()) do
+				if
+					not registerBody(world_data, child)
+					and child.Parent == World2D
+					and child.BaseClass ~= "UIContainer"
+				then
+					table.insert(world_data.pendingChildren, child)
+				end
+			end
+
+			-- Listen for new / removed children
+			world_data.connections.childAdded = World2D.ChildAdded:Connect(function(child)
+				if
+					not registerBody(world_data, child)
+					and child.Parent == World2D
+					and child.BaseClass ~= "UIContainer"
+				then
+					table.insert(world_data.pendingChildren, child)
 				end
 			end)
-			debugstep()
+
 			world_data.connections.childRemoved = World2D.ChildRemoved:Connect(function(child)
 				destroyBody(world_data, child)
 			end)
-			debugstep()
+
+			-- React to world property changes
 			world_data.connections.changed = World2D.Changed:Connect(function(property)
 				applyWorldSettings(world_data, property)
 			end)
-			debugstep()
+
 			applyWorldSettings(world_data)
-			debugstep()
+
+			-- Public API on the World2D object
 			World2D.AddBody = function(_, body)
 				if body and body.Parent ~= world_data.object then
 					body.Parent = world_data.object
 				end
 				registerBody(world_data, body)
 			end
-			debugstep()
+
 			World2D.RemoveBody = function(_, body)
 				destroyBody(world_data, body)
 			end
-			debugstep()
+
 			World2D.Clear = function()
 				clearWorldBodies(world_data)
 			end
-			debugstep()
+
 			World2D.Step = function(_, dt)
 				if not dt or dt <= 0 then
 					return
 				end
-
 				box2d.lib.b2World_Step(world_data.worldId, dt, world_data.object.VelocityIterations or 4)
 				world_data.object.ElapsedTime += dt
-				for _, body in pairs(world_data.bodies) do
-					if body._shapeDirty then
-						if updateBodyShape(body) then
-							body._shapeDirty = false
-						end
-					end
-					if body._transformDirty then
-						if syncBodyFromObject(body) then
-							body._transformDirty = false
-						end
-					end
-					if body.object and body.object.Anchored == true then
-						syncBodyFromObject(body)
-					else
-						updateObjectFromBody(body)
-					end
-				end
+				processWorld(world_data)
 			end
-			debugstep()
+
 			return worldId
 		end,
 	})
 
+	-- Automatic stepping on RenderStepped
 	renderer_signal:Connect(function(route, dt)
 		if route ~= "RenderStepped" then
 			return
@@ -629,27 +639,11 @@ Box2DService.InitRenderer = function(renderer, renderer_signal, game)
 				worldObject.ElapsedTime += stepDt
 			end
 
-			for _, body in pairs(world.bodies) do
-				if body._shapeDirty then
-					if updateBodyShape(body) then
-						body._shapeDirty = false
-					end
-				end
-				if body._transformDirty then
-					if syncBodyFromObject(body) then
-						body._transformDirty = false
-					end
-				end
-
-				if body.object and body.object.Anchored == true then
-					syncBodyFromObject(body)
-				else
-					updateObjectFromBody(body)
-				end
-			end
+			processWorld(world)
 		end
 	end)
 
+	-- Cleanup on shutdown
 	table.insert(game.ShutdownCallbacks, function()
 		for _, world in pairs(worlds) do
 			clearWorldBodies(world)

@@ -49,8 +49,23 @@ local function cloneStyle(style)
 		bold = style.bold,
 		italic = style.italic,
 		underline = style.underline,
-		strike = style.strike,
 	}
+end
+
+local function resolveColor3(c, transparency)
+	if c then
+		if c.ToRaylib then
+			return c:ToRaylib(transparency)
+		elseif c.R and c.G and c.B then
+			return raylib.structs.Color:new({
+				r = math.clamp(math.floor(c.R * 255 + 0.5), 0, 255),
+				g = math.clamp(math.floor(c.G * 255 + 0.5), 0, 255),
+				b = math.clamp(math.floor(c.B * 255 + 0.5), 0, 255),
+				a = math.clamp(math.floor((1 - (transparency or 0)) * 255 + 0.5), 0, 255)
+			})
+		end
+	end
+	return raylib.structs.Color:new({r=255, g=255, b=255, a=math.clamp(math.floor((1 - (transparency or 0)) * 255 + 0.5), 0, 255)})
 end
 
 local function parseColorString(value, fallback)
@@ -677,12 +692,12 @@ function RichText.DrawLayout(drawLib, object, framePos, frameSize, layout, spaci
 					continue
 				end
 
-				local segmentColor = segment.color:ToRaylib(segmentTransparency)
+				local segmentColor = resolveColor3(segment.color, segmentTransparency)
 
 				if drawStroke then
 					local strokeTransparency = combineTransparency(segmentTransparency, object.TextStrokeTransparency)
 					if strokeTransparency < 1 then
-						local strokeColor = object.TextStrokeColor:ToRaylib(strokeTransparency)
+						local strokeColor = resolveColor3(object.TextStrokeColor, strokeTransparency)
 						drawLib.DrawTextEx(
 							segment.font,
 							segment.text,

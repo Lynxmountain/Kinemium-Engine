@@ -1,5 +1,5 @@
 -- vector3 implementation by devcell
-local Vector3 = {}
+local Vector3 = { __type = "Vector3" }
 Vector3.__index = Vector3
 
 function Vector3.new(x, y, z)

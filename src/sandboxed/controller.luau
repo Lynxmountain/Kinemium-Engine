@@ -18,7 +18,7 @@ local CAM_ZOOM_MIN = 0.1
 local CAM_ZOOM_MAX = 50
 local CAM_ZOOM_MUL = 1.15
 local CAM_LERP = 10
-local CAM_SENS_FP = 0.005
+local CAM_SENS_FP = 0.35
 
 local ZERO = Vector3.new(0, 0, 0)
 

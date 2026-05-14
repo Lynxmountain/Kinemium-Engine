@@ -1,4 +1,4 @@
-local NumberRange = {}
+local NumberRange = { __type = "NumberRange" }
 NumberRange.__index = NumberRange
 
 function NumberRange.new(minVal, maxVal)

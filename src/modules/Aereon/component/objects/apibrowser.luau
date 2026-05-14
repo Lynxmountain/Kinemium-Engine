@@ -960,6 +960,19 @@ return function(objects, data)
 				config.fontSpacing,
 				config.textColor
 			)
+
+			if config.selectedItem.super then
+				local superText = "Inherits from " .. config.selectedItem.super
+				drawText(
+					superText,
+					rightPanel.x + config.padding + badgeWidth + 12,
+					currentY + (badgeHeight - config.fontSize) / 2,
+					config.fontSize,
+					config.fontSpacing,
+					config.subtextColor
+				)
+			end
+
 			currentY = currentY + badgeHeight + 12
 
 			-- Section divider

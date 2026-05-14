@@ -171,12 +171,12 @@ local function pruneOwnershipImpactCache(now)
 	end
 end
 
+local reusableJoltVec3 = { x = 0, y = 0, z = 0 }
 local function ToJoltVec3(vec3)
-	return {
-		x = vec3.X,
-		y = vec3.Y,
-		z = vec3.Z,
-	}
+	reusableJoltVec3.x = vec3.X
+	reusableJoltVec3.y = vec3.Y
+	reusableJoltVec3.z = vec3.Z
+	return reusableJoltVec3
 end
 
 local function RVec3(x, y, z)
@@ -575,9 +575,10 @@ local function CalculateBodyPhysics(part, bodyInterface, bodyID, assumeActive)
 	local qz = rotation:readf32(8)
 	local qw = rotation:readf32(12)
 
-	local qlen = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
-	if qlen > 1e-6 then
-		qx, qy, qz, qw = qx / qlen, qy / qlen, qz / qlen, qw / qlen
+	local qlen = qx * qx + qy * qy + qz * qz + qw * qw
+	if qlen > 1e-12 and math.abs(qlen - 1) > 1e-6 then
+		local invLen = 1 / math.sqrt(qlen)
+		qx, qy, qz, qw = qx * invLen, qy * invLen, qz * invLen, qw * invLen
 	end
 
 	local xx, yy, zz = qx * qx, qy * qy, qz * qz
@@ -596,10 +597,13 @@ local function CalculateBodyPhysics(part, bodyInterface, bodyID, assumeActive)
 	local r21 = 2 * (yz + wx)
 	local r22 = 1 - 2 * (xx + yy)
 
+	-- Snap position to 0.001 precision without math.round overhead:
+	-- floor(x * 1000 + 0.5) / 1000 avoids the function call.
+	local f = math.floor
 	local finalCF = CFrame.new(
-		math.round(posX * 1000) / 1000,
-		math.round(posY * 1000) / 1000,
-		math.round(posZ * 1000) / 1000,
+		f(posX * 1000 + 0.5) * 0.001,
+		f(posY * 1000 + 0.5) * 0.001,
+		f(posZ * 1000 + 0.5) * 0.001,
 		r00,
 		r01,
 		r02,
@@ -612,19 +616,22 @@ local function CalculateBodyPhysics(part, bodyInterface, bodyID, assumeActive)
 	)
 
 	local linearVelocity
-	if math.abs(velX) > 1e-4 or math.abs(velY) > 1e-4 or math.abs(velZ) > 1e-4 then
-		linearVelocity =
-			Vector3.new(math.round(velX * 1000) / 1000, math.round(velY * 1000) / 1000, math.round(velZ * 1000) / 1000)
+	if velX * velX + velY * velY + velZ * velZ > 1e-8 then
+		linearVelocity = Vector3.new(
+			f(velX * 1000 + 0.5) * 0.001,
+			f(velY * 1000 + 0.5) * 0.001,
+			f(velZ * 1000 + 0.5) * 0.001
+		)
 	else
 		linearVelocity = Vector3.zero
 	end
 
 	local angularVelocity
-	if math.abs(angvelX) > 1e-4 or math.abs(angvelY) > 1e-4 or math.abs(angvelZ) > 1e-4 then
+	if angvelX * angvelX + angvelY * angvelY + angvelZ * angvelZ > 1e-8 then
 		angularVelocity = Vector3.new(
-			math.round(angvelX * 1000) / 1000,
-			math.round(angvelY * 1000) / 1000,
-			math.round(angvelZ * 1000) / 1000
+			f(angvelX * 1000 + 0.5) * 0.001,
+			f(angvelY * 1000 + 0.5) * 0.001,
+			f(angvelZ * 1000 + 0.5) * 0.001
 		)
 	else
 		angularVelocity = Vector3.zero
@@ -1151,9 +1158,153 @@ KinemiumPhysicsService.InitRenderer = function(renderer, renderer_signal, game)
 				local jForce = structs.JPH_Vec3:new({ x = force.X, y = force.Y, z = force.Z })
 				local jPoint = RVec3(applicationPoint.X, applicationPoint.Y, applicationPoint.Z)
 
-				local _success, _result = pcall(function(...)
-					lib.JPH_BodyInterface_AddForce2(bodyInterface, bodyID, jForce, jPoint)
-				end)
+				lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
+				local f = structs.JPH_Vec3:new({ x = force.X, y = force.Y, z = force.Z })
+				if applicationPoint then
+					local p = structs.JPH_RVec3:new({})
+					p:writef64(0, applicationPoint.X)
+					p:writef64(8, applicationPoint.Y)
+					p:writef64(16, applicationPoint.Z)
+					lib.JPH_BodyInterface_AddForce2(bodyInterface, bodyID, f, p)
+				else
+					lib.JPH_BodyInterface_AddForce(bodyInterface, bodyID, f)
+				end
+			end,
+
+			CreateRawBody = function(data)
+				local halfSize = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
+				local size = data.Size or Vector3.new(1, 1, 1)
+				halfSize:writef32(0, size.X / 2)
+				halfSize:writef32(4, size.Y / 2)
+				halfSize:writef32(8, size.Z / 2)
+
+				local shape
+				if data.Shape == Enum.PartType.Ball then
+					shape = lib.JPH_SphereShape_Create(size.X * 0.5)
+				else
+					shape = lib.JPH_BoxShape_Create(halfSize, 0.05)
+				end
+
+				local pos = data.Position or Vector3.zero
+				local position = ffi.alloc(structs.JPH_RVec3:size(), structs.JPH_RVec3:alignment())
+				position:writef64(0, pos.X)
+				position:writef64(8, pos.Y)
+				position:writef64(16, pos.Z)
+
+				local rotation = ffi.alloc(structs.JPH_Quat:size(), structs.JPH_Quat:alignment())
+				rotation:writef32(0, 0)
+				rotation:writef32(4, 0)
+				rotation:writef32(8, 0)
+				rotation:writef32(12, 1)
+
+				local cgName = data.CollisionGroup or "Default"
+				local cgId = GetCollisionGroupId(cgName)
+
+				local motionState = 0
+				if data.CanCollide then
+					motionState = data.Anchored and 0 or 1
+				else
+					motionState = data.Anchored and 2 or 3
+				end
+				local layer = (cgId * 4) + motionState
+				local motionType = data.Anchored and 0 or 2 
+
+				local bodySettings = lib.JPH_BodyCreationSettings_Create3(shape, position, rotation, motionType, layer)
+				lib.JPH_BodyCreationSettings_SetAllowSleeping(bodySettings, 1)
+				lib.JPH_BodyCreationSettings_SetAllowDynamicOrKinematic(bodySettings, 1)
+
+				if data.Friction then lib.JPH_BodyCreationSettings_SetFriction(bodySettings, data.Friction) end
+				if data.Restitution then lib.JPH_BodyCreationSettings_SetRestitution(bodySettings, data.Restitution) end
+				if data.LinearDamping then lib.JPH_BodyCreationSettings_SetLinearDamping(bodySettings, data.LinearDamping) end
+				if data.AngularDamping then lib.JPH_BodyCreationSettings_SetAngularDamping(bodySettings, data.AngularDamping) end
+				if data.GravityFactor ~= nil then lib.JPH_BodyCreationSettings_SetGravityFactor(bodySettings, data.GravityFactor) end
+
+				local bodyPtr = lib.JPH_BodyInterface_CreateBody(bodyInterface, bodySettings)
+				if bodyPtr == ffi.null then
+					lib.JPH_BodyCreationSettings_Destroy(bodySettings)
+					return nil
+				end
+
+				local bodyID = lib.JPH_Body_GetID(bodyPtr)
+				lib.JPH_BodyInterface_AddBody(bodyInterface, bodyID, motionType == 2 and 0 or 1)
+				lib.JPH_BodyCreationSettings_Destroy(bodySettings)
+
+				if data.AssemblyLinearVelocity then
+					local tempLinear = ffi.alloc(structs.JPH_Vec3:size(), structs.JPH_Vec3:alignment())
+					tempLinear:writef32(0, data.AssemblyLinearVelocity.X)
+					tempLinear:writef32(4, data.AssemblyLinearVelocity.Y)
+					tempLinear:writef32(8, data.AssemblyLinearVelocity.Z)
+					lib.JPH_BodyInterface_SetLinearVelocity(bodyInterface, bodyID, tempLinear)
+				end
+
+				return bodyID
+			end,
+
+			GetRawBodyCFrame = function(bodyID)
+				if not bodyID then return CFrame.new() end
+				local position = tempBodyPosition
+				local rotation = tempBodyRotation
+
+				lib.JPH_BodyInterface_GetPositionAndRotation(bodyInterface, bodyID, position, rotation)
+				local posX = position:readf64(0)
+				local posY = position:readf64(8)
+				local posZ = position:readf64(16)
+				
+				local qx = rotation:readf32(0)
+				local qy = rotation:readf32(4)
+				local qz = rotation:readf32(8)
+				local qw = rotation:readf32(12)
+
+				local xx, yy, zz = qx * qx, qy * qy, qz * qz
+				local xy, xz, yz = qx * qy, qx * qz, qy * qz
+				local wx, wy, wz = qw * qx, qw * qy, qw * qz
+
+				local r00 = 1 - 2 * (yy + zz)
+				local r01 = 2 * (xy - wz)
+				local r02 = 2 * (xz + wy)
+
+				local r10 = 2 * (xy + wz)
+				local r11 = 1 - 2 * (xx + zz)
+				local r12 = 2 * (yz - wx)
+
+				local r20 = 2 * (xz - wy)
+				local r21 = 2 * (yz + wx)
+				local r22 = 1 - 2 * (xx + yy)
+
+				return CFrame.new(posX, posY, posZ, r00, r01, r02, r10, r11, r12, r20, r21, r22)
+			end,
+
+			GetRawBodyPosition = function(bodyID)
+				if not bodyID then return Vector3.zero end
+				local position = tempBodyPosition
+				lib.JPH_BodyInterface_GetPosition(bodyInterface, bodyID, position)
+				return Vector3.new(position:readf64(0), position:readf64(8), position:readf64(16))
+			end,
+
+			GetRawBodyVelocity = function(bodyID)
+				if not bodyID then return Vector3.zero end
+				local velocity = tempBodyLinear
+				lib.JPH_BodyInterface_GetLinearVelocity(bodyInterface, bodyID, velocity)
+				return Vector3.new(velocity:readf32(0), velocity:readf32(4), velocity:readf32(8))
+			end,
+
+			DeleteRawBody = function(bodyID)
+				if not bodyID then return end
+				lib.JPH_BodyInterface_RemoveAndDestroyBody(bodyInterface, bodyID)
+			end,
+
+			ApplyForceToRawBody = function(bodyID, force)
+				if not bodyID then return end
+				lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
+				local f = structs.JPH_Vec3:new({ x = force.X, y = force.Y, z = force.Z })
+				lib.JPH_BodyInterface_AddForce(bodyInterface, bodyID, f)
+			end,
+
+			ApplyImpulseToRawBody = function(bodyID, impulse)
+				if not bodyID then return end
+				lib.JPH_BodyInterface_ActivateBody(bodyInterface, bodyID)
+				local f = structs.JPH_Vec3:new({ x = impulse.X, y = impulse.Y, z = impulse.Z })
+				lib.JPH_BodyInterface_AddImpulse(bodyInterface, bodyID, f)
 			end,
 
 			ApplyTorque = function(part, torque)

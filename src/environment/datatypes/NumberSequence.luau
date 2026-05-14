@@ -1,4 +1,4 @@
-local NumberSequence = {}
+local NumberSequence = { __type = "NumberSequence" }
 NumberSequence.__index = NumberSequence
 
 local NumberSequenceKeypoint = require("@NumberSequenceKeypoint")

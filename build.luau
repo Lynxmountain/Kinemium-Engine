@@ -32,18 +32,16 @@ end
 
 local ext = ""
 
-local function getLibraries(ext, path)
-	local libs = {}
+local function copyLibraries(ext, bin, path)
 	for _, f in pairs(zune.fs.entries(path)) do
 		if f.kind == "directory" then
-			for _, lib in pairs(getLibraries(ext, zjoin(path, f.name))) do
-				table.insert(libs, lib)
-			end
+			copyLibraries(ext, bin, zjoin(path, f.name))
 		elseif f.kind == "file" and zpath.globMatch(f.name, "*." .. ext) then
-			table.insert(libs, zpath.join(path, f.name))
+			local lib = zpath.join(path, f.name)
+			print("Copying " .. f.name)
+			zune.fs.copy(lib, zjoin(bin, f.name), true)
 		end
 	end
-	return libs
 end
 
 local b_windows = flagExists("windows")
@@ -94,12 +92,11 @@ local function buildExecutable(name, exec_ext, lib_ext)
 	local l_args = table.clone(b_args)
 	local l_exec = zpath.join(dir, EXECUTABLE_NAME .. exec_ext)
 
-	print("Embedding libraries")
-	local libs = getLibraries(lib_ext, zpath.join(root, "external"))
-	for _, lib in pairs(libs) do
-		table.insert(l_args, lib)
-	end
+	print("Copying libraries")
+	copyLibraries(lib_ext, dir, zpath.join(root, "external"))
 
+	print("Copying assets")
+	zune.fs.copy(zjoin(root, "assets"), zjoin(dir, "assets"), true)
 	table.insert(l_args, "--out=" .. l_exec)
 
 	print("Bundling: zune " .. table.concat(l_args, " "))
@@ -124,6 +121,10 @@ if b_debian or zune.platform.os == "linux" then
 	buildExecutable("debian_x86-64", "", "so")
 end
 
+-- There is no progress on proper FreeBSD support despite
+-- an available native Zune executable.
+-- Linux compatibility may need to be enabled by the user,
+-- since the .so libraries are re-used from Linux.
 if b_freebsd or zune.platform.os == "freebsd" then
 	buildExecutable("freebsd_x86-64", "", "so")
 end

@@ -20,6 +20,29 @@ local function parseSemver(v)
 	return { major = tonumber(major), minor = tonumber(minor), patch = tonumber(patch) }
 end
 
+local function resolveUrl(baseUrl, maybeRelative)
+	if type(maybeRelative) ~= "string" or maybeRelative == "" then
+		return nil
+	end
+
+	if maybeRelative:match("^https?://") then
+		return maybeRelative
+	end
+
+	local base = tostring(baseUrl or "")
+	local origin = base:match("^(https?://[^/]+)")
+	if not origin then
+		return maybeRelative
+	end
+
+	if maybeRelative:sub(1, 1) == "/" then
+		return origin .. maybeRelative
+	end
+
+	local baseDir = base:match("^(https?://.*/)") or (origin .. "/")
+	return baseDir .. maybeRelative
+end
+
 -- Supports: "1.2.3" (exact), "^1.2.3" (compatible), ">=1.2.3" (minimum)
 local function satisfiesVersion(wanted, got)
 	local gotV = parseSemver(got)
@@ -377,6 +400,31 @@ PluginLoader.InitRenderer = function(renderer, signal, datamodel)
 			decoded = HttpService:JSONDecode(decoded)
 
 			local base64 = zune.serde.base64
+			local marketplaceUrl = ENGINE_ENDPOINT.MARKETPLACE
+
+			local function decodeImageBlob(value)
+				if type(value) ~= "string" or value == "" then
+					return nil
+				end
+
+				local b64 = value:match("^data:[^;]+;base64,(.+)$")
+				if b64 then
+					return base64.decode(buffer.fromstring(b64))
+				end
+
+				-- keep remote assets as URLs; do not fetch here to avoid blocking UI thread
+				if value:match("^https?://") then
+					return nil
+				end
+
+				-- plain base64 payload without data: prefix
+				local ok, decodedValue = pcall(base64.decode, buffer.fromstring(value))
+				if ok then
+					return decodedValue
+				end
+
+				return nil
+			end
 
 			local list = {}
 
@@ -386,14 +434,29 @@ PluginLoader.InitRenderer = function(renderer, signal, datamodel)
 					continue
 				end
 
+				local iconBlob = decodeImageBlob(entry.icon)
+				local thumbnailBlob = decodeImageBlob(entry.thumbnail)
+
+				if not iconBlob and entry.assets and entry.assets.iconUrl then
+					iconBlob = decodeImageBlob(entry.assets.iconUrl)
+				end
+
+				if not thumbnailBlob and entry.assets and entry.assets.thumbnailUrl then
+					thumbnailBlob = decodeImageBlob(entry.assets.thumbnailUrl)
+				end
+
 				list[manifest.id] = {
 					manifest = manifest,
-					url = entry.url,
-					thumbnail = entry.thumbnail and base64.decode(
-						buffer.fromstring(entry.thumbnail:match("^data:[^;]+;base64,(.+)$") or entry.thumbnail)
+					url = entry.url
+						or (entry.download and resolveUrl(marketplaceUrl, entry.download.url))
+						or resolveUrl(marketplaceUrl, entry.detailsUrl),
+					thumbnail = thumbnailBlob,
+					icon = iconBlob,
+					iconUrl = resolveUrl(marketplaceUrl, entry.icon or (entry.assets and entry.assets.iconUrl)),
+					thumbnailUrl = resolveUrl(
+						marketplaceUrl,
+						entry.thumbnail or (entry.assets and entry.assets.thumbnailUrl)
 					),
-					icon = entry.icon
-						and base64.decode(buffer.fromstring(entry.icon:match("^data:[^;]+;base64,(.+)$") or entry.icon)),
 				}
 			end
 

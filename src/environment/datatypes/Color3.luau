@@ -1,4 +1,4 @@
-local Color3 = {}
+local Color3 = { __type = "Color3" }
 Color3.__index = Color3
 
 local structs = require("@raylib").structs

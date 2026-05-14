@@ -161,6 +161,7 @@ local function controller()
 	return {
 		animClock = 0,
 		animStride = 0,
+		accessories = {},
 		bindings = {},
 		currentPos = nil,
 		dashCooldownUntil = 0,
@@ -649,6 +650,8 @@ local function applyPose(h, rootCF, pose)
 	if not c then
 		return
 	end
+	-- Track final CFrames per binding name for accessory attachment
+	local partCFrames = {}
 	for bindingName, binding in pairs(c.bindings) do
 		local bindPose = pose[bindingName]
 		for i, seg in ipairs(binding.Segments) do
@@ -661,7 +664,23 @@ local function applyPose(h, rootCF, pose)
 					* seg.CenterOffset
 
 				seg.Part.CFrame = finalCF
+				-- Store the first segment's CFrame as the binding's CFrame
+				if not partCFrames[bindingName] then
+					partCFrames[bindingName] = finalCF
+				end
 			end
+		end
+	end
+
+	-- Position accessories relative to their parent body part
+	for _, accEntry in ipairs(c.accessories) do
+		local accessory = accEntry.accessory
+		local attachPoint = accEntry.attachmentPoint
+		if accessory and accessory.Parent ~= nil then
+			local parentCF = partCFrames[attachPoint] or rootCF
+			local att = accessory.GetAttachment and accessory:GetAttachment() or nil
+			local offset = att and att.CFrame or ID
+			accessory.CFrame = parentCF * offset
 		end
 	end
 end
@@ -1288,6 +1307,84 @@ return {
 					end
 				end
 			end
+		end
+
+		--- Adds an Accessory to the character. The accessory is parented to the
+		--- character model and its CFrame is updated every tick by applyPose,
+		--- following the body part named by `accessory.AttachmentPoint`.
+		--- The Attachment child on the Accessory describes the local offset.
+		function h:AddAccessory(accessory)
+			if not accessory or accessory.ClassName ~= "Accessory" then
+				return
+			end
+
+			local char = characterOf(self)
+			if not char then
+				return
+			end
+
+			-- Parent the accessory to the character model
+			accessory.Parent = char
+
+			local attachPoint = accessory.AttachmentPoint or "Head"
+
+			-- Initial snap: position the accessory at its attachment point
+			local rigPart = self:GetRigPart(attachPoint)
+			if rigPart and rigPart.CFrame then
+				local att = accessory.GetAttachment and accessory:GetAttachment() or nil
+				local offset = att and att.CFrame or CFrame.new()
+				accessory.CFrame = rigPart.CFrame * offset
+			end
+
+			-- Track in the controller for per-frame updates
+			local ctrl = rawget(self, "_humanoidController")
+			if ctrl then
+				-- Avoid duplicates
+				for _, entry in ipairs(ctrl.accessories) do
+					if entry.accessory == accessory then
+						return
+					end
+				end
+				table.insert(ctrl.accessories, {
+					accessory = accessory,
+					attachmentPoint = attachPoint,
+				})
+			end
+		end
+
+		--- Removes a previously added Accessory from the character.
+		function h:RemoveAccessory(accessory)
+			if not accessory then
+				return
+			end
+
+			local ctrl = rawget(self, "_humanoidController")
+			if ctrl then
+				for i, entry in ipairs(ctrl.accessories) do
+					if entry.accessory == accessory then
+						table.remove(ctrl.accessories, i)
+						break
+					end
+				end
+			end
+
+			if accessory.Parent ~= nil then
+				accessory.Parent = nil
+			end
+		end
+
+		--- Returns a list of all currently tracked Accessory instances.
+		function h:GetAccessories()
+			local result = {}
+			local ctrl = rawget(self, "_humanoidController")
+			if ctrl then
+				for _, entry in ipairs(ctrl.accessories) do
+					if entry.accessory and entry.accessory.Parent ~= nil then
+						table.insert(result, entry.accessory)
+					end
+				end
+			end
+			return result
 		end
 
 		function h:Move(dir)

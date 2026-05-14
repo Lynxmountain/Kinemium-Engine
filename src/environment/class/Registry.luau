@@ -5,7 +5,7 @@ local zembed = require("@zembed")
 
 local registry = {}
 local listOfClasses = {}
-local created = {}
+local created = setmetatable({}, { __mode = "v" })
 
 local entries = {}
 
@@ -66,6 +66,15 @@ function registry.ClassValid(class)
 	end
 end
 
+function registry.GetUnparentedInstances()
+	for _, v in ipairs(created) do
+		if v:IsA("Instance") and v.Parent == nil then
+			return v
+		end
+	end
+	return nil
+end
+
 function registry.new(class, renderer, datamodel, force)
 	local found
 
@@ -97,6 +106,10 @@ function registry.new(class, renderer, datamodel, force)
 	end
 	table.insert(created, instance)
 	return instance
+end
+
+function registry.GetActiveInstances()
+	return created
 end
 
 return registry

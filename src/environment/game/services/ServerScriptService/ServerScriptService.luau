@@ -12,17 +12,6 @@ ServerScriptService:SetProperties({
 	LoadStringEnabled = false,
 })
 
-ServerScriptService.InitRenderer = function(renderer, signal)
-	signal:Connect(function(route, data)
-		if route == "PlayTest" then
-			for _, child in pairs(ServerScriptService:GetChildren()) do
-				if child.ClassName == "Script" then
-					-- TODO: add run function for Scripts
-					child:Run()
-				end
-			end
-		end
-	end)
-end
+ServerScriptService.InitRenderer = function(renderer, signal) end
 
 return ServerScriptService

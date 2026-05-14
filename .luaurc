@@ -18,6 +18,7 @@
         "CustomPhysicalProperties": "./src/environment/datatypes/CustomPhysicalProperties",
         "Vector2": "./src/environment/datatypes/Vector2",
         "MeshGen": "./src/renderer/meshgen",
+        "repr": "./src/modules/repr",
         "Color3": "./src/environment/datatypes/Color3",
         "Humanoid": "./src/environment/class/list/Humanoid",
         "syntax_highlighter": "./src/modules/Aereon/ide/syntax",

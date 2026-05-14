@@ -210,7 +210,8 @@ local function create_window(title, frame)
 		width = initialSize.X,
 		DisableClipping = true,
 		height = initialSize.Y,
-		headerRender = false,
+		headerRender = true,
+		Minimized = true,
 
 		tabs = {
 			{
@@ -663,6 +664,140 @@ RunService.RenderStepped:Connect(function(a0: number)
 	end
 end)
 
+local StudioThemeService = game:GetService("StudioThemeService")
+renderer.Pool.new("2d", function(data)
+	if game.Context ~= Enum.GameContext.Editor then
+		return
+	end
+
+	local dt = rl.GetFrameTime()
+	local mainTheme = StudioThemeService.SelectedTheme
+
+	window.update(dt)
+	window.draw(dt, mainTheme.aereon)
+end)
+
+local function renderImageDropdownButton(xPos, name, element, windowData, dt)
+	local winX, winY = windowData.x, windowData.y + 80
+	local cellWidth = element.width or 60
+	local cellHeight = element.height or 60
+	local dropHeight = element.dropHeight or 22
+	local totalHeight = cellHeight + dropHeight
+	local labelWidth = name and measureTextWidth(name) or 0
+	local effectiveWidth = math.max(cellWidth, labelWidth + 10)
+
+	local btnKey = element
+	local aereonElement = componentCache[btnKey]
+	if not aereonElement then
+		aereonElement = gui.button({
+			x = winX + xPos,
+			y = winY,
+			width = effectiveWidth,
+			height = cellHeight,
+			text = "",
+			backgroundTransparency = 1,
+			backgroundColor = element.backgroundColor or Color3.new(0.18, 0.18, 0.18),
+			hoverColor = element.hoverColor or Color3.new(0.35, 0.35, 0.35),
+			onClick = function()
+				if element.callback then
+					element.callback(element, aRect.new(winX + xPos, winY, effectiveWidth, cellHeight))
+				end
+			end,
+		})
+		componentCache[btnKey] = aereonElement
+	end
+
+	local btnRect = aRect.new(winX + xPos, winY, effectiveWidth, cellHeight)
+	aereonElement.set("obj_rect", btnRect)
+	aereonElement.render(dt)
+
+	if element.texture then
+		local scale = element.scale or 2.0
+		local texW = element.texture.x * scale
+		local texH = element.texture.y * scale
+		local iconX = btnRect.x + effectiveWidth / 2 - texW / 2
+		local iconY = btnRect.y + cellHeight / 2 - texH / 2
+		rl.DrawTexturePro(
+			element.texture.texture,
+			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }),
+			aRect:translate(aRect.new(iconX, iconY, texW, texH)),
+			vector.create(0, 0),
+			element.rotation or 0,
+			ImageColor
+		)
+	end
+
+	local dropKey = tostring(element) .. "_idd_drop"
+	local dropElement = componentCache[dropKey]
+	if not dropElement then
+		local opts = {}
+		for _, opt in ipairs(element.options or {}) do
+			table.insert(opts, opt.label)
+		end
+		effectiveWidth = effectiveWidth + 100
+
+		dropElement = gui.dropdown({
+			x = winX + xPos,
+			y = winY + cellHeight,
+			width = effectiveWidth,
+			height = dropHeight,
+			options = opts,
+			selectedIndex = element.defaultIndex or 1,
+			backgroundColor = element.dropBackgroundColor or Color3.new(0.13, 0.13, 0.13),
+			hoverColor = element.hoverColor or Color3.new(0.3, 0.3, 0.3),
+			textColor = Theme.TextColor,
+			backgroundTransparency = 1,
+			borderTransparency = 1,
+			onSelect = function(idx, optLabel)
+				local opt
+				for _, o in ipairs(element.options or {}) do
+					if o.label == optLabel then
+						opt = o
+						break
+					end
+				end
+				if opt then
+					element._selected = opt.label
+					if opt.onClick then
+						opt.onClick(opt)
+					end
+					if element.onSelect then
+						element.onSelect(opt)
+					elseif element.callback then
+						element.callback(opt)
+					end
+				end
+			end,
+		})
+		componentCache[dropKey] = dropElement
+	end
+
+	local dropRect = aRect.new(winX + xPos, winY + cellHeight, effectiveWidth + 100, dropHeight)
+	dropElement.set("obj_rect", dropRect)
+
+	if element._selected then
+		local idx = 1
+		for i, o in ipairs(element.options or {}) do
+			if o.label == element._selected then
+				idx = i
+				break
+			end
+		end
+		dropElement.set("selectedIndex", idx)
+	end
+
+	dropElement.render(dt)
+
+	local fullRect = aRect.new(winX + xPos, winY, effectiveWidth, totalHeight)
+	if aRect.MouseIsInRect(fullRect) and element.tooltip then
+		local mx = rl.GetMouseX and rl.GetMouseX() or winX + xPos
+		local my = rl.GetMouseY and rl.GetMouseY() or winY
+		updateTooltip(dt, tostring(element) .. "_idd", element.tooltip, mx, my)
+	end
+
+	return effectiveWidth + (element.padding or 5)
+end
+
 propback.stepped = function(propback)
 	if propback.title == "Toolbar" then
 		local dt = KinemiumRaylib.GetLib().GetFrameTime()
@@ -683,6 +818,9 @@ propback.stepped = function(propback)
 					currentX = currentX + width
 				elseif element.type == "DropdownButton" then
 					local width = renderDropdownButton(currentX, element.text, element, propback, dt)
+					currentX = currentX + width
+				elseif element.type == "ImageDropdownButton" then
+					local width = renderImageDropdownButton(currentX, element.text, element, propback, dt)
 					currentX = currentX + width
 				elseif element.type == "Separator" then
 					local width = renderSeperator(currentX, propback, element, dt)

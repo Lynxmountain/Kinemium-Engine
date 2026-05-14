@@ -110,29 +110,6 @@ local propTable = {
 }
 GuiObject.inherit(propTable)
 
-local function resolveBlendMode(value)
-	if type(value) == "number" then
-		return value
-	end
-	if type(value) ~= "string" then
-		return rl.const.BlendMode.BLEND_ALPHA
-	end
-
-	local normalized = string.lower(value)
-	if normalized == "additive" or normalized == "add" then
-		return rl.const.BlendMode.BLEND_ADDITIVE
-	elseif normalized == "multiply" or normalized == "multiplied" then
-		return rl.const.BlendMode.BLEND_MULTIPLIED
-	elseif normalized == "premultiply" or normalized == "premultipliedalpha" or normalized == "premultiplied" then
-		return rl.const.BlendMode.BLEND_ALPHA_PREMULTIPLY
-	elseif normalized == "addcolors" then
-		return rl.const.BlendMode.BLEND_ADD_COLORS
-	elseif normalized == "subtract" or normalized == "subtractcolors" then
-		return rl.const.BlendMode.BLEND_SUBTRACT_COLORS
-	end
-
-	return rl.const.BlendMode.BLEND_ALPHA
-end
 
 local defaultFont = lib.GetFontDefault()
 
@@ -237,7 +214,7 @@ propTable.render = function(_, object, dt, structs, renderer, datamodel)
 		local blend = object:FindFirstChildOfClass("UIBlend")
 		local didBlend = false
 		if blend and blend.Enabled ~= false and blend.AffectSelf ~= false then
-			lib.BeginBlendMode(resolveBlendMode(blend.Mode))
+			lib.BeginBlendMode(GuiObject.resolveBlendMode(raylib, blend.Mode))
 			didBlend = true
 		end
 

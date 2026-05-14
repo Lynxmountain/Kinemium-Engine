@@ -1,6 +1,6 @@
 local Vector2 = require("@Vector2")
 
-local UDim2 = {}
+local UDim2 = { __type = "UDim2" }
 UDim2.__index = UDim2
 
 function UDim2.new(xScale, xOffset, yScale, yOffset)

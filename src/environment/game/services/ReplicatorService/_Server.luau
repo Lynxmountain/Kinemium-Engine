@@ -1904,7 +1904,7 @@ function Server.init(context)
 			local maxStatesForSession = math.max(1, MAX_SNAPSHOT_STATES_PER_MESSAGE)
 
 			for netId, history in pairs(objectStateHistory) do
-				local latestTickSequence = history.order[#history.order]
+				local latestTickSequence = history:GetLatestSequence()
 				if not latestTickSequence then
 					continue
 				end

@@ -20,14 +20,10 @@ local SIGNAL_NAMES = {
 	DescendantRemoving = true,
 	Destroying = true,
 	DescendantAdded = true,
-	DescendantChanged = true,
+	DescendantChanged = true
 }
 
 function instance_mt.__index(self, key)
-	if key == "childAdded" then
-		key = "ChildAdded"
-	end
-
 	local props = rawget(self, "_props")
 	if props and props[key] ~= nil then
 		local val = props[key]
@@ -37,21 +33,23 @@ function instance_mt.__index(self, key)
 		return val
 	end
 
+	local childMap = rawget(self, "_childByName")
+	if childMap and childMap[key] then
+		return childMap[key]
+	end
+
+	local method = Instance[key]
+	if method then
+		return method
+	end
+
 	if SIGNAL_NAMES[key] then
-		if not props then
-			return Instance[key]
-		end
 		local sig = Signal.new()
-		props[key] = sig
+		rawset(self, key, sig)
 		return sig
 	end
 
-	local childByName = props and props._childByName
-	if childByName and childByName[key] then
-		return childByName[key]
-	end
-
-	return Instance[key]
+	return nil
 end
 
 function instance_mt.__eq(a, b)
@@ -93,6 +91,7 @@ function instance_mt.__newindex(self, key, value)
 			error("NetworkId is already assigned and read-only", 2)
 		end
 		props.NetworkId = value
+		rawset(self, "NetworkId", value)
 		return
 	end
 
@@ -102,13 +101,12 @@ function instance_mt.__newindex(self, key, value)
 			return
 		end
 
-		local ancestryChanged = props.AncestryChanged
-		if ancestryChanged then
-			ancestryChanged:Fire(oldParent, value)
+		if rawget(self, "AncestryChanged") then
+			self.AncestryChanged:Fire(oldParent, value)
 		end
 
 		if oldParent then
-			local oldChildren = oldParent.Children
+			local oldChildren = rawget(oldParent, "Children")
 			if oldChildren then
 				for i = #oldChildren, 1, -1 do
 					if oldChildren[i] == self then
@@ -117,135 +115,128 @@ function instance_mt.__newindex(self, key, value)
 					end
 				end
 			end
-
-			local oldParentProps = rawget(oldParent, "_props")
-			if oldParentProps and oldParentProps._childByName and props.Name then
-				if oldParentProps._childByName[props.Name] == self then
-					oldParentProps._childByName[props.Name] = nil
+			local oldMap = rawget(oldParent, "_childByName")
+			if oldMap and oldMap[props.Name] == self then
+				oldMap[props.Name] = nil
+				if oldChildren then
+					for _, c in ipairs(oldChildren) do
+						if c.Name == props.Name and c ~= self then
+							oldMap[props.Name] = c
+							break
+						end
+					end
 				end
 			end
 
-			local oldChildRemoved = oldParentProps and oldParentProps.ChildRemoved
-			if oldChildRemoved then
-				oldChildRemoved:Fire(self)
+			if rawget(oldParent, "ChildRemoved") then
+				oldParent.ChildRemoved:Fire(self)
 			end
 
 			local ancestor = oldParent
 			while ancestor do
-				local aProps = rawget(ancestor, "_props")
-				local descRem = aProps and aProps.DescendantRemoving
-				if descRem then
-					descRem:Fire(self)
+				if rawget(ancestor, "DescendantRemoving") then
+					ancestor.DescendantRemoving:Fire(self)
 				end
-				ancestor = aProps and aProps.Parent
+				local parentProp = rawget(ancestor, "_props")
+				ancestor = parentProp and parentProp.Parent
 			end
 		end
 
 		props.Parent = value
 		if value then
-			table.insert(value.Children, self)
-
-			local valProps = rawget(value, "_props")
-			if valProps then
-				if not valProps._childByName then
-					valProps._childByName = {}
-				end
-				valProps._childByName[props.Name] = self
+			local newChildren = rawget(value, "Children")
+			if newChildren then
+				table.insert(newChildren, self)
+			end
+			local newMap = rawget(value, "_childByName")
+			if newMap and not newMap[props.Name] then
+				newMap[props.Name] = self
 			end
 
-			local childAdded = valProps and valProps.ChildAdded
-			if childAdded then
-				childAdded:Fire(self)
+			if rawget(value, "ChildAdded") then
+				value.ChildAdded:Fire(self)
 			end
 
 			local ancestor = value
 			while ancestor do
-				local aProps = rawget(ancestor, "_props")
-				local descAdd = aProps and aProps.DescendantAdded
-				if descAdd then
-					descAdd:Fire(self)
+				if rawget(ancestor, "DescendantAdded") then
+					ancestor.DescendantAdded:Fire(self)
 				end
-				ancestor = aProps and aProps.Parent
+				local parentProp = rawget(ancestor, "_props")
+				ancestor = parentProp and parentProp.Parent
 			end
 		end
+	elseif key == "Name" then
+		local oldName = props.Name
+		if oldName == value then return end
+		local parent = props.Parent
+		if parent then
+			local pMap = rawget(parent, "_childByName")
+			if pMap and pMap[oldName] == self then
+				pMap[oldName] = nil
+				local pChildren = rawget(parent, "Children")
+				if pChildren then
+					for _, c in ipairs(pChildren) do
+						if c.Name == oldName and c ~= self then
+							pMap[oldName] = c
+							break
+						end
+					end
+				end
+			end
+			if pMap and not pMap[value] then
+				pMap[value] = self
+			end
+		end
+		props.Name = value
 	else
-		if key == "Name" then
-			local parent = props.Parent
-			if parent then
-				local pProps = rawget(parent, "_props")
-				if pProps then
-					if not pProps._childByName then
-						pProps._childByName = {}
-					end
-					if props.Name and pProps._childByName[props.Name] == self then
-						pProps._childByName[props.Name] = nil
-					end
-					pProps._childByName[value] = self
-				end
-			end
-		end
 		props[key] = value
 	end
 
-	local changed = props.Changed
-	if changed then
-		changed:Fire(key, value)
+	if rawget(self, "Changed") then
+		self.Changed:Fire(key, value)
 	end
 
 	local ancestor = props.Parent
 	while ancestor do
-		local aProps = rawget(ancestor, "_props")
-		local descChanged = aProps and aProps.DescendantChanged
-		if descChanged then
-			descChanged:Fire(self, key, value)
+		if rawget(ancestor, "DescendantChanged") then
+			ancestor.DescendantChanged:Fire(self, key, value)
 		end
-		ancestor = aProps and aProps.Parent
+		local parentProp = rawget(ancestor, "_props")
+		ancestor = parentProp and parentProp.Parent
 	end
 end
 
 function Instance.new(className)
-	local self = {}
+	local self = {
+		BaseClass = "Instance",
+		Children = {},
+		_childByName = {},
+		tags = {},
+		attributes = {},
+		CanReplicate = true,
+
+		-- deprecated
+		getChildren = Instance.GetChildren,
+		findFirstChild = Instance.FindFirstChild,
+		clone = Instance.Clone,
+		destroy = Instance.Destroy,
+	}
 
 	self._props = {
 		ClassName = className,
 		Name = className,
-		BaseClass = "Instance",
 		Parent = nil,
-		Children = {},
-		tags = {},
-		attributes = {},
 		NetworkId = nil,
 		UniqueId = generateUniqueId(),
 		NetworkOwner = nil,
 		NetworkOwnerType = 0,
-		CanReplicate = true,
-		_childByName = {},
 	}
 
 	return setmetatable(self, instance_mt)
 end
 
 -- Utility methods
-function Instance:IterDescendants()
-	local stack = { self }
-	local i = #stack
-	return function()
-		while i > 0 do
-			local node = stack[i]
-			i = i - 1
-			local children = node.Children
-			if children then
-				for j = #children, 1, -1 do
-					i = i + 1
-					stack[i] = children[j]
-				end
-			end
-			if node ~= self then
-				return node
-			end
-		end
-	end
-end
 function Instance:GetProperties()
 	return rawget(self, "_props")
 end
@@ -255,10 +246,9 @@ function Instance:SetProperty(name, value)
 end
 
 function Instance:FindFirstChild(name)
-	for _, child in ipairs(self.Children) do
-		if child.Name == name then
-			return child
-		end
+	local childMap = rawget(self, "_childByName")
+	if childMap and childMap[name] then
+		return childMap[name]
 	end
 	return nil
 end
@@ -315,6 +305,31 @@ function Instance:GetDescendants()
 	return result
 end
 
+function Instance:IterDescendants()
+	local current = self
+	
+	return function()
+		if #current.Children > 0 then
+			current = current.Children[1]
+			return current
+		end
+		
+		while current and current ~= self do
+			local parent = current.Parent
+			if parent then
+				local siblings = parent.Children
+				local nextIdx = table.find(siblings, current)
+				if nextIdx and nextIdx < #siblings then
+					current = siblings[nextIdx + 1]
+					return current
+				end
+			end
+			current = parent
+		end
+		return nil
+	end
+end
+
 function Instance:IsA(className)
 	return self.ClassName == className or self.BaseClass == className
 end
@@ -325,28 +340,16 @@ function Instance:Clone(keepUniqueId)
 	local srcProps = rawget(self, "_props")
 	local dstProps = rawget(root, "_props")
 	for k, v in pairs(srcProps) do
-		if
-			k ~= "Parent"
-			and k ~= "Children"
-			and k ~= "_childByName"
-			and not SIGNAL_NAMES[k]
-			and (keepUniqueId or k ~= "UniqueId")
-		then
-			if type(v) == "table" and k ~= "tags" and k ~= "attributes" then
-				dstProps[k] = v
-			else
-				dstProps[k] = v
-			end
+		if k ~= "Parent" and k ~= "Children" and (keepUniqueId or k ~= "UniqueId") then
+			dstProps[k] = v
 		end
 	end
 
-	dstProps.tags = {}
-	for k, v in pairs(srcProps.tags or {}) do
-		dstProps.tags[k] = v
+	for k, v in pairs(self.tags) do
+		root.tags[k] = v
 	end
-	dstProps.attributes = {}
-	for k, v in pairs(srcProps.attributes or {}) do
-		dstProps.attributes[k] = v
+	for k, v in pairs(self.attributes) do
+		root.attributes[k] = v
 	end
 
 	local queue = { { src = self, dst = root } }
@@ -356,7 +359,7 @@ function Instance:Clone(keepUniqueId)
 		local pair = queue[head]
 		head = head + 1
 
-		local srcChildren = pair.src.Children
+		local srcChildren = rawget(pair.src, "Children")
 		local dstParent = pair.dst
 
 		for _, child in ipairs(srcChildren) do
@@ -365,33 +368,23 @@ function Instance:Clone(keepUniqueId)
 			local cSrcProps = rawget(child, "_props")
 			local cDstProps = rawget(copy, "_props")
 			for k, v in pairs(cSrcProps) do
-				if
-					k ~= "Parent"
-					and k ~= "Children"
-					and k ~= "_childByName"
-					and not SIGNAL_NAMES[k]
-					and (keepUniqueId or k ~= "UniqueId")
-				then
+				if k ~= "Parent" and k ~= "Children" and (keepUniqueId or k ~= "UniqueId") then
 					cDstProps[k] = v
 				end
 			end
 
-			cDstProps.tags = {}
-			for k, v in pairs(cSrcProps.tags or {}) do
-				cDstProps.tags[k] = v
+			for k, v in pairs(child.tags) do
+				copy.tags[k] = v
 			end
-			cDstProps.attributes = {}
-			for k, v in pairs(cSrcProps.attributes or {}) do
-				cDstProps.attributes[k] = v
+			for k, v in pairs(child.attributes) do
+				copy.attributes[k] = v
 			end
 
 			cDstProps.Parent = dstParent
-			table.insert(dstParent.Children, copy)
-			if cDstProps.Name then
-				if not rawget(dstParent, "_props")._childByName then
-					rawget(dstParent, "_props")._childByName = {}
-				end
-				rawget(dstParent, "_props")._childByName[cDstProps.Name] = copy
+			table.insert(rawget(dstParent, "Children"), copy)
+			local dstMap = rawget(dstParent, "_childByName")
+			if dstMap and not dstMap[copy.Name] then
+				dstMap[copy.Name] = copy
 			end
 			table.insert(queue, { src = child, dst = copy })
 		end
@@ -411,21 +404,20 @@ function Instance:InheritFrom(source, baseline)
 		end
 
 		for k, v in pairs(srcProps) do
-			if
-				k ~= "Parent"
-				and k ~= "Children"
-				and k ~= "_childByName"
-				and not SIGNAL_NAMES[k]
-				and k ~= "UniqueId"
-			then
+			if k ~= "Parent" and k ~= "Children" and k ~= "UniqueId" then
 				local baseVal = baseProps[k]
+				-- only inherit if the live value differs from baseline (i.e. it was changed)
 				if v ~= baseVal then
-					dstProps[k] = v
+					if k == "Name" then
+						dst.Name = v -- Trigger __newindex to properly update _childByName
+					else
+						dstProps[k] = v
+					end
 				end
 			end
 		end
 
-		for k, v in pairs(rawget(src, "_props").tags) do
+		for k, v in pairs(src.tags) do
 			if base.tags[k] ~= v then
 				dst.tags[k] = v
 			end
@@ -443,21 +435,21 @@ function Instance:InheritFrom(source, baseline)
 	local sourceById = {}
 	local baselineById = {}
 
-	for desc in source:IterDescendants() do
+	for _, desc in ipairs(source:GetDescendants()) do
 		local props = rawget(desc, "_props")
 		if props and props.UniqueId then
 			sourceById[props.UniqueId] = desc
 		end
 	end
 
-	for desc in baseline:IterDescendants() do
+	for _, desc in ipairs(baseline:GetDescendants()) do
 		local props = rawget(desc, "_props")
 		if props and props.UniqueId then
 			baselineById[props.UniqueId] = desc
 		end
 	end
 
-	for desc in self:IterDescendants() do
+	for _, desc in ipairs(self:GetDescendants()) do
 		local dProps = rawget(desc, "_props")
 		if dProps and dProps.UniqueId then
 			local match = sourceById[dProps.UniqueId]
@@ -479,14 +471,12 @@ function Instance:RestoreFrom(source)
 		end
 
 		for k, v in pairs(srcProps) do
-			if
-				k ~= "Parent"
-				and k ~= "Children"
-				and k ~= "_childByName"
-				and not SIGNAL_NAMES[k]
-				and k ~= "UniqueId"
-			then
-				dstProps[k] = v
+			if k ~= "Parent" and k ~= "Children" and k ~= "UniqueId" then
+				if k == "Name" then
+					dst.Name = v -- Trigger __newindex to properly update _childByName
+				else
+					dstProps[k] = v
+				end
 			end
 		end
 
@@ -501,14 +491,14 @@ function Instance:RestoreFrom(source)
 	restoreSingle(self, source)
 
 	local sourceById = {}
-	for desc in source:IterDescendants() do
+	for _, desc in ipairs(source:GetDescendants()) do
 		local props = rawget(desc, "_props")
 		if props and props.UniqueId then
 			sourceById[props.UniqueId] = desc
 		end
 	end
 
-	for desc in self:IterDescendants() do
+	for _, desc in ipairs(self:GetDescendants()) do
 		local dProps = rawget(desc, "_props")
 		if dProps and dProps.UniqueId then
 			local match = sourceById[dProps.UniqueId]
@@ -601,6 +591,14 @@ function Instance:GetPropertyChangedSignal(property)
 	return self._propertySignals[property]
 end
 
+function Instance:GetAttributes()
+	local copy = {}
+	for k, v in pairs(self.attributes) do
+		copy[k] = v
+	end
+	return copy
+end
+
 function Instance:GetAttributeChangedSignal(name)
 	if not self._attributeSignals then
 		self._attributeSignals = {}
@@ -614,66 +612,70 @@ function Instance:GetAttributeChangedSignal(name)
 end
 
 function Instance:WaitForChild(name, timeout)
+	timeout = timeout or 5
+
 	local found = self:FindFirstChild(name)
 	if found then
 		return found
 	end
 
+	local connection
+	local result = nil
 	local thread = coroutine.running()
-	local conn
-	conn = self.ChildAdded:Connect(function(child)
+
+	connection = self.ChildAdded:Connect(function(child)
 		if child.Name == name then
-			conn:Disconnect()
-			task.spawn(thread, child)
+			result = child
+			connection:Disconnect()
+			if coroutine.status(thread) == "suspended" then
+				task.spawn(thread)
+			end
 		end
 	end)
 
-	local timer = task.delay(timeout or 5, function()
-		conn:Disconnect()
-		task.spawn(thread, nil)
+	task.spawn(function()
+		task.wait(timeout)
+		if not result and coroutine.status(thread) == "suspended" then
+			connection:Disconnect()
+			task.spawn(thread)
+		end
 	end)
 
-	local result = coroutine.yield()
+	coroutine.yield()
+
 	if not result then
 		error(("WaitForChild('%s') timed out"):format(name))
 	end
-	task.cancel(timer)
+
 	return result
 end
 
 function Instance:SetAttribute(name, value)
-	local attrs = rawget(self, "_props").attributes
-	attrs[name] = value
+	self.attributes[name] = value
 
 	if self._attributeSignals and self._attributeSignals[name] then
 		self._attributeSignals[name]:Fire(value)
 	end
 end
 
-function Instance:GetAttribute(name)
-	return rawget(self, "_props").attributes[name]
-end
-
 function Instance:AddTag(tag)
-	rawget(self, "_props").tags[tag] = true
+	self.tags[tag] = true
 end
 
 function Instance:RemoveTag(tag)
-	rawget(self, "_props").tags[tag] = nil
+	self.tags[tag] = nil
 end
 
 function Instance:GetTags()
-	local tags = rawget(self, "_props").tags
 	local copy = {}
-	print(tags)
-	for k, v in pairs(tags) do
+	for k, v in pairs(self.tags) do
 		copy[k] = v
 	end
 	return copy
 end
 
 function Instance:HasTag(tag)
-	return rawget(self, "_props").tags[tag] == true
+	return self.tags[tag] == true
 end
 
 function Instance:GetAncestors()
@@ -716,58 +718,80 @@ function Instance:GetDescendantsOfClass(className)
 end
 
 function Instance:WaitForChildOfClass(className, timeout)
+	timeout = timeout or 5
+
 	local found = self:FindFirstChildOfClass(className)
 	if found then
 		return found
 	end
 
+	local connection
+	local result = nil
 	local thread = coroutine.running()
-	local conn
-	conn = self.ChildAdded:Connect(function(child)
+
+	connection = self.ChildAdded:Connect(function(child)
 		if child.ClassName == className then
-			conn:Disconnect()
-			task.spawn(thread, child)
+			result = child
+			connection:Disconnect()
+			if coroutine.status(thread) == "suspended" then
+				task.spawn(thread)
+			end
 		end
 	end)
 
-	local timer = task.delay(timeout or 5, function()
-		conn:Disconnect()
-		task.spawn(thread, nil)
+	task.spawn(function()
+		task.wait(timeout)
+		if not result and coroutine.status(thread) == "suspended" then
+			connection:Disconnect()
+			task.spawn(thread)
+		end
 	end)
 
-	local result = coroutine.yield()
+	coroutine.yield()
+
 	if not result then
 		error(("WaitForChildOfClass('%s') timed out"):format(className))
 	end
-	task.cancel(timer)
+
 	return result
 end
 
 function Instance:WaitForChildWhichIsA(className, timeout)
+	timeout = timeout or 5
+
 	local found = self:FindFirstChildWhichIsA(className)
 	if found then
 		return found
 	end
 
+	local connection
+	local result = nil
 	local thread = coroutine.running()
-	local conn
-	conn = self.ChildAdded:Connect(function(child)
-		if child.ClassName == className then
-			conn:Disconnect()
-			task.spawn(thread, child)
+
+	connection = self.ChildAdded:Connect(function(child)
+		if child:IsA(className) then
+			result = child
+			connection:Disconnect()
+			if coroutine.status(thread) == "suspended" then
+				task.spawn(thread)
+			end
 		end
 	end)
 
-	local timer = task.delay(timeout or 5, function()
-		conn:Disconnect()
-		task.spawn(thread, nil)
+	task.spawn(function()
+		task.wait(timeout)
+		if not result and coroutine.status(thread) == "suspended" then
+			connection:Disconnect()
+			task.spawn(thread)
+		end
 	end)
 
-	local result = coroutine.yield()
+	coroutine.yield()
+
 	if not result then
 		error(("WaitForChildWhichIsA('%s') timed out"):format(className))
 	end
-	task.cancel(timer)
+
 	return result
 end
 
@@ -1113,13 +1137,8 @@ function Instance:GetMetadata(key)
 	return meta and meta[key]
 end
 
-function Instance:GetAttributes()
-	local attrs = rawget(self, "_props").attributes
-	local copy = {}
-	for k, v in pairs(attrs) do
-		copy[k] = v
-	end
-	return copy
+function Instance:GetAttribute(name)
+	return self.attributes[name]
 end
 
 function Instance:EnableHistory(limit)
@@ -1165,11 +1184,48 @@ function Instance:Destroy()
 	rawset(self, "_props", nil)
 	rawset(self, "_skipParentRemoval", nil)
 	rawset(self, "Destroyed", true)
-end
 
-Instance.getChildren = Instance.GetChildren
-Instance.findFirstChild = Instance.FindFirstChild
-Instance.clone = Instance.Clone
-Instance.destroy = Instance.Destroy
+	-- Disconnect all signals
+	if rawget(self, "ChildAdded") then
+		self.ChildAdded:Destroy()
+	end
+	if rawget(self, "AncestryChanged") then
+		self.AncestryChanged:Destroy()
+	end
+	if rawget(self, "Changed") then
+		self.Changed:Destroy()
+	end
+	if rawget(self, "ChildRemoved") then
+		self.ChildRemoved:Destroy()
+	end
+	if rawget(self, "DescendantRemoving") then
+		self.DescendantRemoving:Destroy()
+	end
+	if rawget(self, "Destroying") then
+		self.Destroying:Destroy()
+	end
+	if rawget(self, "DescendantAdded") then
+		self.DescendantAdded:Destroy()
+	end
+	if rawget(self, "DescendantChanged") then
+		self.DescendantChanged:Destroy()
+	end
+
+	local propertySignals = rawget(self, "_propertySignals")
+	if propertySignals then
+		for _, signal in pairs(propertySignals) do
+			signal:Destroy()
+		end
+		rawset(self, "_propertySignals", nil)
+	end
+
+	local attributeSignals = rawget(self, "_attributeSignals")
+	if attributeSignals then
+		for _, signal in pairs(attributeSignals) do
+			signal:Destroy()
+		end
+		rawset(self, "_attributeSignals", nil)
+	end
+end
 
 return Instance

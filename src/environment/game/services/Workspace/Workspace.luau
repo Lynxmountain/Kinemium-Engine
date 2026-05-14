@@ -200,7 +200,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local function addPart(part)
 		local pos = part.CFrame and part.CFrame.Position or part.Position
 		local cx, cy, cz = worldToChunk(pos)
-		local key = cx .. "," .. cy .. "," .. cz
+		local key = string.format("%d,%d,%d", cx, cy, cz)
 
 		local chunk = chunks[key]
 		if not chunk then
@@ -301,7 +301,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		local oldKey = rawget(part, "__workspaceChunkKey")
 		local pos = part.CFrame and part.CFrame.Position or part.Position
 		local cx, cy, cz = worldToChunk(pos)
-		local newKey = cx .. "," .. cy .. "," .. cz
+		local newKey = string.format("%d,%d,%d", cx, cy, cz)
 
 		if oldKey == newKey then
 			markChunkDirty(oldChunk, false)
@@ -582,14 +582,17 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		if loadedMaterials[materialName] then
 			return loadedMaterials[materialName]
 		end
-		if not availableMaterials[materialName] or availableMaterials[materialName].loading then
+
+		local mtl_info = availableMaterials[materialName]
+		if not mtl_info then
+			return nil
+		end
+		if mtl_info.loading then
 			return nil
 		end
 
-		zune.task.spawn(function()
-			local mtl_info = availableMaterials[materialName]
+		local function processLoad()
 			local material = mtl_info.material
-
 			mtl_info.loading = true
 
 			local function read(path): (buffer?, string?)
@@ -609,7 +612,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local data_albedo, data_albedo_ext = read(mtl_info.path.albedo)
 			local data_normal, data_normal_ext = read(mtl_info.path.normal)
 			local data_orm, data_orm_ext = read(mtl_info.path.orm)
-			-- local data_emission, data_emission_ext = read(path.emission)
 			iodebug(
 				string.format(
 					"Loaded custom material %s in %.3fms",
@@ -655,9 +657,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				mtsh_sh[materialName].Apply(material)
 			end
 
-			availableMaterials[materialName].loading = false
-
-			loadedMaterials[materialName] = availableMaterials[materialName]
+			mtl_info.loading = false
+			loadedMaterials[materialName] = mtl_info
 
 			iodebug(
 				string.format(
@@ -666,27 +667,51 @@ Workspace.InitRenderer = function(renderer, signal, game)
 					(os.clock() - materialProcessStart) * 1000
 				)
 			)
-		end)
+			return mtl_info
+		end
+
+		if sync then
+			return processLoad()
+		end
+
+		zune.task.spawn(processLoad)
 		return nil
 	end
 
-	local function getInstancedMaterial(materialName)
+	local function getInstancedMaterial(materialName, isOpaque)
 		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
 		if not matData then
 			return nil
 		end
-		return matData.material
+
+		local matKey = materialName .. (isOpaque and "_opaque" or "_transparent")
+		if not instancedMaterialCache[matKey] then
+			local materialBuffer = buffer.create(SIZE_MATERIAL)
+			buffer.copy(materialBuffer, 0, matData.material, 0, SIZE_MATERIAL)
+			buffer.writei32(
+				materialBuffer,
+				OFF_MATERIAL_TRANSPARENCY_MODE,
+				isOpaque and const.R3D_TRANSPARENCY_DISABLED or const.R3D_TRANSPARENCY_PREPASS
+			)
+			buffer.writei32(materialBuffer, OFF_MATERIAL_CULL_MODE, R3D_CULL_BACK)
+			instancedMaterialCache[matKey] = materialBuffer
+		end
+
+		return instancedMaterialCache[matKey]
 	end
 
+	local reusableCustomMatData = { material = nil }
 	local function queueSinglePartDraw(part, r3dAABB)
 		local isMeshPart = part:IsA("MeshPart")
 		local shapeName = part.Shape and part.Shape.Value
 		local materialName = part.Material and part.Material.Value
 
 		local mesh = nil
+		local customMaterial = nil
 		if isMeshPart then
 			if part.MeshObject and part.MeshObject._meshgenHandle then
 				mesh = part.MeshObject._meshgenHandle
+				customMaterial = part.MeshObject._materialHandle
 			end
 		elseif shapeName then
 			local meshData = preloadedMeshes and preloadedMeshes[shapeName]
@@ -695,11 +720,21 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 		end
 
-		if not mesh or not materialName then
+		if not mesh then
 			return
 		end
 
-		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+		local matData
+		if customMaterial then
+			reusableCustomMatData.material = customMaterial
+			matData = reusableCustomMatData
+		else
+			if not materialName then
+				return
+			end
+			matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+		end
+
 		if not matData then
 			return
 		end
@@ -995,18 +1030,10 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				if qw < 0 then
 					qx, qy, qz, qw = -qx, -qy, -qz, -qw
 				end
-				local f = math.floor
-				local key = f(pos.X * 10)
-					.. ","
-					.. f(pos.Y * 10)
-					.. ","
-					.. f(pos.Z * 10)
-					.. ","
-					.. f(sz.X * 10)
-					.. ","
-					.. f(sz.Y * 10)
-					.. ","
-					.. f(sz.Z * 10)
+			local f = math.floor
+				local key = string.format("%d,%d,%d,%d,%d,%d",
+					f(pos.X * 10), f(pos.Y * 10), f(pos.Z * 10),
+					f(sz.X * 10), f(sz.Y * 10), f(sz.Z * 10))
 				if globalSeenTransforms[key] then
 					rawset(part, "__workspaceDuplicate", true)
 					continue
@@ -1021,10 +1048,12 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 			local mesh = nil
 			local meshKey = ""
+			local customMaterial = nil
 			if isMeshPart then
 				local meshObject = part.MeshObject
 				if meshObject and meshObject._meshgenHandle then
 					mesh = meshObject._meshgenHandle
+					customMaterial = meshObject._materialHandle
 					-- Batch by the actual GPU mesh handle instead of per-object identity.
 					-- This lets repeated MeshParts that share the same uploaded mesh
 					-- collapse into one instanced batch even when their mesh objects
@@ -1039,9 +1068,16 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				end
 			end
 
-			local matData = materialName and loadedMaterials[materialName]
-				or loadMaterial(materialName)
-				or fallbackMaterial
+			local matData
+			if customMaterial then
+				reusableCustomMatData.material = customMaterial
+				matData = reusableCustomMatData
+				materialName = "__custom_" .. tostring(customMaterial)
+			else
+				matData = materialName and loadedMaterials[materialName]
+					or loadMaterial(materialName)
+					or fallbackMaterial
+			end
 
 			if not mesh or not matData then
 				continue
@@ -1053,13 +1089,30 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local canInstance = Workspace.UseGpuInstancing
 				and renderer.MeshPool.DrawMeshInstanced ~= nil
 				and not hasPerObjectShader
-				and isOpaque
 
 			if canInstance then
-				local key = meshKey .. "|" .. materialName
+				local key = meshKey .. "|" .. materialName .. "|" .. tostring(isOpaque)
 				local batch = chunk.batches[key]
 				if not batch then
-					local instancedMaterial = getInstancedMaterial(materialName)
+					local instancedMaterial = nil
+					if customMaterial then
+						local matKey = "custom_" .. tostring(customMaterial) .. (isOpaque and "_opaque" or "_transparent")
+						if not instancedMaterialCache[matKey] then
+							local materialBuffer = buffer.create(SIZE_MATERIAL)
+							buffer.copy(materialBuffer, 0, customMaterial, 0, SIZE_MATERIAL)
+							buffer.writei32(
+								materialBuffer,
+								OFF_MATERIAL_TRANSPARENCY_MODE,
+								isOpaque and const.R3D_TRANSPARENCY_DISABLED or const.R3D_TRANSPARENCY_PREPASS
+							)
+							buffer.writei32(materialBuffer, OFF_MATERIAL_CULL_MODE, R3D_CULL_BACK)
+							instancedMaterialCache[matKey] = materialBuffer
+						end
+						instancedMaterial = instancedMaterialCache[matKey]
+					else
+						instancedMaterial = getInstancedMaterial(materialName, isOpaque)
+					end
+
 					if not instancedMaterial then
 						rawset(part, "__materialDirty", true)
 						rawset(part, "__matrixDirty", true)

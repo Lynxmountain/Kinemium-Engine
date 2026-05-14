@@ -153,6 +153,10 @@ comps.projectCard = function(data)
 	return create("./objects/projectCard", data)
 end
 
+comps.engineUIContainer = function(data)
+	return create("./objects/engineUIContainer", data)
+end
+
 comps.hstack = function(data)
 	data.direction = "horizontal"
 	return create("./objects/stack", data)

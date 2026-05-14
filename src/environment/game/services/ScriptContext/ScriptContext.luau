@@ -69,14 +69,22 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 							requiredCache[target] = false
 
 							local source = target.Source
-							local success, result, id, thread
+							local success, result, id, thread, getResult
 							if source and type(source) == "string" then
-								id, success, result, thread = kilang:execute(source, { StackId = target.Name }, {
-									script = target,
-									src = target,
-									loader = scriptObject,
-									require = script_environment.require,
-								})
+								id, success, result, thread, getResult = kilang:execute(
+									source,
+									{ StackId = target.Name },
+									{
+										script = target,
+										src = target,
+										loader = scriptObject,
+										require = script_environment.require,
+									}
+								)
+							end
+
+							if getResult then
+								success, result = getResult()
 							end
 
 							if thread and result ~= nil then
@@ -111,7 +119,7 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 					-- add to thread table
 					activeThreads["Luau"][scriptObject.UniqueId] = thread
 
-					return thread
+					return thread, id, success, result
 				end,
 
 				killthread = function(uniqueId)
