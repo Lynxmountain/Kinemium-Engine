@@ -1,5 +1,5 @@
 -- devcell
-
+--[[
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local RunService = game:GetService("RunService")
 if RunService:IsServer() then
@@ -165,3 +165,4 @@ renderer.Pool.new("2d", function(data)
 	window.update(dt)
 	window.draw(dt, mainTheme.aereon)
 end)
+--]]
