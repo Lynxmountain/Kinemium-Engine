@@ -56,7 +56,7 @@ local defaultCode = [[return function(parent)
 	textLabel.Parent = frame
 
 	return frame
-end]]
+end
 
 box:setText(defaultCode)
 
