@@ -79,6 +79,16 @@ end
 
 _G.GetFlagShell = function(flag)
 	local args = zune.process.env
+
+	if args[flag] then
+		return args[flag]
+	end
+
+	local upperFlag = string.upper(flag)
+	if args[upperFlag] then
+		return args[upperFlag]
+	end
+
 	for i, v in ipairs(args) do
 		if v == "--" .. flag then
 			return args[i + 1]
@@ -341,7 +351,7 @@ game.EngineSignal:Connect(function(route)
 end)
 
 -- KILANG REPL
-if FlagExists("kilang") or IsServer then
+if FlagExists("kilang") then
 	require("./repl"):init(function(line)
 		task.spawn(function()
 			local _, success, result = kilang:execute(line, {

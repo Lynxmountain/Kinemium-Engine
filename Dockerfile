@@ -53,12 +53,14 @@ RUN rokit install --no-trust-check
 EXPOSE ${port}
 
 CMD ["/bin/bash", "-lc", "\
+    resolved_address=\"${address:-${ADDRESS:-0.0.0.0}}\" && \
+    resolved_port=\"${port:-${PORT:-7777}}\" && \
     if [ \"$USE_PLAYIT\" = \"true\" ] && [ -n \"$PLAYIT_SECRET\" ]; then \
     echo '[playit] Starting playit.gg tunnel...' && \
     playit --secret \"$PLAYIT_SECRET\" & \
     elif [ \"$USE_PLAYIT\" = \"true\" ] && [ -z \"$PLAYIT_SECRET\" ]; then \
     echo '[playit] USE_PLAYIT=true but PLAYIT_SECRET is not set, skipping.' ; \
     fi && \
-    echo '[engine] Starting Kinemium server...' && \
-    zune run game --server --headless --address \"$address\" --port \"$port\" \
+    echo \"[engine] Starting Kinemium server on ${resolved_address}:${resolved_port}...\" && \
+    zune run game --server --headless --address \"$resolved_address\" --port \"$resolved_port\" \
     "]

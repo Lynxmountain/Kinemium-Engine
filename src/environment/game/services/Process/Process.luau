@@ -65,6 +65,7 @@ Process.InitRenderer = function(renderer, renderer_signal)
 				"run",
 				"game",
 				"--server",
+				"--kilang",
 				"--port",
 				tostring(port),
 				"--address",
@@ -88,6 +89,7 @@ Process.InitRenderer = function(renderer, renderer_signal)
 				"run",
 				"game",
 				"--server",
+				"--kilang",
 				"--port",
 				tostring(port),
 				"--address",
@@ -105,6 +107,7 @@ Process.InitRenderer = function(renderer, renderer_signal)
 				"run",
 				"game",
 				"--server",
+				"--kilang",
 			}
 
 			if flags then
