@@ -77,7 +77,21 @@ _G.plug = function(lib)
 	return lib
 end
 
+_G.GetFlagShell = function(flag)
+	local args = zune.process.env
+	for i, v in ipairs(args) do
+		if v == "--" .. flag then
+			return args[i + 1]
+		end
+	end
+	return nil
+end
+
 _G.GetFlagValue = function(flag)
+	local shellValue = GetFlagShell(flag)
+	if shellValue then
+		return shellValue
+	end
 	local args = zune.process.args
 	for i, v in ipairs(args) do
 		if v == "--" .. flag then
