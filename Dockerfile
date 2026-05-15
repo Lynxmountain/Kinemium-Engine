@@ -35,10 +35,9 @@ RUN curl -fsSL https://raw.githubusercontent.com/CompeyDev/setup-rokit/main/inst
 # =========================
 # Install playit.gg (optional, only runs if USE_PLAYIT=true)
 # =========================
-RUN curl -SsL https://playit-cloud.github.io/ppa/key.gpg | gpg --dearmor | tee /etc/apt/trusted.gpg.d/playit.gpg >/dev/null \
-    && echo "deb [signed-by=/etc/apt/trusted.gpg.d/playit.gpg] https://playit-cloud.github.io/ppa/v0 . /" | tee /etc/apt/sources.list.d/playit-cloud.list \
-    && apt-get update && apt-get install -y playit \
-    && rm -rf /var/lib/apt/lists/*
+RUN curl -L -o playit https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-linux-amd64 \
+    && chmod +x playit \
+    && mv playit /usr/local/bin/playit
 
 # =========================
 # App setup
