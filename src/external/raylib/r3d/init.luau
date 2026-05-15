@@ -1,6 +1,42 @@
 --!strict
 --!optimize 2
 
+if _G.IsHeadless == true then
+	local function noop()
+		return 0
+	end
+
+	local mockStruct = {
+		new = function()
+			return buffer.create(0)
+		end,
+		offset = function()
+			return 0
+		end,
+		size = function()
+			return 0
+		end,
+	}
+
+	return {
+		lib = setmetatable({}, {
+			__index = function()
+				return noop
+			end,
+		}),
+		structs = setmetatable({}, {
+			__index = function()
+				return mockStruct
+			end,
+		}),
+		constants = setmetatable({}, {
+			__index = function()
+				return 0
+			end,
+		}),
+	}
+end
+
 local dll = "./src/external/raylib/native/bin/"
 local zembed = require("@zembed")
 if zembed.IsEmbedded() then

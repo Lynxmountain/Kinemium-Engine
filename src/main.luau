@@ -142,12 +142,6 @@ _G.printi = function(tbl)
 end
 
 -- DEPENDENCIES
-local Instance = require("@Instance")
-local Enum = require("@EnumMap")
-local kilang = require("@kilang")
-local task = zune.task
-local cam = require("@camera")
-
 -- DETERMINE ENGINE MODE
 _G.IsClient = false
 _G.IsServer = false
@@ -157,21 +151,37 @@ if FlagExists("client") then
 	_G.IsClient = true
 elseif FlagExists("server") then
 	_G.IsServer = true
-	log("Running engine in headless mode (Server).")
 end
 
-if FlagExists("headless") then
+if FlagExists("headless") or FlagExists("cli") or (_G.IsServer and not FlagExists("editor")) then
 	_G.IsHeadless = true
 end
 
 if FlagExists("cli") then
-	_G.IsHeadless = true
 	task.spawn(function()
 		task.wait(10)
 		iodebug("Ran CLI successfully")
 		zune.process.exit(0)
 	end)
 end
+
+if _G.IsServer then
+	if _G.IsHeadless then
+		log("Running engine in headless server mode.")
+	else
+		log("Running engine in graphical server mode.")
+	end
+elseif _G.IsClient then
+	log("Running engine in client mode.")
+elseif _G.IsHeadless then
+	log("Running engine in headless mode.")
+end
+
+local Instance = require("@Instance")
+local Enum = require("@EnumMap")
+local kilang = require("@kilang")
+local task = zune.task
+local cam = require("@camera")
 
 -- LOAD APPROPRIATE RENDERER
 local renderer
