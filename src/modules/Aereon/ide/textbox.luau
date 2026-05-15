@@ -1564,12 +1564,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		end
 
 		-- Draw current line highlight
-		raylib.BeginScissorMode(
-			math.floor(x),
-			math.floor(y),
-			math.floor(width),
-			math.floor(height - statusBarHeight)
-		)
+		raylib.BeginScissorMode(math.floor(x), math.floor(y), math.floor(width), math.floor(height - statusBarHeight))
 
 		if self.isFocused and self.multiline and self.lineHighlight then
 			local c = self.buffer.cursor
@@ -2605,6 +2600,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					self.buffer:deleteSelection()
 				end
 				local text = raylib.GetClipboardText()
+
 				local bufferLength = buffer.len(text:span())
 				local data = buffer.readstring(text:span(), 0, bufferLength - 1)
 				data = string.gsub(data, "\r\n", "\n")
