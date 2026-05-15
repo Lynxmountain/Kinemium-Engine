@@ -57,7 +57,7 @@ CMD ["/bin/bash", "-lc", "\
     resolved_port=\"${port:-${PORT:-7777}}\" && \
     if [ \"$USE_PLAYIT\" = \"true\" ] && [ -n \"$PLAYIT_SECRET\" ]; then \
     echo '[playit] Starting playit.gg tunnel...' && \
-    playit --secret \"$PLAYIT_SECRET\" --platform_docker & \
+    playit --stdout --secret \"$PLAYIT_SECRET\" --platform_docker & \
     elif [ \"$USE_PLAYIT\" = \"true\" ] && [ -z \"$PLAYIT_SECRET\" ]; then \
     echo '[playit] USE_PLAYIT=true but PLAYIT_SECRET is not set, skipping.' ; \
     fi && \
