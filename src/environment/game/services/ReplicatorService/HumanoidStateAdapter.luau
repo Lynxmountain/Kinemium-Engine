@@ -4,6 +4,27 @@ local Enum = require("@EnumMap")
 
 local HumanoidStateAdapter = {}
 
+local VELOCITY_QUANTIZATION = 8
+local FACING_QUANTIZATION = 64
+
+local function quantize(value, scale)
+	return math.round((value or 0) * scale) / scale
+end
+
+local function vectorToTable(value, scale)
+	if type(value) ~= "table" or type(value.X) ~= "number" then
+		return nil
+	end
+
+	return {
+		type = "Vector3",
+		__type = "Vector3",
+		X = quantize(value.X, scale),
+		Y = quantize(value.Y, scale),
+		Z = quantize(value.Z, scale),
+	}
+end
+
 local function vecEqual(a, b, threshold)
 	if a == nil and b == nil then
 		return true
@@ -33,8 +54,8 @@ function HumanoidStateAdapter.capture(humanoid)
 		state = humanoidState,
 		sprinting = humanoid.Sprinting == true,
 		crouching = humanoid.Crouching == true,
-		velocity = humanoid.MoveVelocity and humanoid.MoveVelocity:ToTable() or nil,
-		facingDir = humanoid.FacingDirection and humanoid.FacingDirection:ToTable() or nil,
+		velocity = vectorToTable(humanoid.MoveVelocity, VELOCITY_QUANTIZATION),
+		facingDir = vectorToTable(humanoid.FacingDirection, FACING_QUANTIZATION),
 	}
 end
 
@@ -82,7 +103,7 @@ function HumanoidStateAdapter.equals(a, b)
 	if not vecEqual(a.velocity, b.velocity, 0.25) then
 		return false
 	end
-	if not vecEqual(a.facingDir, b.facingDir, 0.001) then
+	if not vecEqual(a.facingDir, b.facingDir, 0.01) then
 		return false
 	end
 	return true

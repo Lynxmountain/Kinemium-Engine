@@ -8,6 +8,9 @@ local Vector3 = require("@Vector3")
 local Enum = require("@EnumMap")
 local InputActionService = require("../InputActionService/InputActionService")
 
+local OWNED_STATE_SEND_RATE = 15
+local NO_OWNED_STATE_LOG_INTERVAL_SECONDS = 10
+
 local function packArgs(...)
 	return table.pack(...)
 end
@@ -567,6 +570,49 @@ function Client.init(context)
 		return nil
 	end
 
+	local function detachCharacterModel(model)
+		if not model or model.ClassName ~= "Model" then
+			return
+		end
+
+		local playersService = game:GetService("Players")
+		local uid = model.GetAttribute and model:GetAttribute("__characterUserId")
+		local player = nil
+		if type(uid) == "number" then
+			player = playersService:GetPlayerByUserId(uid)
+		end
+		if not player then
+			player = playersService:GetPlayerByName(model.Name)
+		end
+
+		if player and player.Character == model then
+			if player.CharacterRemoving then
+				player.CharacterRemoving:Fire(model)
+			end
+			player.Character = nil
+		end
+	end
+
+	local function destroyCharacterModelsForPlayer(player)
+		local workspace = game:GetService("Workspace")
+		if not workspace or not player then
+			return
+		end
+
+		for _, child in ipairs(workspace:GetChildren()) do
+			if child.ClassName == "Model" and child.FindFirstChildOfClass then
+				local humanoid = child:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					local uid = child.GetAttribute and child:GetAttribute("__characterUserId")
+					if (type(uid) == "number" and uid == player.UserId) or child.Name == player.Name then
+						detachCharacterModel(child)
+						child:Destroy()
+					end
+				end
+			end
+		end
+	end
+
 	local function syncPlayerCharacterBindingForModel(model)
 		print(
 			`[Replicator][Client] syncCharBindingForModel: ${model and model.Name or "nil"} class=${model and model.ClassName or "?"}`
@@ -1120,7 +1166,9 @@ function Client.init(context)
 	end
 
 	local function shouldSendOwnedStates(tick, states)
-		if tick - lastOwnedStateSendTick < (1 / 20) then
+		local tickRate = tonumber(networkService.TickRate) or 30
+		local minTicksBetweenSends = math.max(1, math.ceil(tickRate / OWNED_STATE_SEND_RATE))
+		if tick - lastOwnedStateSendTick < minTicksBetweenSends then
 			return false
 		end
 
@@ -1224,6 +1272,11 @@ function Client.init(context)
 
 		local object = lookup[payload.object]
 		if object then
+			if object.ClassName == "Player" then
+				destroyCharacterModelsForPlayer(object)
+			elseif object.ClassName == "Model" then
+				detachCharacterModel(object)
+			end
 			lookup[payload.object] = nil
 			remoteTargets[payload.object] = nil
 			outboundOwnedPatchEntries[payload.object] = nil
@@ -1243,7 +1296,7 @@ function Client.init(context)
 		handleSnapshot(payload)
 		networkService:SendToServer(Protocol.Channels.Replication, Protocol.Kinds.SnapshotAck, {
 			tick = payload.tick,
-		}, true)
+		}, false)
 	end)
 
 	networkService:RegisterMessageHandler(
@@ -1441,7 +1494,7 @@ function Client.init(context)
 			if ownedStateSequence == 1 or ownedStateSequence % 30 == 0 then
 				print(`[Replicator][Client] Sending owned state batch: sequence={ownedStateSequence}, count={#states}`)
 			end
-		elseif tick - lastNoOwnedStateLogTick >= 60 then
+		elseif tick - lastNoOwnedStateLogTick >= (networkService.TickRate or 30) * NO_OWNED_STATE_LOG_INTERVAL_SECONDS then
 			lastNoOwnedStateLogTick = tick
 			print(`[Replicator][Client] No owned state objects for {localPlayer.Name} at tick {tick}`)
 		end

@@ -19,8 +19,9 @@ local INITIAL_INVENTORY_HANDSHAKE_TIMEOUT = 8
 local SNAPSHOT_MIN_SEND_INTERVAL_TICKS = 6
 local SNAPSHOT_IDLE_KEEPALIVE_TICKS = 0
 local SNAPSHOT_MAX_UNACKED_TICKS = 2
+local SNAPSHOT_BACKPRESSURE_RETRY_TICKS = 12
 local MAX_CREATE_PAYLOAD_BYTES = 32 * 1024
-local DEBUG_REPLICATION_TRACE = true
+local DEBUG_REPLICATION_TRACE = false
 
 local function packArgs(...)
 	return table.pack(...)
@@ -567,13 +568,38 @@ function Server.init(context)
 			and type(object:GetAttribute("__characterUserId")) == "number"
 	end
 
+	local function isCharacterEntity(object)
+		local current = object
+		while current do
+			if isCharacterModel(current) then
+				return true
+			end
+			if current.ClassName == "Workspace" or current.ClassName == "DataModel" then
+				return false
+			end
+			current = current.Parent
+		end
+
+		return false
+	end
+
+	local function listHasCharacterEntity(objects)
+		for _, object in ipairs(objects or {}) do
+			if isCharacterEntity(object) then
+				return true
+			end
+		end
+
+		return false
+	end
+
 	local function sendPatchEntries(recipient, entries)
 		if #entries == 0 then
 			return
 		end
 
-		for _, payload in ipairs(buildListPayloads("entries", entries, {}, MAX_PATCH_ENTRIES_PER_MESSAGE)) do
-			if recipient then
+		if recipient then
+			for _, payload in ipairs(buildListPayloads("entries", entries, {}, MAX_PATCH_ENTRIES_PER_MESSAGE)) do
 				networkService:SendToClient(
 					recipient,
 					Protocol.Channels.Replication,
@@ -581,35 +607,42 @@ function Server.init(context)
 					payload,
 					true
 				)
-			else
-				-- AoI-filtered broadcast: send each patch payload only to sessions
-				-- that are in range of at least one of the patched objects.
-				for _, session in ipairs(networkService:GetSessions()) do
-					local relevant = false
-					for _, entry in ipairs(payload.entries or {}) do
-						if
-							AreaOfInterest.ShouldReplicateNetId(
-								session,
-								entry.object,
-								lookup,
-								networkOwnership.GetWorldPosition,
-								networkOwnership
-							)
-						then
-							relevant = true
-							break
-						end
+			end
+			return
+		end
+
+		local sessions = networkService:GetSessions()
+		local entriesBySession = {}
+		for _, entry in ipairs(entries) do
+			for _, session in ipairs(sessions) do
+				if
+					AreaOfInterest.ShouldReplicateNetId(
+						session,
+						entry.object,
+						lookup,
+						networkOwnership.GetWorldPosition,
+						networkOwnership
+					)
+				then
+					local sessionEntries = entriesBySession[session]
+					if not sessionEntries then
+						sessionEntries = {}
+						entriesBySession[session] = sessionEntries
 					end
-					if relevant then
-						networkService:SendToClient(
-							session,
-							Protocol.Channels.Replication,
-							Protocol.Kinds.PatchBatch,
-							payload,
-							true
-						)
-					end
+					table.insert(sessionEntries, entry)
 				end
+			end
+		end
+
+		for session, sessionEntries in pairs(entriesBySession) do
+			for _, payload in ipairs(buildListPayloads("entries", sessionEntries, {}, MAX_PATCH_ENTRIES_PER_MESSAGE)) do
+				networkService:SendToClient(
+					session,
+					Protocol.Channels.Replication,
+					Protocol.Kinds.PatchBatch,
+					payload,
+					true
+				)
 			end
 		end
 	end
@@ -647,9 +680,10 @@ function Server.init(context)
 				-- this creation will be covered by that client's initial/inventory
 				-- sync.  Avoid serializing huge blobs into a reliable queue that
 				-- cannot help anyone yet.
+				local hasCharacterEntity = listHasCharacterEntity(batch)
 				relevantSessions = {}
 				for _, session in ipairs(networkService:GetSessions()) do
-					if isSessionEligibleForLiveCreate(session) then
+					if isSessionEligibleForLiveCreate(session) or hasCharacterEntity then
 						local inRange = false
 						for _, obj in ipairs(batch) do
 							if
@@ -813,10 +847,12 @@ function Server.init(context)
 			debugTrace(`sendCreate reason={reason or "unspecified"} recipient batching done`)
 		else
 			if not hasLiveCreateRecipients() then
-				debugTrace(
-					`sendCreate reason={reason or "unspecified"} broadcast skipped; no initial-sync-complete recipients`
-				)
-				return
+				if not listHasCharacterEntity(serializable) then
+					debugTrace(
+						`sendCreate reason={reason or "unspecified"} broadcast skipped; no initial-sync-complete recipients`
+					)
+					return
+				end
 			end
 
 			-- Runtime broadcast (new objects spawned during gameplay): use small
@@ -1896,7 +1932,11 @@ function Server.init(context)
 
 			local clientAckTick = session.lastSnapshotAckTick or 0
 			local lastSentTick = session.lastSentSnapshotTick or -1
-			if lastSentTick > clientAckTick + SNAPSHOT_MAX_UNACKED_TICKS then
+			local ticksSinceLastSent = tick - lastSentTick
+			if
+				lastSentTick > clientAckTick + SNAPSHOT_MAX_UNACKED_TICKS
+				and ticksSinceLastSent < SNAPSHOT_BACKPRESSURE_RETRY_TICKS
+			then
 				continue
 			end
 			local changedStates = {}
@@ -1941,7 +1981,6 @@ function Server.init(context)
 			end
 
 			local lastOwnedSequence = session.lastAppliedOwnedStateSequence or 0
-			local ticksSinceLastSent = tick - lastSentTick
 			local shouldSend = false
 			if numStates > 0 then
 				shouldSend = ticksSinceLastSent >= SNAPSHOT_MIN_SEND_INTERVAL_TICKS
