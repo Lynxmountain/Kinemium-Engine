@@ -21,6 +21,9 @@ local SNAPSHOT_IDLE_KEEPALIVE_TICKS = 0
 local SNAPSHOT_MAX_UNACKED_TICKS = 2
 local SNAPSHOT_BACKPRESSURE_RETRY_TICKS = 12
 local MAX_CREATE_PAYLOAD_BYTES = REPLICATION_TARGET_BYTES
+local CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT = 512
+local CREATE_PRE_SERIALIZE_ROOT_SPLIT_COUNT = 256
+local CREATE_PRE_SERIALIZE_MAX_ROOTS_PER_BATCH = 16
 local CREATE_BACKPRESSURE_PENDING_LIMIT = 24
 local CREATE_BACKPRESSURE_FRAGMENT_LIMIT = 512
 local CREATE_BACKPRESSURE_LOG_INTERVAL_SECONDS = 10
@@ -711,11 +714,93 @@ function Server.init(context)
 		local totalBackpressureSeconds = 0
 		local largestPayloadBytes = 0
 		local largestPayloadRoots = ""
+		local treeCountCache = setmetatable({}, { __mode = "k" })
 		local pendingBatches = {}
 
 		local function queueBatch(batch)
+			if #batch == 0 then
+				return
+			end
 			batchesQueued += 1
 			table.insert(pendingBatches, batch)
+		end
+
+		local function getTreeCount(object)
+			if not object then
+				return 0
+			end
+			local cached = treeCountCache[object]
+			if cached ~= nil then
+				return cached
+			end
+			local count = countTreeObjects(object)
+			treeCountCache[object] = count
+			return count
+		end
+
+		local function collectReplicatedChildren(root)
+			local children = {}
+			for _, child in ipairs(root and root:GetChildren() or {}) do
+				if child.CanReplicate ~= false and child.NetworkId ~= nil then
+					table.insert(children, child)
+				end
+			end
+			return children
+		end
+
+		local function queueBalancedBatches(objects)
+			local batch = {}
+			local batchTreeCount = 0
+			for _, object in ipairs(objects) do
+				local treeCount = getTreeCount(object)
+				if #batch > 0 and (#batch >= CREATE_PRE_SERIALIZE_MAX_ROOTS_PER_BATCH or batchTreeCount + treeCount > CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT) then
+					queueBatch(batch)
+					batch = {}
+					batchTreeCount = 0
+				end
+				table.insert(batch, object)
+				batchTreeCount += treeCount
+			end
+			queueBatch(batch)
+		end
+
+		local function preSplitBatch(batch)
+			local totalTreeCount = 0
+			local passthrough = {}
+			local didSplit = false
+
+			for _, object in ipairs(batch) do
+				local treeCount = getTreeCount(object)
+				totalTreeCount += treeCount
+
+				if treeCount > CREATE_PRE_SERIALIZE_ROOT_SPLIT_COUNT and not isCharacterModel(object) then
+					local children = collectReplicatedChildren(object)
+					if #children > 0 then
+						didSplit = true
+						batchesSplit += 1
+						logReplicationDiagnostic(`sendBatch pre-split-root reason={reasonLabel} root={describeObject(object)} tree={treeCount} children={#children}`)
+						queueBalancedBatches(children)
+					else
+						table.insert(passthrough, object)
+					end
+				else
+					table.insert(passthrough, object)
+				end
+			end
+
+			if didSplit then
+				queueBalancedBatches(passthrough)
+				return true
+			end
+
+			if #batch > 1 and totalTreeCount > CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT then
+				batchesSplit += 1
+				logReplicationDiagnostic(`sendBatch pre-split-batch reason={reasonLabel} roots={#batch} tree={totalTreeCount} limit={CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT}`)
+				queueBalancedBatches(batch)
+				return true
+			end
+
+			return false
 		end
 
 		local function waitForCreateBackpressure(sessions)
@@ -770,6 +855,10 @@ function Server.init(context)
 
 		local function sendBatch(batch)
 			if #batch == 0 then
+				return
+			end
+
+			if preSplitBatch(batch) then
 				return
 			end
 
