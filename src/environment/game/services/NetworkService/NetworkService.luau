@@ -395,12 +395,18 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		bindTickLoop(datamodel:GetService("RunService"))
 
 		local function sendToClient(recipient, channel, kind, payload, reliable)
+			-- Force Create messages to be unreliable to prevent blocking reliable traffic (chat, input, remotes)
+			local actualReliable = reliable
+			if channel == Protocol.Channels.Replication and kind == Protocol.Kinds.Create then
+				actualReliable = false
+			end
+
 			sendEnvelope(function(client, envelope, shouldBeReliable)
 				if KiNet.Server.IsClientConnected and not KiNet.Server:IsClientConnected(client) then
 					return false
 				end
 				return KiNet.Server:Send(client, envelope, shouldBeReliable)
-			end, recipient, channel, kind, payload, reliable)
+			end, recipient, channel, kind, payload, actualReliable)
 		end
 
 		local function broadcast(channel, kind, payload, reliable)
@@ -425,12 +431,18 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end
 
 		local function sendToServer(channel, kind, payload, reliable)
+			-- Force Create messages to be unreliable to prevent blocking reliable traffic
+			local actualReliable = reliable
+			if channel == Protocol.Channels.Replication and kind == Protocol.Kinds.Create then
+				actualReliable = false
+			end
+
 			if not NetworkService.IsClientConnected or not KiNet.Client.Socket then
 				return
 			end
 			sendEnvelope(function(envelope, shouldBeReliable)
 				return KiNet.Client:Send(envelope, shouldBeReliable)
-			end, nil, channel, kind, payload, reliable)
+			end, nil, channel, kind, payload, actualReliable)
 		end
 
 		function NetworkService:StartServer(address, port, allowedTokens)
