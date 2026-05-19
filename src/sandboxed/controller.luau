@@ -18,7 +18,7 @@ local CAM_ZOOM_MIN = 0.1
 local CAM_ZOOM_MAX = 50
 local CAM_ZOOM_MUL = 1.15
 local CAM_LERP = 10
-local CAM_SENS_FP = 0.005
+local CAM_SENS_FP = 0.35
 
 local ZERO = Vector3.new(0, 0, 0)
 
@@ -193,7 +193,6 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 
 	local isFirstPerson = zoomDist <= 0.5
-	local camRot = CFrame.fromEulerAnglesYXZ(yaw, pitch, 0)
 	local rmb = UserInputService:IsMouseButtonDown(Enum.MouseButton.Right)
 
 	local sens = isFirstPerson and CAM_SENS_FP or CAM_SENS
@@ -206,6 +205,8 @@ RunService.RenderStepped:Connect(function(dt)
 		setCursorDisabled(false)
 		flushDelta()
 	end
+
+	local camRot = CFrame.fromEulerAnglesYXZ(yaw, pitch, 0)
 
 	if isFirstPerson then
 		local firstPersonPos = head.CFrame.Position
@@ -239,17 +240,16 @@ RunService.RenderStepped:Connect(function(dt)
 			end
 		end
 
+		for _, part in pairs(character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Transparency = 0
+			end
+		end
+
 		camera.CFrame = CFrame.new(finalCamPos, focusPos)
 
 		humanoid.TurnSpeed = 18
 		humanoid:ClearFacingDirection()
-	end
-
-	if isFirstPerson or rmb then
-		yaw = yaw - math.rad(delta.X * CAM_SENS)
-		pitch = math.clamp(pitch - math.rad(delta.Y * CAM_SENS), math.rad(CAM_MIN_Y), math.rad(CAM_MAX_Y))
-	else
-		flushDelta()
 	end
 
 	local moveInput = ZERO

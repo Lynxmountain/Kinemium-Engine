@@ -71,9 +71,19 @@ for i, v in pairs(EnumMap) do
 end
 
 for i, v in pairs(Registry.getClasses()) do
+	local super = "Instance"
+	if v.inherit then
+		local dummy = {}
+		pcall(v.inherit, dummy)
+		if dummy.BaseClass then
+			super = dummy.BaseClass
+		end
+	end
+
 	table.insert(api[1].items[1].children, {
 		name = i,
 		type = "class",
+		super = super,
 		description = "No one shall be subjected to arbitrary arrest, detention or exile. Everyone is entitled in full equality to a fair\n and public hearing by an independent and impartial tribunal, in the determination of his rights and obligations\n and of any criminal charge against him. No one shall be subjected to arbitrary interference with his privacy, family, home or correspondence, nor to attacks upon his honour and reputation. Everyone has the right to the protection of the law against such interference or attacks.",
 	})
 end

@@ -1,4 +1,4 @@
-local Vector2 = {}
+local Vector2 = { __type = "Vector2" }
 Vector2.__index = Vector2
 
 function Vector2.new(x, y)

@@ -1,3 +1,8 @@
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 local MouseCursor = require("@Kinemium.MouseCursor")
@@ -13,7 +18,9 @@ local StudioThemeService = game:GetService("StudioThemeService")
 local ProjectLoaderService = game:GetService("ProjectLoaderService")
 local FileDialogService = game:GetService("FileDialogService")
 local ProjectSyncService = game:GetService("ProjectSyncService")
+local RBXModelImporter = game:GetService("RBXModelImporter")
 local project_prompt_active = false
+local current_place_imported = nil
 
 local fs = Filesystem
 
@@ -36,7 +43,11 @@ local addIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Add"))
 local textbox = aereon.textbox(StudioThemeService.SelectedTheme, game)
 local gameiconPath
 
-local scrollY = 0
+local projectSearchBox
+local projectFilterDropdown
+local projectSearchText = ""
+local projectFilter = "All"
+local projectEntries = {}
 
 KinemiumIconLoader.new("Folder", "./src/assets/images/icons/Folder.png")
 KinemiumIconLoader.new("Project", "./src/assets/images/icons/DataModel.png")
@@ -46,13 +57,45 @@ local folderIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Folder")
 local projectIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Project"))
 local pathIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Path"))
 
-local logoPath = "./src/assets/images/kinemium/KinemiumWhite.png"
-
 local projects = ProjectLoaderService.GetProjects() or {}
 
-local itemSlots = {}
 local generated_card_projects = {}
-local base_y = 150
+
+local function applyProjectFilter()
+	local query = string.lower(projectSearchText or "")
+	local now = os.time()
+	for _, entry in ipairs(projectEntries) do
+		local projectData = entry.project
+		local name = string.lower(projectData.name or "")
+		local path = string.lower(projectData.path or "")
+		local matchesSearch = query == "" or string.find(name, query, 1, true) or string.find(path, query, 1, true)
+		local isRecent = projectData.last_opened and (now - projectData.last_opened) <= (7 * 24 * 60 * 60)
+		local matchesFilter = true
+		if projectFilter == "Recent" then
+			matchesFilter = isRecent
+		elseif projectFilter == "Older" then
+			matchesFilter = not isRecent
+		end
+		entry.card.set("visible", matchesSearch and matchesFilter)
+	end
+end
+
+local cardStack = gui.vstack({
+	spacing = 10,
+	padding = 0,
+	autoSize = true,
+	backgroundColor = Color3.new(0, 0, 0),
+	backgroundTransparency = 1,
+})
+
+local scrollArea = gui.scrollable({
+	child = cardStack,
+	scrollbarWidth = 8,
+	scrollbarColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+	scrollbarHoverColor = StudioThemeService.SelectedTheme.Accent,
+	scrollbarBackground = StudioThemeService.SelectedTheme.ThirdBackgroundColor,
+	scrollbarBackgroundTransparency = 0.7,
+})
 
 local function generateProjectCards()
 	projects = ProjectLoaderService.GetProjects() or {}
@@ -78,7 +121,7 @@ local function generateProjectCards()
 		local card = gui.projectCard({
 			comp = "projectCard",
 			x = 0,
-			y = base_y, -- use base_y for initial placement
+			y = 0,
 			width = screenx - 135,
 			title = projectData.name,
 			subtext = "Edited on " .. os.date("%Y-%m-%d %H:%M:%S", projectData.last_opened),
@@ -100,9 +143,8 @@ local function generateProjectCards()
 			end,
 		})
 
-		table.insert(itemSlots, card)
-
-		base_y = base_y + 90 -- move down for next card
+		cardStack.add(card)
+		table.insert(projectEntries, { project = projectData, card = card })
 	end
 end
 
@@ -195,6 +237,7 @@ group = aereon.create({
 					renderer:SetDimension("3D")
 
 					generateProjectCards()
+					applyProjectFilter()
 				end,
 			},
 		},
@@ -208,6 +251,52 @@ group = aereon.create({
 
 			-- Draw logo background
 			raylib.lib.DrawRectangleRounded(rect:translate(logoRect), 0.1, 12, logoBg)
+
+			-- Import button (stub)
+			if not group.importButton then
+				group.importButton = gui.imageTextButton({
+					text = "Import RBXL/RBXLX",
+					icon = folderIcon,
+					font = vend,
+					fontSize = 14,
+					backgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+					hoverColor = StudioThemeService.SelectedTheme.ThirdBackgroundColor,
+					pressColor = StudioThemeService.SelectedTheme.Accent,
+					textColor = StudioThemeService.SelectedTheme.TextColor,
+					rounded = { 0.2, 6 },
+					onClick = function()
+						local file = FileDialogService.RequestFile({
+                            { name = "Place file", extensions = { "rbxl", "rbxlx" } },
+                        })
+
+						if file then
+							current_place_imported = file
+
+							local converted = RBXModelImporter.ImportPlaceFile(file)
+
+							-- expected structure:
+							-- { Service = {children = raw}}
+							if converted then
+								for service, children in pairs(converted) do
+									local service_object = game:GetService(service)
+									if service_object then
+										for _, child in pairs(children) do
+											if child then
+												child.Parent = service_object
+											end
+										end
+									end
+								end
+							end
+						end
+					end,
+				})
+			end
+			local importW, importH = 240, 28
+			local importX = x + 10
+			local importY = y + height - importH - 10
+			group.importButton.set("obj_rect", arect.new(importX, importY, importW, importH))
+			group.importButton.render(dt)
 
 			local iconRectSource = rect.new(0, 0, logoIcon.x, logoIcon.y)
 			local iconPadding = 20
@@ -324,6 +413,7 @@ repeat
 until ishared.Home
 
 generateProjectCards()
+applyProjectFilter()
 
 ishared.Home.pages["Projects"] = function(dt, alpha, slideOffset)
 	local fade = function(col, a)
@@ -336,18 +426,12 @@ ishared.Home.pages["Projects"] = function(dt, alpha, slideOffset)
 
 	screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 
-	-- Handle scrolling
-	local wheel = lib.GetMouseWheelMove()
-	if wheel ~= 0 then
-		scrollY = scrollY - wheel * 40
-		if scrollY < 0 then
-			scrollY = 0
-		end
-	end
-
 	local startX = 100
 	local headerY = 80 + slideOffset
-	local headerDesc = 120 + slideOffset
+	local controlsY = headerY + 90
+	local searchHeight = 32
+	local dropdownWidth = 180
+	local gap = 12
 
 	group.addButton.set("obj_rect", arect.new(screenx - 50, 110 + slideOffset, 30, 30))
 	group.newProjectPrompt.set("obj_rect", arect.new(0, 0, 600, 250))
@@ -372,20 +456,66 @@ ishared.Home.pages["Projects"] = function(dt, alpha, slideOffset)
 		)
 	end
 
-	-- render each card
-	local currentY = 170 - scrollY + slideOffset
-	for i, card in ipairs(itemSlots) do
-		card.set("obj_rect", arect.new(100, currentY, screenx - 115, 80))
-		card.set("backgroundTransparency", 1 - alpha)
-		card.render(dt)
-		currentY = currentY + 90
+	-- Search + Filter
+	if not projectSearchBox then
+		projectSearchBox = textbox.new({
+			padding = 8,
+			backgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+			textColor = StudioThemeService.SelectedTheme.TextColor,
+			placeholderColor = StudioThemeService.SelectedTheme.SecondaryTextColor,
+			cornerRadius = 0.2,
+			BackgroundTransparency = 0,
+			BorderTransparency = 1,
+			placeholder = "Search projects...",
+			fontSize = 14,
+			escapeBlurs = false,
+			blurOnSubmit = false,
+			onChange = function(text)
+				projectSearchText = text or ""
+				applyProjectFilter()
+			end,
+		})
 	end
 
-	local contentHeight = #itemSlots * 90 + 150
-	local maxScroll = math.max(0, contentHeight - screeny + 100)
-	if scrollY > maxScroll then
-		scrollY = maxScroll
+	local searchWidth = screenx - 170 - dropdownWidth - gap
+	projectSearchBox:drawWithExtras(startX, controlsY + slideOffset, searchWidth, searchHeight)
+	local currentSearch = projectSearchBox:getText() or ""
+	if currentSearch ~= projectSearchText then
+		projectSearchText = currentSearch
+		applyProjectFilter()
 	end
+
+	if not projectFilterDropdown then
+		projectFilterDropdown = gui.dropdown({
+			x = startX + searchWidth + gap,
+			y = controlsY + slideOffset,
+			width = dropdownWidth,
+			height = searchHeight,
+			options = { "All", "Recent", "Older" },
+			font = vend,
+			selectedIndex = 1,
+			backgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+			hoverColor = StudioThemeService.SelectedTheme.ThirdBackgroundColor,
+			textColor = StudioThemeService.SelectedTheme.TextColor,
+			borderTransparency = 1,
+			onSelect = function(index, value)
+				projectFilter = value or "All"
+				applyProjectFilter()
+			end,
+		})
+	end
+	projectFilterDropdown.set(
+		"obj_rect",
+		arect.new(startX + searchWidth + gap, controlsY + slideOffset, dropdownWidth, searchHeight)
+	)
+
+	-- Render scroll area
+	local scrollY = controlsY + searchHeight + 16 + slideOffset
+	scrollArea.set("obj_rect", arect.new(100, scrollY, screenx - 170, screeny - (scrollY + 50)))
+	cardStack.set("width", screenx - 180) -- Adjust stack width for scrollbar
+	scrollArea.render(dt)
+
+	projectFilterDropdown.render(dt)
 
 	group.newProjectPrompt.render(dt)
 end

@@ -31,9 +31,9 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 					size = UDim2.new(1, 0, 0, 170),
 				},
 				CodeEditor = {
-					position = UDim2.new(0, 20, 0, 220),
+					position = UDim2.new(0, 20, 0, 40),
 					anchorPoint = Vector2.new(0, 0),
-					size = UDim2.new(1, -420, 0.73, -20),
+					size = UDim2.new(0, 800, 0, 600),
 				},
 			},
 			TextColor = Color3.new(1, 1, 1),
@@ -52,12 +52,12 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			Accent = Color3.new(1, 1, 1),
 			AccentTransparency = 0,
 			WindowBackgroundColor = Color3.new(0, 0, 0),
-			WindowBackgroundTransparency = 0.05,
+			WindowBackgroundTransparency = 0.15,
 			TitleTextSize = 16,
 			WindowTitleHeight = 29,
 			ShadowsEnabled = true,
 			ShadowTransparency = 0.98,
-			CornerRadius = 15,
+			CornerRadius = 5,
 			ShadowColor = Color3.new(0, 0, 0),
 			ArrowImageColor = Color3.new(1, 1, 1),
 			TitleColor = Color3.new(1, 1, 1),
@@ -65,7 +65,7 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			aereon = {
 				window = {
 					BackgroundColor = Color3.new(0, 0, 0),
-					BackgroundTransparency = 1,
+					BackgroundTransparency = 0.15,
 					TextColor = Color3.new(1, 1, 1),
 					SecondaryBackgroundColor = Color3.new(0.05, 0.05, 0.05),
 					DragColor = Color3.new(0.02, 0.5, 1),
@@ -74,7 +74,7 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 					TitleTextSize = 16,
 					TitleColor = Color3.new(1, 1, 1),
 					TitleHeight = 29,
-					ShadowsEnabled = true,
+					ShadowsEnabled = false,
 					ShadowTransparency = 0.98,
 					ShadowColor = Color3.new(0, 0, 0),
 				},
@@ -121,7 +121,6 @@ StudioThemeService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		themes = themes,
 		SelectedTheme = themes.dark,
 	})
-
 end
 
 return StudioThemeService

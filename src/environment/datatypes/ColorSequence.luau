@@ -1,7 +1,7 @@
 local Color3 = require("@Color3")
 local ColorSequenceKeypoint = require("@ColorSequenceKeypoint")
 
-local ColorSequence = {}
+local ColorSequence = { __type = "ColorSequence" }
 ColorSequence.__index = ColorSequence
 
 function ColorSequence.new(keypoints)

@@ -15,7 +15,7 @@ return function(objects, data)
 		h = 0,
 		s = 1,
 		v = 1,
-		a = 1,
+		a = 0,
 		dragging = nil, -- "sv", "hue", "alpha"
 		onChanged = data.onChanged,
 		rounded = data.rounded or { 0.08, 8 },
@@ -63,6 +63,16 @@ return function(objects, data)
 		end
 		config[prop] = value
 		return wrapper
+	end
+
+	wrapper.setColor = function(col)
+		local h, s, v = col:ToHSV()
+
+		config.h = h
+		config.s = s
+		config.v = v
+
+		updateColor()
 	end
 
 	wrapper.getColor = function()

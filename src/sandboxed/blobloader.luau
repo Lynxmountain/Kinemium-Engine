@@ -3,6 +3,9 @@ local BlobLoader = game:GetService("BlobLoader")
 local flagValue = GetFlagValue("blob")
 
 if flagValue then
+	if BlobLoader.MarkBlobLoadingPending then
+		BlobLoader:MarkBlobLoadingPending()
+	end
 	task.spawn(function()
 		print("Loading blob from", flagValue)
 		local ok, read = pcall(Filesystem.readFile, flagValue, true)

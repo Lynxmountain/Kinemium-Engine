@@ -660,9 +660,9 @@ local funcs = {
 	R3D_GenMeshDataNormals = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_GenMeshDataTangents = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_CalculateMeshDataBoundingBox = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	R3D_LoadModel = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	R3D_LoadModel = { returns = structs.R3D_Model, args = { ffi.types.pointer } },
 	R3D_LoadModelFromMemory = {
-		returns = ffi.types.pointer,
+		returns = structs.R3D_Model,
 		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer },
 	},
 	R3D_UnloadModel = { returns = ffi.types.void, args = { ffi.types.pointer, ffi.types.u8 } },
@@ -746,7 +746,7 @@ local funcs = {
 	},
 	R3D_LoadMaterialsFromImporter = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.pointer } },
 
-	R3D_LoadModelEx = { returns = ffi.types.pointer, args = { ffi.types.pointer, ffi.types.u32 } },
+	R3D_LoadModelEx = { returns = structs.R3D_Model, args = { ffi.types.pointer, ffi.types.u32 } },
 	R3D_LoadModelFromMemoryEx = {
 		returns = ffi.types.pointer,
 		args = { ffi.types.pointer, ffi.types.u32, ffi.types.pointer, ffi.types.u32 },
@@ -779,7 +779,7 @@ local funcs = {
 	},
 
 	R3D_LoadSurfaceShader = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
-	R3D_LoadSurfaceShaderFromMemory = { returns = ffi.types.pointer, args = { ffi.types.pointer } },
+	R3D_LoadSurfaceShaderFromMemory = { returns = structs.R3D_SurfaceShader, args = { ffi.types.pointer } },
 	R3D_UnloadSurfaceShader = { returns = ffi.types.void, args = { ffi.types.pointer } },
 	R3D_SetSurfaceShaderUniform = {
 		returns = ffi.types.void,

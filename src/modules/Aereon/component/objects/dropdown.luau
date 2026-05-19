@@ -22,6 +22,8 @@ return function(objects, data)
 		secondaryTextColor = data.secondaryTextColor or color3.new(0.7, 0.7, 0.75),
 		fontSize = data.fontSize or 16,
 		spacing = data.spacing or 1,
+		backgroundTransparency = data.backgroundTransparency or 0,
+		borderTransparency = data.borderTransparency or 0,
 		onSelect = data.onSelect,
 		animProgress = 0,
 	}
@@ -68,7 +70,12 @@ return function(objects, data)
 			config.animProgress = math.max(config.animProgress - dt * 8, 0)
 		end
 
-		raylib.lib.DrawRectangleRounded(rect:translate(r), 0.15, 10, config.borderColor:ToRaylib(0))
+		raylib.lib.DrawRectangleRounded(
+			rect:translate(r),
+			0.15,
+			10,
+			config.borderColor:ToRaylib(config.borderTransparency)
+		)
 		raylib.lib.DrawRectangleRounded(
 			structs.Rectangle:new({
 				x = r.x + 1,
@@ -78,7 +85,7 @@ return function(objects, data)
 			}),
 			0.15,
 			10,
-			config.backgroundColor:ToRaylib(0)
+			config.backgroundColor:ToRaylib(config.backgroundTransparency)
 		)
 
 		if rect.MouseIsInRect(r) and not config.expanded then

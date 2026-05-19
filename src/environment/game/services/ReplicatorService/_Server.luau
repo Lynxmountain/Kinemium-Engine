@@ -1,6 +1,6 @@
 local Server = {}
 
-local KiNet = require("@KiNet")
+local GNS = require("@GNS")
 local Protocol = require("../NetworkService/Protocol")
 local Shared = require("./Shared")
 local OwnedStateAntiCheat = require("./OwnedStateAntiCheat")
@@ -8,18 +8,30 @@ local PredictionBuffer = require("./PredictionBuffer")
 local CFrame = require("@CFrame")
 local InputActionService = require("../InputActionService/InputActionService")
 local AreaOfInterest = require("./AreaOfInterest")
+local Enum = require("@EnumMap")
 
 local MAX_TERRAIN_RELIABLE_MESSAGES_PER_TICK = 10
 local OWNERSHIP_REBALANCE_INTERVAL = 0.2
-local REPLICATION_TARGET_BYTES = 50 * 1024
+local REPLICATION_TARGET_BYTES = 384 * 1024 -- keep reliable Create messages small so gameplay remotes are not starved
 local MAX_PATCH_ENTRIES_PER_MESSAGE = 96
 local MAX_SNAPSHOT_STATES_PER_MESSAGE = 16
 local INITIAL_INVENTORY_HANDSHAKE_TIMEOUT = 8
 local SNAPSHOT_MIN_SEND_INTERVAL_TICKS = 6
 local SNAPSHOT_IDLE_KEEPALIVE_TICKS = 0
 local SNAPSHOT_MAX_UNACKED_TICKS = 2
-local MAX_CREATE_PAYLOAD_BYTES = 32 * 1024
-local DEBUG_REPLICATION_TRACE = true
+local SNAPSHOT_BACKPRESSURE_RETRY_TICKS = 12
+local MAX_CREATE_PAYLOAD_BYTES = REPLICATION_TARGET_BYTES
+local CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT = 192
+local CREATE_PRE_SERIALIZE_ROOT_SPLIT_COUNT = 96
+local CREATE_PRE_SERIALIZE_MAX_ROOTS_PER_BATCH = 8
+local CREATE_INTER_BATCH_YIELD_SECONDS = 0.03
+local CREATE_BACKPRESSURE_PENDING_LIMIT = 8
+local CREATE_BACKPRESSURE_FRAGMENT_LIMIT = 128
+local CREATE_BACKPRESSURE_LOG_INTERVAL_SECONDS = 10
+local DEBUG_REPLICATION_TRACE = false
+local REPLICATION_DIAGNOSTICS = true
+local SLOW_TICK_DIAGNOSTIC_SECONDS = 0.05
+local INITIAL_ROOT_DETAIL_LIMIT = 40
 
 local function packArgs(...)
 	return table.pack(...)
@@ -29,7 +41,7 @@ function Server.init(context)
 	local game = context.game
 	local serializationService = context.SerializationService
 	local networkService = context.NetworkService
-	local transportSerializer = KiNet.Serializer
+	local transportSerializer = GNS.Serializer
 	local stateRegistry = context.StateRegistry
 	local networkOwnership = context.NetworkOwnership
 	local userdata = serializationService.userdata
@@ -37,7 +49,7 @@ function Server.init(context)
 
 	-- Register custom serializer adapters with error handling
 	local ok, SerializerAdapters = pcall(function()
-		return KiNet.SerializerAdapters
+		return GNS.SerializerAdapters
 	end)
 	if ok and SerializerAdapters and SerializerAdapters.EnsureRegistered then
 		SerializerAdapters.EnsureRegistered()
@@ -76,6 +88,32 @@ function Server.init(context)
 	local initialSyncCompleted = {}
 
 	local readySessions = {}
+
+	local function isRuntimeCreateSuppressed()
+		if game.GetMetadata == nil then
+			return false
+		end
+
+		return (game:GetMetadata("__replicatorSuppressRuntimeCreate") or 0) > 0
+	end
+
+	local function isSessionEligibleForLiveCreate(session)
+		if not session or not session.key then
+			return false
+		end
+
+		return initialSyncCompleted[session.key] == true
+	end
+
+	local function hasLiveCreateRecipients()
+		for _, session in ipairs(networkService:GetSessions()) do
+			if isSessionEligibleForLiveCreate(session) then
+				return true
+			end
+		end
+
+		return false
+	end
 
 	local function isHumanoidRootObject(object)
 		if type(object) ~= "table" then
@@ -307,6 +345,9 @@ function Server.init(context)
 
 	local function assignNetworkId(object)
 		if object.NetworkId ~= nil then
+			if type(object.NetworkId) == "number" and object.NetworkId >= nextNetId then
+				nextNetId = object.NetworkId + 1
+			end
 			return
 		end
 
@@ -334,6 +375,33 @@ function Server.init(context)
 		callback(root)
 		for _, descendant in ipairs(root:GetDescendants()) do
 			callback(descendant)
+		end
+	end
+
+	local function formatSeconds(seconds)
+		return string.format("%.3f", seconds or 0)
+	end
+
+	local function describeObject(object)
+		if not object then
+			return "nil"
+		end
+
+		return `{object.ClassName or "?"}:{object.Name or "?"}#{object.NetworkId or "?"}`
+	end
+
+	local function countTreeObjects(root)
+		if not root then
+			return 0
+		end
+
+		local descendants = root:GetDescendants()
+		return #descendants + 1
+	end
+
+	local function logReplicationDiagnostic(message)
+		if REPLICATION_DIAGNOSTICS then
+			print(`[Replicator][Server][Diag] {message}`)
 		end
 	end
 
@@ -446,13 +514,31 @@ function Server.init(context)
 	end
 
 	local function serializeObjects(objects)
+		local startedAt = os.clock()
+		local stampStartedAt = startedAt
 		local stamped = {}
+		local stampedCount = 0
+		local rootSummary = {}
+
+		for index, object in ipairs(objects) do
+			if index <= 12 then
+				table.insert(rootSummary, `{describeObject(object)} tree={countTreeObjects(object)}`)
+			end
+		end
+		if #objects > 12 then
+			table.insert(rootSummary, `...+{#objects - 12} more roots`)
+		end
+		logReplicationDiagnostic(`serializeObjects begin roots={#objects} [{table.concat(rootSummary, ", ")}]`)
 
 		local function stamp(object)
 			if stamped[object] then
 				return
 			end
-			stamped[object] = true
+			stamped[object] = {
+				NetworkId = object._props.NetworkId,
+				_parentID = object._props._parentID,
+			}
+			stampedCount += 1
 			object._props.NetworkId = object.NetworkId
 			object._props._parentID = object.Parent and object.Parent.NetworkId
 		end
@@ -460,19 +546,26 @@ function Server.init(context)
 		for _, object in ipairs(objects) do
 			visitTree(object, stamp)
 		end
+		local stampSeconds = os.clock() - stampStartedAt
+		logReplicationDiagnostic(`serializeObjects stamped={stampedCount} stampSeconds={formatSeconds(stampSeconds)}`)
 
 		-- Always restore _props even when serialization throws.
+		local serializeStartedAt = os.clock()
 		local ok, result = pcall(serializationService.SerializeInstancesAsync, objects)
+		local serializeSeconds = os.clock() - serializeStartedAt
 
-		for object in pairs(stamped) do
-			object._props.NetworkId = nil
-			object._props._parentID = nil
+		for object, previous in pairs(stamped) do
+			object._props.NetworkId = previous.NetworkId
+			object._props._parentID = previous._parentID
 		end
 
 		if not ok then
-			warn(`[Replicator][Server] serializeObjects failed: {result}`)
+			warn(`[Replicator][Server] serializeObjects failed after {formatSeconds(serializeSeconds)}s: {result}`)
 			return nil
 		end
+
+		local payloadBytes = buffer.len(result)
+		logReplicationDiagnostic(`serializeObjects done roots={#objects} stamped={stampedCount} bytes={payloadBytes} stampSeconds={formatSeconds(stampSeconds)} serializeSeconds={formatSeconds(serializeSeconds)} totalSeconds={formatSeconds(os.clock() - startedAt)}`)
 
 		return result
 	end
@@ -505,6 +598,10 @@ function Server.init(context)
 				return
 			end
 
+			if type(object._props) ~= "table" then
+				return
+			end
+
 			local updates = {}
 			for prop, value in pairs(object._props) do
 				if prop ~= "Parent" and Shared.IsInstanceReference(value) then
@@ -527,13 +624,20 @@ function Server.init(context)
 		return entries
 	end
 
+	local function isCharacterModel(object)
+		return object ~= nil
+			and object.ClassName == "Model"
+			and object.GetAttribute ~= nil
+			and type(object:GetAttribute("__characterUserId")) == "number"
+	end
+
 	local function sendPatchEntries(recipient, entries)
 		if #entries == 0 then
 			return
 		end
 
-		for _, payload in ipairs(buildListPayloads("entries", entries, {}, MAX_PATCH_ENTRIES_PER_MESSAGE)) do
-			if recipient then
+		if recipient then
+			for _, payload in ipairs(buildListPayloads("entries", entries, {}, MAX_PATCH_ENTRIES_PER_MESSAGE)) do
 				networkService:SendToClient(
 					recipient,
 					Protocol.Channels.Replication,
@@ -541,35 +645,42 @@ function Server.init(context)
 					payload,
 					true
 				)
-			else
-				-- AoI-filtered broadcast: send each patch payload only to sessions
-				-- that are in range of at least one of the patched objects.
-				for _, session in ipairs(networkService:GetSessions()) do
-					local relevant = false
-					for _, entry in ipairs(payload.entries or {}) do
-						if
-							AreaOfInterest.ShouldReplicateNetId(
-								session,
-								entry.object,
-								lookup,
-								networkOwnership.GetWorldPosition,
-								networkOwnership
-							)
-						then
-							relevant = true
-							break
-						end
+			end
+			return
+		end
+
+		local sessions = networkService:GetSessions()
+		local entriesBySession = {}
+		for _, entry in ipairs(entries) do
+			for _, session in ipairs(sessions) do
+				if
+					AreaOfInterest.ShouldReplicateNetId(
+						session,
+						entry.object,
+						lookup,
+						networkOwnership.GetWorldPosition,
+						networkOwnership
+					)
+				then
+					local sessionEntries = entriesBySession[session]
+					if not sessionEntries then
+						sessionEntries = {}
+						entriesBySession[session] = sessionEntries
 					end
-					if relevant then
-						networkService:SendToClient(
-							session,
-							Protocol.Channels.Replication,
-							Protocol.Kinds.PatchBatch,
-							payload,
-							true
-						)
-					end
+					table.insert(sessionEntries, entry)
 				end
+			end
+		end
+
+		for session, sessionEntries in pairs(entriesBySession) do
+			for _, payload in ipairs(buildListPayloads("entries", sessionEntries, {}, MAX_PATCH_ENTRIES_PER_MESSAGE)) do
+				networkService:SendToClient(
+					session,
+					Protocol.Channels.Replication,
+					Protocol.Kinds.PatchBatch,
+					payload,
+					true
+				)
 			end
 		end
 	end
@@ -582,6 +693,9 @@ function Server.init(context)
 	end
 
 	local function sendCreate(recipient, roots, reason)
+		local sendCreateStartedAt = os.clock()
+		local reasonLabel = reason or "unspecified"
+		logReplicationDiagnostic(`sendCreate begin reason={reasonLabel} recipient={recipient and recipient.key or "broadcast"} roots={roots and #roots or 0}`)
 		debugTrace(
 			`sendCreate reason={reason or "unspecified"} recipient={recipient and recipient.key or "broadcast"} roots={roots and #roots or 0}`
 		)
@@ -595,14 +709,213 @@ function Server.init(context)
 			or "broadcast"
 
 		local batchesSent = 0
+		local batchesQueued = 0
+		local batchesSplit = 0
+		local totalPayloadBytes = 0
+		local totalBackpressureSeconds = 0
+		local largestPayloadBytes = 0
+		local largestPayloadRoots = ""
+		local treeCountCache = setmetatable({}, { __mode = "k" })
+		local pendingBatches = {}
+
+		local function queueBatch(batch)
+			if #batch == 0 then
+				return
+			end
+			batchesQueued += 1
+			table.insert(pendingBatches, batch)
+		end
+
+		local function getTreeCount(object)
+			if not object then
+				return 0
+			end
+			local cached = treeCountCache[object]
+			if cached ~= nil then
+				return cached
+			end
+			local count = countTreeObjects(object)
+			treeCountCache[object] = count
+			return count
+		end
+
+		local function collectReplicatedChildren(root)
+			local children = {}
+			for _, child in ipairs(root and root:GetChildren() or {}) do
+				if child.CanReplicate ~= false and child.NetworkId ~= nil then
+					table.insert(children, child)
+				end
+			end
+			return children
+		end
+
+		local function queueBalancedBatches(objects)
+			local batch = {}
+			local batchTreeCount = 0
+			for _, object in ipairs(objects) do
+				local treeCount = getTreeCount(object)
+				if #batch > 0 and (#batch >= CREATE_PRE_SERIALIZE_MAX_ROOTS_PER_BATCH or batchTreeCount + treeCount > CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT) then
+					queueBatch(batch)
+					batch = {}
+					batchTreeCount = 0
+				end
+				table.insert(batch, object)
+				batchTreeCount += treeCount
+			end
+			queueBatch(batch)
+		end
+
+		local function preSplitBatch(batch)
+			local totalTreeCount = 0
+			local passthrough = {}
+			local didSplit = false
+
+			for _, object in ipairs(batch) do
+				local treeCount = getTreeCount(object)
+				totalTreeCount += treeCount
+
+				if treeCount > CREATE_PRE_SERIALIZE_ROOT_SPLIT_COUNT and not isCharacterModel(object) then
+					local children = collectReplicatedChildren(object)
+					if #children > 0 then
+						didSplit = true
+						batchesSplit += 1
+						logReplicationDiagnostic(`sendBatch pre-split-root reason={reasonLabel} root={describeObject(object)} tree={treeCount} children={#children}`)
+						queueBalancedBatches(children)
+					else
+						table.insert(passthrough, object)
+					end
+				else
+					table.insert(passthrough, object)
+				end
+			end
+
+			if didSplit then
+				queueBalancedBatches(passthrough)
+				return true
+			end
+
+			if #batch > 1 and totalTreeCount > CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT then
+				batchesSplit += 1
+				logReplicationDiagnostic(`sendBatch pre-split-batch reason={reasonLabel} roots={#batch} tree={totalTreeCount} limit={CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT}`)
+				queueBalancedBatches(batch)
+				return true
+			end
+
+			return false
+		end
+
+		local function waitForCreateBackpressure(sessions)
+			local startedAt = os.clock()
+			local lastWarningAt = startedAt
+
+			while true do
+				local highestPendingMessages = 0
+				local highestPendingFragments = 0
+				local anyConnected = false
+
+				for _, session in ipairs(sessions or {}) do
+					local client = session and session.client
+					if client and GNS.Server:IsClientConnected(client) then
+						anyConnected = true
+						local stats = GNS.Server:GetClientStats(client)
+						highestPendingMessages = math.max(highestPendingMessages, stats.pendingReliable or 0)
+						highestPendingFragments = math.max(
+							highestPendingFragments,
+							stats.pendingReliableFragments or 0
+						)
+					end
+				end
+
+				if not anyConnected then
+					totalBackpressureSeconds += os.clock() - startedAt
+					return false
+				end
+
+				if
+					highestPendingMessages < CREATE_BACKPRESSURE_PENDING_LIMIT
+					and highestPendingFragments < CREATE_BACKPRESSURE_FRAGMENT_LIMIT
+				then
+					totalBackpressureSeconds += os.clock() - startedAt
+					return true
+				end
+
+				local now = os.clock()
+				if now - lastWarningAt > CREATE_BACKPRESSURE_LOG_INTERVAL_SECONDS then
+					lastWarningAt = now
+					warn(
+						`[Replicator][Server] Create backpressure waiting {string.format(
+							"%.1f",
+							now - startedAt
+						)}s with {highestPendingMessages} unacked reliable messages ({highestPendingFragments} wire fragments)`
+					)
+				end
+
+				task.wait(0.05)
+			end
+		end
 
 		local function sendBatch(batch)
 			if #batch == 0 then
 				return
 			end
 
+			if preSplitBatch(batch) then
+				return
+			end
+
+			local relevantSessions = nil
+			if not recipient then
+				-- Runtime broadcast: if no client has completed initial sync yet,
+				-- this creation will be covered by that client's initial/inventory
+				-- sync.  Avoid serializing huge blobs into a reliable queue that
+				-- cannot help anyone yet.
+				relevantSessions = {}
+				for _, session in ipairs(networkService:GetSessions()) do
+					if isSessionEligibleForLiveCreate(session) then
+						local inRange = false
+						for _, obj in ipairs(batch) do
+							if
+								AreaOfInterest.ShouldReplicateToSession(
+									session,
+									obj,
+									networkOwnership.GetWorldPosition,
+									networkOwnership
+								)
+							then
+								inRange = true
+								break
+							end
+						end
+						if inRange then
+							table.insert(relevantSessions, session)
+						end
+					end
+				end
+
+				if #relevantSessions == 0 then
+					debugTrace(
+						`sendBatch reason={reason or "unspecified"} broadcast skipped before serialize; no initial-sync-complete recipients`
+					)
+					return
+				end
+			end
+
+			local batchStartedAt = os.clock()
+			local batchNames = {}
+			for index, object in ipairs(batch) do
+				if index <= 12 then
+					table.insert(batchNames, describeObject(object))
+				end
+			end
+			if #batch > 12 then
+				table.insert(batchNames, `...+{#batch - 12} more`)
+			end
+			logReplicationDiagnostic(`sendBatch begin reason={reasonLabel} recipient={recipientLabel} roots={#batch} pendingBefore={#pendingBatches} names=[{table.concat(batchNames, ", ")}]`)
 			debugTrace(`sendBatch reason={reason or "unspecified"} serializing size={#batch}`)
+			local serializeStartedAt = os.clock()
 			local serialized = serializeObjects(batch)
+			local batchSerializeSeconds = os.clock() - serializeStartedAt
+			logReplicationDiagnostic(`sendBatch serialized reason={reasonLabel} roots={#batch} ok={serialized ~= nil} serializeSeconds={formatSeconds(batchSerializeSeconds)}`)
 			debugTrace(`sendBatch reason={reason or "unspecified"} serialized={serialized and "success" or "failed"}`)
 
 			if not serialized then
@@ -612,8 +925,9 @@ function Server.init(context)
 						`[Replicator][Server] sendCreate: batch serialization failed for {#batch} objects, retrying individually`
 					)
 					for _, root in ipairs(batch) do
-						sendBatch({ root })
+						queueBatch({ root })
 					end
+					return
 				else
 					-- Single root failed — try its children.
 					local root = batch[1]
@@ -624,9 +938,10 @@ function Server.init(context)
 						)
 						for _, child in ipairs(children) do
 							if child.CanReplicate ~= false and child.NetworkId ~= nil then
-								sendBatch({ child })
+								queueBatch({ child })
 							end
 						end
+						return
 					else
 						warn(
 							`[Replicator][Server] sendCreate: leaf object {root.ClassName}:{root.Name} failed to serialize, dropping`
@@ -639,11 +954,20 @@ function Server.init(context)
 			-- Keep reliable Create payloads under a safe ceiling to avoid massive
 			-- fragmentation storms that can starve ACK/control traffic.
 			local payloadBytes = buffer.len(serialized)
+			totalPayloadBytes += payloadBytes
+			if payloadBytes > largestPayloadBytes then
+				largestPayloadBytes = payloadBytes
+				largestPayloadRoots = table.concat(batchNames, ", ")
+			end
 			if payloadBytes > MAX_CREATE_PAYLOAD_BYTES then
 				debugTrace(
 					`sendBatch reason={reason or "unspecified"} oversize bytes={payloadBytes} limit={MAX_CREATE_PAYLOAD_BYTES} batch={#batch}`
 				)
-				if #batch > 1 then
+				if #batch == 1 and isCharacterModel(batch[1]) then
+					debugTrace(
+						`sendBatch reason={reason or "unspecified"} keeping oversized character model {batch[1].Name} intact`
+					)
+				elseif #batch > 1 then
 					local midpoint = math.max(1, math.floor(#batch / 2))
 					local left = {}
 					local right = {}
@@ -653,26 +977,30 @@ function Server.init(context)
 					for i = midpoint + 1, #batch do
 						table.insert(right, batch[i])
 					end
-					sendBatch(left)
-					sendBatch(right)
+					batchesSplit += 1
+					logReplicationDiagnostic(`sendBatch split reason={reasonLabel} oversized bytes={payloadBytes} limit={MAX_CREATE_PAYLOAD_BYTES} roots={#batch} left={#left} right={#right}`)
+					queueBatch(left)
+					queueBatch(right)
 					return
-				end
-
-				local root = batch[1]
-				local children = root and root:GetChildren() or {}
-				if #children > 0 then
-					local splitChildren = {}
-					for _, child in ipairs(children) do
-						if child.CanReplicate ~= false and child.NetworkId ~= nil then
-							table.insert(splitChildren, child)
+				else
+					local root = batch[1]
+					local children = root and root:GetChildren() or {}
+					if #children > 0 then
+						local splitChildren = {}
+						for _, child in ipairs(children) do
+							if child.CanReplicate ~= false and child.NetworkId ~= nil then
+								table.insert(splitChildren, child)
+							end
 						end
-					end
-					if #splitChildren > 0 then
-						debugTrace(
-							`sendBatch reason={reason or "unspecified"} split root {root.ClassName}:{root.Name} into {#splitChildren} children`
-						)
-						sendBatch(splitChildren)
-						return
+						if #splitChildren > 0 then
+							debugTrace(
+								`sendBatch reason={reason or "unspecified"} split root {root.ClassName}:{root.Name} into {#splitChildren} children`
+							)
+							batchesSplit += 1
+							logReplicationDiagnostic(`sendBatch split-root reason={reasonLabel} root={describeObject(root)} bytes={payloadBytes} children={#splitChildren}`)
+							queueBatch(splitChildren)
+							return
+						end
 					end
 				end
 			end
@@ -691,6 +1019,9 @@ function Server.init(context)
 
 			local payload = { objects = serialized }
 			if recipient then
+				if not waitForCreateBackpressure({ recipient }) then
+					return
+				end
 				networkService:SendToClient(
 					recipient,
 					Protocol.Channels.Replication,
@@ -699,28 +1030,8 @@ function Server.init(context)
 					true
 				)
 			else
-				-- AoI-filtered broadcast for runtime object creation.
-				-- Check which sessions should see any of the objects in this batch.
-				local allSessions = networkService:GetSessions()
-				local relevantSessions = {}
-				for _, session in ipairs(allSessions) do
-					local inRange = false
-					for _, obj in ipairs(batch) do
-						if
-							AreaOfInterest.ShouldReplicateToSession(
-								session,
-								obj,
-								networkOwnership.GetWorldPosition,
-								networkOwnership
-							)
-						then
-							inRange = true
-							break
-						end
-					end
-					if inRange then
-						table.insert(relevantSessions, session)
-					end
+				if not waitForCreateBackpressure(relevantSessions) then
+					return
 				end
 				networkService:SendToMultipleClients(
 					relevantSessions,
@@ -732,78 +1043,100 @@ function Server.init(context)
 			end
 
 			batchesSent += 1
-			-- Yield every 4 batches to let the network stack flush datagrams
-			-- and process heartbeats — prevents heartbeat-timeout disconnects
-			-- when replicating large worlds.
-			if batchesSent % 4 == 0 then
-				task.wait()
-			end
+			logReplicationDiagnostic(`sendBatch sent reason={reasonLabel} recipient={recipientLabel} roots={#batch} bytes={payloadBytes} totalSeconds={formatSeconds(os.clock() - batchStartedAt)} batchesSent={batchesSent} queued={batchesQueued} pending={#pendingBatches}`)
+			-- Pace every Create batch so reliable initial-sync traffic does not starve
+			-- gameplay remotes, ACKs, and control messages.
+			task.wait(CREATE_INTER_BATCH_YIELD_SECONDS)
 		end
 
-		if recipient then
-			-- Initial world state: avoid giant reliable payloads that fragment into
-			-- hundreds of packets and can starve ACK traffic on lossy links.
-			local ROOTS_PER_BATCH = 2
-			debugTrace(`sendCreate reason={reason or "unspecified"} recipient batching roots={#serializable}`)
-			for i = 1, #serializable, ROOTS_PER_BATCH do
-				local batch = {}
-				for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
-					table.insert(batch, serializable[j])
-				end
-				sendBatch(batch)
-			end
-			debugTrace(`sendCreate reason={reason or "unspecified"} recipient batching done`)
-		else
-			-- Runtime broadcast (new objects spawned during gameplay): use small
-			-- batches so each packet stays lightweight.
-			local ROOTS_PER_BATCH = 8
-			debugTrace(`sendCreate reason={reason or "unspecified"} broadcast batching roots={#serializable}`)
-			for i = 1, #serializable, ROOTS_PER_BATCH do
-				local batch = {}
-				for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
-					table.insert(batch, serializable[j])
-				end
-				sendBatch(batch)
-			end
-			debugTrace(`sendCreate reason={reason or "unspecified"} broadcast batching done`)
+		if not recipient and not hasLiveCreateRecipients() then
+			debugTrace(
+				`sendCreate reason={reason or "unspecified"} broadcast skipped; no initial-sync-complete recipients`
+			)
+			return
 		end
 
-		sendPatchEntries(recipient, collectReferencePatchEntries(serializable))
+		local ROOTS_PER_BATCH = 2 -- keep initial root batches small; larger trees are pre-split below
+		debugTrace(`sendCreate reason={reason or "unspecified"} queueing {#serializable} roots`)
+		for i = 1, #serializable, ROOTS_PER_BATCH do
+			local batch = {}
+			for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
+				table.insert(batch, serializable[j])
+			end
+			queueBatch(batch)
+		end
+
+		while #pendingBatches > 0 do
+			local batch = table.remove(pendingBatches, 1)
+			sendBatch(batch)
+		end
+		logReplicationDiagnostic(`sendCreate done reason={reasonLabel} recipient={recipientLabel} roots={#serializable} queued={batchesQueued} sent={batchesSent} split={batchesSplit} totalBytes={totalPayloadBytes} largestBytes={largestPayloadBytes} largestRoots=[{largestPayloadRoots}] backpressureSeconds={formatSeconds(totalBackpressureSeconds)} totalSeconds={formatSeconds(os.clock() - sendCreateStartedAt)}`)
+		debugTrace(`sendCreate reason={reason or "unspecified"} batching done`)
+
+		local patchStartedAt = os.clock()
+		local referencePatches = collectReferencePatchEntries(serializable)
+		logReplicationDiagnostic(`sendCreate referencePatches reason={reasonLabel} entries={#referencePatches} collectSeconds={formatSeconds(os.clock() - patchStartedAt)}`)
+		sendPatchEntries(recipient, referencePatches)
 	end
 
 	local function collectInitialRoots()
+		local startedAt = os.clock()
 		local roots = {}
 		local seen = {}
+		local seenNetIds = {}
+		local seenWorkspaceSingletons = {}
+		local workspaceSingletonClasses = {
+			Terrain = true,
+		}
+		local workspaceInst = game:GetService("Workspace")
 
 		local function addRoot(object)
 			if not object or object.CanReplicate == false or object.NetworkId == nil or seen[object] then
 				return
 			end
+			if seenNetIds[object.NetworkId] then
+				return
+			end
+			if object.Parent == workspaceInst and workspaceSingletonClasses[object.ClassName] then
+				if seenWorkspaceSingletons[object.ClassName] then
+					return
+				end
+				seenWorkspaceSingletons[object.ClassName] = true
+			end
+			seenNetIds[object.NetworkId] = true
 			seen[object] = true
 			table.insert(roots, object)
 		end
 
+		local function addWorkspaceRoot(object)
+			if not object or object.CanReplicate == false or object.NetworkId == nil then
+				return
+			end
+
+			local ancestor = object
+			while ancestor.Parent and ancestor.Parent ~= workspaceInst do
+				ancestor = ancestor.Parent
+			end
+			if ancestor.Parent == workspaceInst then
+				addRoot(ancestor)
+			end
+		end
+
 		-- Include every top-level Workspace instance that contains replicated descendants (nested rigs, synced folders).
-		local workspaceInst = game:GetService("Workspace")
 		local trackedCount = 0
 		for netId in pairs(lookup) do
 			trackedCount += 1
 		end
 		print(`[Replicator][Server] collectInitialRoots: lookup has {trackedCount} tracked objects`)
+		local workspaceDescendants = {}
+		local workspaceScanStartedAt = os.clock()
 		if workspaceInst then
-			for _, object in ipairs(workspaceInst:GetDescendants()) do
-				if object.CanReplicate == false or object.NetworkId == nil then
-					continue
-				end
-				local ancestor = object
-				while ancestor.Parent and ancestor.Parent ~= workspaceInst do
-					ancestor = ancestor.Parent
-				end
-				if ancestor.Parent == workspaceInst then
-					addRoot(ancestor)
-				end
+			workspaceDescendants = workspaceInst:GetDescendants()
+			for _, object in ipairs(workspaceDescendants) do
+				addWorkspaceRoot(object)
 			end
 		end
+		logReplicationDiagnostic(`collectInitialRoots workspaceScan descendants={#workspaceDescendants} rootsSoFar={#roots} seconds={formatSeconds(os.clock() - workspaceScanStartedAt)}`)
 
 		local singletonIds = {
 			[0] = true,
@@ -815,7 +1148,9 @@ function Server.init(context)
 			[6] = true,
 		}
 
-		for _, object in ipairs(game:GetDescendants()) do
+		local gameDescendants = game:GetDescendants()
+		local singletonScanStartedAt = os.clock()
+		for _, object in ipairs(gameDescendants) do
 			if object.CanReplicate == false or object.NetworkId == nil then
 				continue
 			end
@@ -826,7 +1161,46 @@ function Server.init(context)
 			end
 		end
 
+		logReplicationDiagnostic(`collectInitialRoots singletonScan descendants={#gameDescendants} rootsSoFar={#roots} seconds={formatSeconds(os.clock() - singletonScanStartedAt)}`)
+
+		table.sort(roots, function(a, b)
+			local function parentPriority(object)
+				local parent = object.Parent
+				local parentNetId = parent and parent.NetworkId
+				if parentNetId == 1 then
+					if object.Name == "Baseplate" then
+						return 0
+					end
+					return 1
+				end
+				if parentNetId == 2 then
+					return 2
+				end
+				if parentNetId == 3 then
+					return 4
+				end
+				return 3
+			end
+
+			local pa = parentPriority(a)
+			local pb = parentPriority(b)
+			if pa ~= pb then
+				return pa < pb
+			end
+			return (a.Name or "") < (b.Name or "")
+		end)
+
 		print(`[Replicator][Server] collectInitialRoots: found {#roots} root(s) to replicate`)
+		local rootDetails = {}
+		for index, root in ipairs(roots) do
+			if index > INITIAL_ROOT_DETAIL_LIMIT then
+				table.insert(rootDetails, `...+{#roots - INITIAL_ROOT_DETAIL_LIMIT} more roots`)
+				break
+			end
+			table.insert(rootDetails, `{describeObject(root)} parent={describeObject(root.Parent)} tree={countTreeObjects(root)}`)
+		end
+		logReplicationDiagnostic(`collectInitialRoots details [{table.concat(rootDetails, "; ")}]`)
+		logReplicationDiagnostic(`collectInitialRoots done tracked={trackedCount} roots={#roots} seconds={formatSeconds(os.clock() - startedAt)}`)
 		return roots
 	end
 
@@ -914,32 +1288,73 @@ function Server.init(context)
 		return missing
 	end
 
-	local function sendInitialStateForSession(session, clientNetIds)
+	local function rootCameFromBlob(root, fingerprint)
+		if type(fingerprint) ~= "string" or fingerprint == "" or root == nil then
+			return false
+		end
+
+		local hasReplicatedObject = false
+		local allFromBlob = true
+		visitTree(root, function(object)
+			if object.NetworkId == nil or object.CanReplicate == false then
+				return
+			end
+
+			hasReplicatedObject = true
+			if object.GetMetadata == nil or object:GetMetadata("__blobFingerprint") ~= fingerprint then
+				allFromBlob = false
+			end
+		end)
+
+		return hasReplicatedObject and allFromBlob
+	end
+
+	local function sendInitialStateForSession(session, clientNetIds, clientBlobFingerprint)
+		local initialSyncStartedAt = os.clock()
 		if not session or not session.key or initialSyncCompleted[session.key] then
 			return
 		end
 
+		local collectStartedAt = os.clock()
 		local initialRoots = collectInitialRoots()
+		local collectSeconds = os.clock() - collectStartedAt
 		local rootsToReplicate = initialRoots
+		logReplicationDiagnostic(`Initial sync {session.key}: collected roots={#initialRoots} seconds={formatSeconds(collectSeconds)}`)
 
+		local filterStartedAt = os.clock()
 		if clientNetIds ~= nil then
 			rootsToReplicate = {}
 			for _, root in ipairs(initialRoots) do
+				if rootCameFromBlob(root, clientBlobFingerprint) then
+					continue
+				end
 				if rootHasMissingObjects(root, clientNetIds) then
 					table.insert(rootsToReplicate, root)
 				end
 			end
 		end
+		logReplicationDiagnostic(`Initial sync {session.key}: filtered roots={#rootsToReplicate}/{#initialRoots} missingOnly={clientNetIds ~= nil} seconds={formatSeconds(os.clock() - filterStartedAt)}`)
 
 		print(
-			`[Replicator][Server] Initial sync {session.key}: sending {#rootsToReplicate}/{#initialRoots} roots (missing-only={clientNetIds ~= nil})`
+			`[Replicator][Server] Initial sync {session.key}: sending {#rootsToReplicate}/{#initialRoots} roots (missing-only={clientNetIds ~= nil}, blobMatch={clientBlobFingerprint == (game.GetMetadata and game:GetMetadata(
+				"__blobFingerprint"
+			) or nil)})`
 		)
 		initialSyncCompleted[session.key] = true
 		pendingInitialInventorySync[session.key] = nil
+		local sendCreateStartedAt = os.clock()
 		sendCreate(session, rootsToReplicate, "initial_sync")
-		sendTerrainSnapshot(session)
+		logReplicationDiagnostic(`Initial sync {session.key}: sendCreateSeconds={formatSeconds(os.clock() - sendCreateStartedAt)}`)
+		if clientBlobFingerprint == nil then
+			local terrainStartedAt = os.clock()
+			sendTerrainSnapshot(session)
+			logReplicationDiagnostic(`Initial sync {session.key}: terrainSnapshotSeconds={formatSeconds(os.clock() - terrainStartedAt)}`)
+		else
+			debugTrace(`Initial sync {session.key}: skipped terrain snapshot because blob fingerprints match`)
+		end
 		sendWorldLoaded(session)
 		print(`[Replicator][Server] WorldLoaded sent to {session.key}`)
+		logReplicationDiagnostic(`Initial sync {session.key}: totalSeconds={formatSeconds(os.clock() - initialSyncStartedAt)}`)
 	end
 
 	local function completeInitialSyncWithoutCreate(session)
@@ -971,12 +1386,15 @@ function Server.init(context)
 		)
 
 		task.delay(INITIAL_INVENTORY_HANDSHAKE_TIMEOUT, function()
-			if not session or not session.key or initialSyncCompleted[session.key] or not pendingInitialInventorySync[session.key] then
+			if
+				not session
+				or not session.key
+				or initialSyncCompleted[session.key]
+				or not pendingInitialInventorySync[session.key]
+			then
 				return
 			end
-			warn(
-				`[Replicator][Server] Initial inventory handshake timed out for {session.key}`
-			)
+			warn(`[Replicator][Server] Initial inventory handshake timed out for {session.key}`)
 			completeInitialSyncWithoutCreate(session)
 		end)
 	end
@@ -1193,6 +1611,9 @@ function Server.init(context)
 	end
 
 	for _, object in ipairs(game:GetDescendants()) do
+		if object.ClassName == "Camera" then
+			continue
+		end
 		trackObject(object)
 		registerOwnershipRoot(object)
 		monitor(object)
@@ -1202,29 +1623,38 @@ function Server.init(context)
 	end
 
 	game.DescendantAdded:Connect(function(object)
+		if object.ClassName == "Camera" then
+			return
+		end
+
 		-- If this object was already in lookup it means a *parent's* DescendantAdded
 		-- handler fired first, called trackTree on the parent (which tracked all
 		-- descendants), and already scheduled sendCreate for the whole tree.
 		-- Sending a second Create for the individual child would flood the network
 		-- with duplicate objects.
 		local alreadyTracked = object.NetworkId ~= nil and lookup[object.NetworkId] == object
+		local suppressedAtAdd = isRuntimeCreateSuppressed()
 
 		trackTree(object)
 		if object.ClassName == "NetworkController" and object.Parent then
 			trackObject(object.Parent)
 		end
 
-		if not alreadyTracked then
+		if suppressedAtAdd then
+			debugTrace(
+				`DescendantAdded suppressed root={object.ClassName}:{object.Name} netId={tostring(object.NetworkId)}`
+			)
+		elseif not alreadyTracked then
 			task.spawn(function()
 				-- Guard: object may have been destroyed (e.g. Debris) before the
 				-- deferred send executes.
 				if object.Parent == nil then
 					return
 				end
-			debugTrace(
-				`DescendantAdded root={object.ClassName}:{object.Name} netId={tostring(object.NetworkId)} descendants={#object:GetDescendants()}`
-			)
-			sendCreate(nil, { object }, "runtime_descendant_added")
+				debugTrace(
+					`DescendantAdded root={object.ClassName}:{object.Name} netId={tostring(object.NetworkId)} descendants={#object:GetDescendants()}`
+				)
+				sendCreate(nil, { object }, "runtime_descendant_added")
 			end)
 		end
 	end)
@@ -1294,7 +1724,14 @@ function Server.init(context)
 			debugTrace(
 				`ClientObjectInventoryResponse session={session.key} payloadCount={#(payload and payload.netIds or {})} uniqueCount={uniqueCount}`
 			)
-			sendInitialStateForSession(session, clientNetIds)
+			local clientBlobFingerprint = type(payload) == "table" and payload.blobFingerprint or nil
+			local serverBlobFingerprint = game.GetMetadata and game:GetMetadata("__blobFingerprint") or nil
+			if clientBlobFingerprint ~= serverBlobFingerprint then
+				clientBlobFingerprint = nil
+			end
+			task.spawn(function()
+				sendInitialStateForSession(session, clientNetIds, clientBlobFingerprint)
+			end)
 		end
 	)
 
@@ -1478,6 +1915,7 @@ function Server.init(context)
 	runService:BindToSimulation(function(dt)
 		local currentTick = runService:GetSimulationTick()
 		local workspace = game:GetService("Workspace")
+
 		if not (workspace.ServerAuthority and workspace.ServerAuthority.AuthorityMode == Enum.AuthorityMode.Server) then
 			return
 		end
@@ -1578,7 +2016,9 @@ function Server.init(context)
 					state,
 					`sequence={payload.sequence or 0}`
 				)
-				stateRegistry.Apply(object, state)
+				withMutedObject(object, function()
+					stateRegistry.Apply(object, state)
+				end)
 				logHumanoidRootState(
 					"apply-owned-after",
 					session.key,
@@ -1731,12 +2171,12 @@ function Server.init(context)
 
 	local function flushSnapshots(tick)
 		for netId, object in pairs(trackedStateObjects) do
-			if object.CanReplicate == false or object.Parent == nil then
+			if object.CanReplicate == false or object.Parent == nil or object.NetworkId == nil then
 				continue
 			end
 
 			local state = stateRegistry.Capture(object)
-			if not state then
+			if not state or state.id == nil then
 				continue
 			end
 
@@ -1760,7 +2200,11 @@ function Server.init(context)
 
 			local clientAckTick = session.lastSnapshotAckTick or 0
 			local lastSentTick = session.lastSentSnapshotTick or -1
-			if lastSentTick > clientAckTick + SNAPSHOT_MAX_UNACKED_TICKS then
+			local ticksSinceLastSent = tick - lastSentTick
+			if
+				lastSentTick > clientAckTick + SNAPSHOT_MAX_UNACKED_TICKS
+				and ticksSinceLastSent < SNAPSHOT_BACKPRESSURE_RETRY_TICKS
+			then
 				continue
 			end
 			local changedStates = {}
@@ -1768,7 +2212,7 @@ function Server.init(context)
 			local maxStatesForSession = math.max(1, MAX_SNAPSHOT_STATES_PER_MESSAGE)
 
 			for netId, history in pairs(objectStateHistory) do
-				local latestTickSequence = history.order[#history.order]
+				local latestTickSequence = history:GetLatestSequence()
 				if not latestTickSequence then
 					continue
 				end
@@ -1805,7 +2249,6 @@ function Server.init(context)
 			end
 
 			local lastOwnedSequence = session.lastAppliedOwnedStateSequence or 0
-			local ticksSinceLastSent = tick - lastSentTick
 			local shouldSend = false
 			if numStates > 0 then
 				shouldSend = ticksSinceLastSent >= SNAPSHOT_MIN_SEND_INTERVAL_TICKS
@@ -1844,15 +2287,37 @@ function Server.init(context)
 	end
 
 	networkService.Tick:Connect(function(tick)
-		if tick % math.max(math.floor((networkService.TickRate or 30) * OWNERSHIP_REBALANCE_INTERVAL), 1) == 0 then
-			rebalanceOwnership(os.clock())
+		local tickOk, tickErr = pcall(function()
+			local tickStartedAt = os.clock()
+			local timings = {}
+			local function measureTickStep(name, callback)
+				local startedAt = os.clock()
+				callback()
+				timings[name] = os.clock() - startedAt
+			end
+
+			if tick % math.max(math.floor((networkService.TickRate or 30) * OWNERSHIP_REBALANCE_INTERVAL), 1) == 0 then
+				measureTickStep("rebalanceOwnership", function()
+					rebalanceOwnership(os.clock())
+				end)
+			end
+			measureTickStep("updateAoIPositions", updateAoIPositions)
+			measureTickStep("applyPendingOwnedStateBatches", applyPendingOwnedStateBatches)
+			measureTickStep("flushDirtyPatches", flushDirtyPatches)
+			measureTickStep("flushTerrainChunkUpdates", flushTerrainChunkUpdates)
+			measureTickStep("flushTerrainQueues", flushTerrainQueues)
+			measureTickStep("flushSnapshots", function()
+				flushSnapshots(tick)
+			end)
+
+			local tickSeconds = os.clock() - tickStartedAt
+			if REPLICATION_DIAGNOSTICS and tickSeconds >= SLOW_TICK_DIAGNOSTIC_SECONDS then
+				warn(`[Replicator][Server][Diag] slow tick={tick} totalSeconds={formatSeconds(tickSeconds)} rebalance={formatSeconds(timings.rebalanceOwnership)} aoi={formatSeconds(timings.updateAoIPositions)} owned={formatSeconds(timings.applyPendingOwnedStateBatches)} patches={formatSeconds(timings.flushDirtyPatches)} terrainChunks={formatSeconds(timings.flushTerrainChunkUpdates)} terrainQueue={formatSeconds(timings.flushTerrainQueues)} snapshots={formatSeconds(timings.flushSnapshots)}`)
+			end
+		end)
+		if not tickOk then
+			warn("[SERVER] Tick handler error (recovered): " .. tostring(tickErr))
 		end
-		updateAoIPositions()
-		applyPendingOwnedStateBatches()
-		flushDirtyPatches()
-		flushTerrainChunkUpdates()
-		flushTerrainQueues()
-		flushSnapshots(tick)
 	end)
 
 	--  Race-condition catch-up

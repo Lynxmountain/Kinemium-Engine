@@ -4,6 +4,7 @@ local CFrame = require("@CFrame")
 local Enum = require("@EnumMap")
 local r3d = require("@r3d")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 
 local rlib = r3d.lib
 local r3dstructs = r3d.structs
@@ -111,6 +112,7 @@ local function loadAlbedoMap(path, color)
 	if type(path) ~= "string" or path == "" then
 		return nil
 	end
+	path = zembed.AssetPath(path)
 
 	local ok, data = pcall(zune.fs.readFileSync, path, true)
 	if not ok or not data then

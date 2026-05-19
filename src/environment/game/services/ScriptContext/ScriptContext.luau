@@ -45,14 +45,16 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 							end
 
 							if type(target) ~= "table" then
-								error("require: expected ModuleScript or string, got " .. type(target), 2)
+								print("require: expected ModuleScript or string, got " .. type(target), 2)
+								return
 							end
 
 							if target.ClassName ~= "ModuleScript" then
-								error(
+								print(
 									`require: cannot require {target.ClassName} '{target.Name}'; expected ModuleScript`,
 									2
 								)
+								return
 							end
 
 							if requiredCache[target] then
@@ -60,20 +62,29 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 							end
 
 							if requiredCache[target] == false then
-								error(`require: circular dependency detected on '{target.Name}'`, 2)
+								print(`require: circular dependency detected on '{target.Name}'`, 2)
+								return
 							end
 
 							requiredCache[target] = false
 
 							local source = target.Source
-							local success, result, id, thread
+							local success, result, id, thread, getResult
 							if source and type(source) == "string" then
-								id, success, result, thread = kilang:execute(source, { StackId = target.Name }, {
-									script = target,
-									src = target,
-									loader = scriptObject,
-									require = script_environment.require,
-								})
+								id, success, result, thread, getResult = kilang:execute(
+									source,
+									{ StackId = target.Name },
+									{
+										script = target,
+										src = target,
+										loader = scriptObject,
+										require = script_environment.require,
+									}
+								)
+							end
+
+							if getResult then
+								success, result = getResult()
 							end
 
 							if thread and result ~= nil then
@@ -85,7 +96,7 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 							end
 
 							if result == nil then
-								error(`require: ModuleScript '{target.Name}' did not return a value`, 2)
+								print(`require: ModuleScript '{target.Name}' did not return a value`, 2)
 							end
 
 							requiredCache[target] = result
@@ -108,7 +119,7 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 					-- add to thread table
 					activeThreads["Luau"][scriptObject.UniqueId] = thread
 
-					return thread
+					return thread, id, success, result
 				end,
 
 				killthread = function(uniqueId)
@@ -126,7 +137,9 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 				if descendant.Enabled == false then
 					return
 				end
-				ScriptContext.MakeThreadObject(descendant)
+				task.spawn(function()
+					ScriptContext.MakeThreadObject(descendant)
+				end)
 			end
 
 			object.DescendantAdded:Connect(function(descendant)
@@ -134,7 +147,9 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 					if descendant.Enabled == false then
 						return
 					end
-					ScriptContext.MakeThreadObject(descendant)
+					task.spawn(function()
+						ScriptContext.MakeThreadObject(descendant)
+					end)
 				end
 			end)
 
@@ -195,6 +210,31 @@ ScriptContext.InitRenderer = function(renderer, signal, datamodel)
 					end
 				end
 				return
+			end,
+
+			RunSource = function(source: string, language: string, name: string?)
+				language = language or "Luau"
+				name = name or "AnonymousScript" .. tostring(math.random(1, 1e9))
+
+				local fakeScript = {
+					ClassName = "Script",
+					Name = name,
+					Source = source,
+					Enabled = true,
+					UniqueId = name .. "_" .. tostring(math.random(1, 1e9)),
+					Language = Enum.Language[language],
+					GetFullName = function()
+						return name
+					end,
+				}
+
+				local api = runtimes[language]
+				if not api then
+					print("No runtime found for language " .. language)
+					return nil
+				end
+
+				return api.newthread(fakeScript, datamodel)
 			end,
 
 			RunClientScripts = function()

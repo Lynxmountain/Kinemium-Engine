@@ -86,6 +86,7 @@ local ENGINE_FONT_FILES = {
 	Ubuntu = "./src/assets/fonts/Ubuntu-Regular.ttf",
 	Arimo = "./src/assets/fonts/Arimo-Regular.ttf",
 	ArimoBold = "./src/assets/fonts/Arimo-Bold.ttf",
+	EvenStevens = "./src/assets/fonts/EvenStevens.ttf",
 	Unknown = DEFAULT_FONT_PATH,
 }
 
@@ -93,10 +94,7 @@ local zembed = require("@zembed")
 local fontCount = 0
 
 local function resolveFontPath(path: string)
-	if zembed.IsEmbedded() then
-		return "." .. path
-	end
-	return path
+	return zembed.AssetPath(path)
 end
 
 KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
@@ -137,6 +135,7 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 
 			FontAdded:Fire(name, fontPath)
 
+			fontPath = resolveFontPath(fontPath)
 			fontInstance.Font = renderer.Font.new(name, fontPath, 64)
 			loadedFonts[name] = fontInstance.Font
 			fontInstance.Unload = function()

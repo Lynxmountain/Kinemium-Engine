@@ -2,6 +2,11 @@ if FlagExists("client") then
 	return
 end
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 local lib = raylib.lib

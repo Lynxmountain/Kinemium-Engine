@@ -26,14 +26,37 @@ return function(objects, data)
 		dimTextColor = color3.new(0.60, 0.60, 0.63),
 		categoryColor = color3.new(0.50, 0.50, 0.53),
 
+		visible = data.visible ~= false,
+		lastSize = { width = data.width or data[3] or 0, height = data.height or data[4] or 0 },
 		isHovered = false,
 		onClick = data.onClick,
 	}
 
 	local wrapper = {}
 
+	wrapper.get_rect = function()
+		if not config.visible then
+			return rect.new(config.obj_rect.x, config.obj_rect.y, 0, 0)
+		end
+		if (config.obj_rect.width == 0 or config.obj_rect.height == 0) and config.lastSize then
+			return rect.new(config.obj_rect.x, config.obj_rect.y, config.lastSize.width, config.lastSize.height)
+		end
+		return config.obj_rect
+	end
+
+	wrapper.get = function(prop)
+		return config[prop]
+	end
+
 	wrapper.set = function(prop, value)
 		if type(config[prop]) == "function" then
+			return wrapper
+		end
+		if prop == "obj_rect" and value then
+			config.obj_rect = value
+			if value.width and value.height and value.width > 0 and value.height > 0 then
+				config.lastSize = { width = value.width, height = value.height }
+			end
 			return wrapper
 		end
 		config[prop] = value
@@ -41,6 +64,9 @@ return function(objects, data)
 	end
 
 	wrapper.render = function(dt)
+		if not config.visible then
+			return
+		end
 		local r = config.obj_rect
 		local mousePos = raylib.lib.GetMousePosition()
 		local mousePressed = raylib.lib.IsMouseButtonPressed(0) == 1
@@ -62,7 +88,6 @@ return function(objects, data)
 		local bannerRect = rect.new(r.x, r.y, r.width, bannerHeight)
 
 		if config.bannerImage then
-			raylib.lib.BeginScissorMode(bannerRect.x, bannerRect.y, bannerRect.width, bannerRect.height)
 			raylib.lib.DrawTexturePro(
 				config.bannerImage.texture,
 				structs.Rectangle:new({ x = 0, y = 0, width = config.bannerImage.x, height = config.bannerImage.y }),
@@ -71,7 +96,6 @@ return function(objects, data)
 				0,
 				raylib.const.WHITE
 			)
-			raylib.lib.EndScissorMode()
 		else
 			raylib.lib.DrawRectangleGradientV(
 				bannerRect.x,

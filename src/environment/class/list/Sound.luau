@@ -2,6 +2,7 @@ local Signal = require("@Kinemium.signal")
 local Enum = require("@EnumMap")
 local Vector3 = require("@Vector3")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local task = zune.task
 
 local propTable = {
@@ -75,12 +76,13 @@ return {
 				return
 			end
 
+			local soundPath = zembed.AssetPath(instance.SoundId)
 			if instance.IsStream then
-				instance._raylibSound = raylib.lib.LoadMusicStream(instance.SoundId)
+				instance._raylibSound = raylib.lib.LoadMusicStream(soundPath)
 				-- MusicStreams are pointer/objects, but in FFI they return valid if loaded
 				instance.IsLoaded = instance._raylibSound ~= nil
 			else
-				instance._raylibSound = raylib.lib.LoadSound(instance.SoundId)
+				instance._raylibSound = raylib.lib.LoadSound(soundPath)
 				instance.IsLoaded = instance._raylibSound ~= nil
 			end
 

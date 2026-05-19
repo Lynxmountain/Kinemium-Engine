@@ -12,6 +12,17 @@ end
 -- Instance metatable
 local instance_mt = {}
 
+local SIGNAL_NAMES = {
+	ChildAdded = true,
+	AncestryChanged = true,
+	Changed = true,
+	ChildRemoved = true,
+	DescendantRemoving = true,
+	Destroying = true,
+	DescendantAdded = true,
+	DescendantChanged = true
+}
+
 function instance_mt.__index(self, key)
 	local props = rawget(self, "_props")
 	if props and props[key] ~= nil then
@@ -22,13 +33,23 @@ function instance_mt.__index(self, key)
 		return val
 	end
 
-	for _, child in ipairs(self.Children) do
-		if child.Name == key then
-			return child
-		end
+	local childMap = rawget(self, "_childByName")
+	if childMap and childMap[key] then
+		return childMap[key]
 	end
 
-	return Instance[key]
+	local method = Instance[key]
+	if method then
+		return method
+	end
+
+	if SIGNAL_NAMES[key] then
+		local sig = Signal.new()
+		rawset(self, key, sig)
+		return sig
+	end
+
+	return nil
 end
 
 function instance_mt.__eq(a, b)
@@ -80,7 +101,7 @@ function instance_mt.__newindex(self, key, value)
 			return
 		end
 
-		if self.AncestryChanged then
+		if rawget(self, "AncestryChanged") then
 			self.AncestryChanged:Fire(oldParent, value)
 		end
 
@@ -94,86 +115,118 @@ function instance_mt.__newindex(self, key, value)
 					end
 				end
 			end
+			local oldMap = rawget(oldParent, "_childByName")
+			if oldMap and oldMap[props.Name] == self then
+				oldMap[props.Name] = nil
+				if oldChildren then
+					for _, c in ipairs(oldChildren) do
+						if c.Name == props.Name and c ~= self then
+							oldMap[props.Name] = c
+							break
+						end
+					end
+				end
+			end
 
-			if oldParent.ChildRemoved then
+			if rawget(oldParent, "ChildRemoved") then
 				oldParent.ChildRemoved:Fire(self)
 			end
 
 			local ancestor = oldParent
 			while ancestor do
-				if ancestor.DescendantRemoving then
+				if rawget(ancestor, "DescendantRemoving") then
 					ancestor.DescendantRemoving:Fire(self)
 				end
-				ancestor = ancestor.Parent
+				local parentProp = rawget(ancestor, "_props")
+				ancestor = parentProp and parentProp.Parent
 			end
 		end
 
 		props.Parent = value
 		if value then
-			table.insert(value.Children, self)
+			local newChildren = rawget(value, "Children")
+			if newChildren then
+				table.insert(newChildren, self)
+			end
+			local newMap = rawget(value, "_childByName")
+			if newMap and not newMap[props.Name] then
+				newMap[props.Name] = self
+			end
 
-			if value.ChildAdded then
+			if rawget(value, "ChildAdded") then
 				value.ChildAdded:Fire(self)
 			end
 
 			local ancestor = value
 			while ancestor do
-				if ancestor.DescendantAdded then
+				if rawget(ancestor, "DescendantAdded") then
 					ancestor.DescendantAdded:Fire(self)
 				end
-				ancestor = ancestor.Parent
+				local parentProp = rawget(ancestor, "_props")
+				ancestor = parentProp and parentProp.Parent
 			end
 		end
+	elseif key == "Name" then
+		local oldName = props.Name
+		if oldName == value then return end
+		local parent = props.Parent
+		if parent then
+			local pMap = rawget(parent, "_childByName")
+			if pMap and pMap[oldName] == self then
+				pMap[oldName] = nil
+				local pChildren = rawget(parent, "Children")
+				if pChildren then
+					for _, c in ipairs(pChildren) do
+						if c.Name == oldName and c ~= self then
+							pMap[oldName] = c
+							break
+						end
+					end
+				end
+			end
+			if pMap and not pMap[value] then
+				pMap[value] = self
+			end
+		end
+		props.Name = value
 	else
 		props[key] = value
 	end
-	if self.Changed then
-		self.Changed:Fire(key, value)
 
-		local ancestor = self.Parent
-		while ancestor do
-			if ancestor.DescendantChanged then
-				ancestor.DescendantChanged:Fire(self, key, value)
-			end
-			ancestor = ancestor.Parent
+	if rawget(self, "Changed") then
+		self.Changed:Fire(key, value)
+	end
+
+	local ancestor = props.Parent
+	while ancestor do
+		if rawget(ancestor, "DescendantChanged") then
+			ancestor.DescendantChanged:Fire(self, key, value)
 		end
+		local parentProp = rawget(ancestor, "_props")
+		ancestor = parentProp and parentProp.Parent
 	end
 end
 
 function Instance.new(className)
-	local self = {}
-	self.ClassName = className
-	self.Name = className
-	self.BaseClass = "Instance"
-	self.Parent = nil
-	self.Children = {}
-	self.ChildAdded = Signal.new()
-	self.AncestryChanged = Signal.new()
-	self.Changed = Signal.new()
-	self.ChildRemoved = Signal.new()
-	self.DescendantRemoving = Signal.new()
-	self.Destroying = Signal.new()
-	self.DescendantAdded = Signal.new()
-	self.tags = {}
-	self.DescendantChanged = Signal.new()
-	self.attributes = {}
-	self.NetworkId = nil -- nil until server assigns one
-	self.CanReplicate = true
-	self.NetworkOwner = nil -- For physics/property authority
-	self.NetworkOwnerType = 0 -- 0: Server, 1: Client, 2: Shared?
+	local self = {
+		BaseClass = "Instance",
+		Children = {},
+		_childByName = {},
+		tags = {},
+		attributes = {},
+		CanReplicate = true,
 
-	-- deprecated
-	self.childAdded = self.ChildAdded
-	self.getChildren = Instance.GetChildren
-	self.findFirstChild = Instance.FindFirstChild
-	self.clone = Instance.Clone
-	self.destroy = Instance.Destroy
+		-- deprecated
+		getChildren = Instance.GetChildren,
+		findFirstChild = Instance.FindFirstChild,
+		clone = Instance.Clone,
+		destroy = Instance.Destroy,
+	}
 
 	self._props = {
 		ClassName = className,
 		Name = className,
 		Parent = nil,
-		Children = {},
 		NetworkId = nil,
 		UniqueId = generateUniqueId(),
 		NetworkOwner = nil,
@@ -193,10 +246,9 @@ function Instance:SetProperty(name, value)
 end
 
 function Instance:FindFirstChild(name)
-	for _, child in ipairs(self.Children) do
-		if child.Name == name then
-			return child
-		end
+	local childMap = rawget(self, "_childByName")
+	if childMap and childMap[name] then
+		return childMap[name]
 	end
 	return nil
 end
@@ -253,6 +305,31 @@ function Instance:GetDescendants()
 	return result
 end
 
+function Instance:IterDescendants()
+	local current = self
+	
+	return function()
+		if #current.Children > 0 then
+			current = current.Children[1]
+			return current
+		end
+		
+		while current and current ~= self do
+			local parent = current.Parent
+			if parent then
+				local siblings = parent.Children
+				local nextIdx = table.find(siblings, current)
+				if nextIdx and nextIdx < #siblings then
+					current = siblings[nextIdx + 1]
+					return current
+				end
+			end
+			current = parent
+		end
+		return nil
+	end
+end
+
 function Instance:IsA(className)
 	return self.ClassName == className or self.BaseClass == className
 end
@@ -265,7 +342,6 @@ function Instance:Clone(keepUniqueId)
 	for k, v in pairs(srcProps) do
 		if k ~= "Parent" and k ~= "Children" and (keepUniqueId or k ~= "UniqueId") then
 			dstProps[k] = v
-			rawset(root, k, v)
 		end
 	end
 
@@ -294,7 +370,6 @@ function Instance:Clone(keepUniqueId)
 			for k, v in pairs(cSrcProps) do
 				if k ~= "Parent" and k ~= "Children" and (keepUniqueId or k ~= "UniqueId") then
 					cDstProps[k] = v
-					rawset(copy, k, v)
 				end
 			end
 
@@ -307,6 +382,10 @@ function Instance:Clone(keepUniqueId)
 
 			cDstProps.Parent = dstParent
 			table.insert(rawget(dstParent, "Children"), copy)
+			local dstMap = rawget(dstParent, "_childByName")
+			if dstMap and not dstMap[copy.Name] then
+				dstMap[copy.Name] = copy
+			end
 			table.insert(queue, { src = child, dst = copy })
 		end
 	end
@@ -329,8 +408,11 @@ function Instance:InheritFrom(source, baseline)
 				local baseVal = baseProps[k]
 				-- only inherit if the live value differs from baseline (i.e. it was changed)
 				if v ~= baseVal then
-					dstProps[k] = v
-					rawset(dst, k, v)
+					if k == "Name" then
+						dst.Name = v -- Trigger __newindex to properly update _childByName
+					else
+						dstProps[k] = v
+					end
 				end
 			end
 		end
@@ -390,8 +472,11 @@ function Instance:RestoreFrom(source)
 
 		for k, v in pairs(srcProps) do
 			if k ~= "Parent" and k ~= "Children" and k ~= "UniqueId" then
-				dstProps[k] = v
-				rawset(dst, k, v)
+				if k == "Name" then
+					dst.Name = v -- Trigger __newindex to properly update _childByName
+				else
+					dstProps[k] = v
+				end
 			end
 		end
 
@@ -528,7 +613,6 @@ end
 
 function Instance:WaitForChild(name, timeout)
 	timeout = timeout or 5
-	local start = os.clock()
 
 	local found = self:FindFirstChild(name)
 	if found then
@@ -537,17 +621,27 @@ function Instance:WaitForChild(name, timeout)
 
 	local connection
 	local result = nil
+	local thread = coroutine.running()
 
 	connection = self.ChildAdded:Connect(function(child)
 		if child.Name == name then
 			result = child
 			connection:Disconnect()
+			if coroutine.status(thread) == "suspended" then
+				task.spawn(thread)
+			end
 		end
 	end)
 
-	while not result and os.clock() - start < timeout do
-		task.wait(0)
-	end
+	task.spawn(function()
+		task.wait(timeout)
+		if not result and coroutine.status(thread) == "suspended" then
+			connection:Disconnect()
+			task.spawn(thread)
+		end
+	end)
+
+	coroutine.yield()
 
 	if not result then
 		error(("WaitForChild('%s') timed out"):format(name))
@@ -625,7 +719,6 @@ end
 
 function Instance:WaitForChildOfClass(className, timeout)
 	timeout = timeout or 5
-	local start = os.clock()
 
 	local found = self:FindFirstChildOfClass(className)
 	if found then
@@ -634,17 +727,27 @@ function Instance:WaitForChildOfClass(className, timeout)
 
 	local connection
 	local result = nil
+	local thread = coroutine.running()
 
 	connection = self.ChildAdded:Connect(function(child)
 		if child.ClassName == className then
 			result = child
 			connection:Disconnect()
+			if coroutine.status(thread) == "suspended" then
+				task.spawn(thread)
+			end
 		end
 	end)
 
-	while not result and os.clock() - start < timeout do
-		task.wait(0)
-	end
+	task.spawn(function()
+		task.wait(timeout)
+		if not result and coroutine.status(thread) == "suspended" then
+			connection:Disconnect()
+			task.spawn(thread)
+		end
+	end)
+
+	coroutine.yield()
 
 	if not result then
 		error(("WaitForChildOfClass('%s') timed out"):format(className))
@@ -655,7 +758,6 @@ end
 
 function Instance:WaitForChildWhichIsA(className, timeout)
 	timeout = timeout or 5
-	local start = os.clock()
 
 	local found = self:FindFirstChildWhichIsA(className)
 	if found then
@@ -664,17 +766,27 @@ function Instance:WaitForChildWhichIsA(className, timeout)
 
 	local connection
 	local result = nil
+	local thread = coroutine.running()
 
 	connection = self.ChildAdded:Connect(function(child)
-		if child.ClassName == className then
+		if child:IsA(className) then
 			result = child
 			connection:Disconnect()
+			if coroutine.status(thread) == "suspended" then
+				task.spawn(thread)
+			end
 		end
 	end)
 
-	while not result and os.clock() - start < timeout do
-		task.wait(0)
-	end
+	task.spawn(function()
+		task.wait(timeout)
+		if not result and coroutine.status(thread) == "suspended" then
+			connection:Disconnect()
+			task.spawn(thread)
+		end
+	end)
+
+	coroutine.yield()
 
 	if not result then
 		error(("WaitForChildWhichIsA('%s') timed out"):format(className))
@@ -1072,6 +1184,48 @@ function Instance:Destroy()
 	rawset(self, "_props", nil)
 	rawset(self, "_skipParentRemoval", nil)
 	rawset(self, "Destroyed", true)
+
+	-- Disconnect all signals
+	if rawget(self, "ChildAdded") then
+		self.ChildAdded:Destroy()
+	end
+	if rawget(self, "AncestryChanged") then
+		self.AncestryChanged:Destroy()
+	end
+	if rawget(self, "Changed") then
+		self.Changed:Destroy()
+	end
+	if rawget(self, "ChildRemoved") then
+		self.ChildRemoved:Destroy()
+	end
+	if rawget(self, "DescendantRemoving") then
+		self.DescendantRemoving:Destroy()
+	end
+	if rawget(self, "Destroying") then
+		self.Destroying:Destroy()
+	end
+	if rawget(self, "DescendantAdded") then
+		self.DescendantAdded:Destroy()
+	end
+	if rawget(self, "DescendantChanged") then
+		self.DescendantChanged:Destroy()
+	end
+
+	local propertySignals = rawget(self, "_propertySignals")
+	if propertySignals then
+		for _, signal in pairs(propertySignals) do
+			signal:Destroy()
+		end
+		rawset(self, "_propertySignals", nil)
+	end
+
+	local attributeSignals = rawget(self, "_attributeSignals")
+	if attributeSignals then
+		for _, signal in pairs(attributeSignals) do
+			signal:Destroy()
+		end
+		rawset(self, "_attributeSignals", nil)
+	end
 end
 
 return Instance

@@ -1,6 +1,6 @@
 local Vector3 = require("./Vector3")
 
-local CFrame = {}
+local CFrame = { __type = "CFrame" }
 CFrame.__index = CFrame
 
 local CF_EPSILON = 1e-6

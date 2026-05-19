@@ -166,11 +166,13 @@ KineFileService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		ExportDatamodel = function(path, name)
 			local saved = {}
 
-			for _, service in pairs(datamodel:GetChildren()) do
-				if #service:GetChildren() > 0 then
-					if service.Name == "Players" then
-						continue
-					end
+			for _, service in ipairs(datamodel:GetChildren()) do
+				if service.Name == "Players" then
+					continue
+				end
+
+				local children = service:GetChildren()
+				if children[1] ~= nil then
 					table.insert(saved, service)
 				else
 					print("Skipped " .. service.Name)

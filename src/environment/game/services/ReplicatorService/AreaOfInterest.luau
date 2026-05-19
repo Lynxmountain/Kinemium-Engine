@@ -36,6 +36,27 @@ local GLOBAL_CLASSES = {
 
 local sessionAoI = {} -- keyed by session.key
 
+local function isCharacterEntity(object)
+	local current = object
+	while current do
+		if current.ClassName == "DataModel" or current.ClassName == "Workspace" then
+			return false
+		end
+
+		if
+			current.ClassName == "Model"
+			and current.GetAttribute ~= nil
+			and type(current:GetAttribute("__characterUserId")) == "number"
+		then
+			return true
+		end
+
+		current = current.Parent
+	end
+
+	return false
+end
+
 function AreaOfInterest.Init()
 	sessionAoI = {}
 end
@@ -150,6 +171,12 @@ function AreaOfInterest.IsGlobalEntity(object)
 
 	-- Certain class types are always global
 	if object.ClassName and GLOBAL_CLASSES[object.ClassName] then
+		return true
+	end
+
+	-- Player characters must be created on every client. If a character spawns
+	-- outside a session's current AoI, snapshots later cannot create that tree.
+	if isCharacterEntity(object) then
 		return true
 	end
 

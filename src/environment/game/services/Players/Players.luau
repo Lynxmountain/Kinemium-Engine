@@ -129,8 +129,12 @@ Players.InitRenderer = function(renderer, signal, game)
 		})
 		CharacterModel.PrimaryPart = humanoid.RootPart
 		CharacterModel.Parent = datamodel.Workspace
+		print(`[Players] Character model created for {player.Name}: {CharacterModel.Name}, PrimaryPart={tostring(CharacterModel.PrimaryPart)}`)
+		print(`[Players]   Humanoid={tostring(humanoid)}, RootPart={tostring(humanoid.RootPart)}`)
+		print(`[Players]   Character parent: {tostring(CharacterModel.Parent and CharacterModel.Parent.Name)}`)
 
 		assignCharacter(player, CharacterModel)
+		print(`[Players]   player.Character after assign: {tostring(player.Character and player.Character.Name)}`)
 		return CharacterModel
 	end
 

@@ -4,6 +4,11 @@ local IsPlaytesting = false
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local playtestService = game:GetService("PlaytestService")
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 repeat
 	task.wait()
 until ishared.NewCategoryToolbar

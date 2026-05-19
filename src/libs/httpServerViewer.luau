@@ -2,12 +2,63 @@ local net = zune.net
 
 local kinemium_http = {}
 
+local function envValue(...)
+	local env = zune.process.env
+	for _, key in ipairs({ ... }) do
+		if env[key] ~= nil and env[key] ~= "" then
+			return env[key]
+		end
+	end
+	return nil
+end
+
+local function envNumber(...)
+	local value = envValue(...)
+	if value == nil then
+		return nil
+	end
+	return tonumber(value)
+end
+
+local function getServerConfig()
+	local configuredPort = envNumber("perf_port", "PERF_PORT")
+	local renderPort = envNumber("PORT")
+	local configuredAddress = envValue("perf_address", "PERF_ADDRESS") or "0.0.0.0"
+	local explicitlyEnabled = configuredPort ~= nil
+		or envValue("perf_address", "PERF_ADDRESS") ~= nil
+		or (_G.FlagExists and _G.FlagExists("perfserver"))
+
+	if _G.IsHeadless or _G.IsServer then
+		local port = configuredPort or renderPort
+		if not port and not explicitlyEnabled then
+			return nil
+		end
+		return {
+			address = configuredAddress,
+			port = port or math.random(4000, 10000),
+			mode = if renderPort and not configuredPort then "health" else "perf",
+		}
+	end
+
+	return {
+		address = configuredAddress,
+		port = configuredPort or math.random(4000, 10000),
+		mode = "perf",
+	}
+end
+
 function kinemium_http:Init(renderer)
-	net.http.serve({
-		port = math.random(4000, 10000),
-		address = "0.0.0.0",
-		request = function(req: HttpServerRequest)
-			local page = [[
+	local config = getServerConfig()
+	if not config then
+		return
+	end
+
+	local ok, err = pcall(function()
+		net.http.serve({
+			port = config.port,
+			address = config.address,
+			request = function(req: HttpServerRequest)
+				local page = [[
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -236,7 +287,7 @@ function kinemium_http:Init(renderer)
                 Live
             </div>
         </div>
-        <div class="topbar-right">Port 7000</div>
+        <div class="topbar-right">Port ]] .. tostring(config.port) .. [[</div>
     </div>
 
     <div class="page-header">
@@ -255,17 +306,18 @@ function kinemium_http:Init(renderer)
             <tbody>
             ]]
 
-			for prop, value in pairs(renderer.PerfStats) do
-				page = page
-					.. string.format(
-						'<tr><td class="prop-name">%s</td><td class="prop-value">%s</td></tr>',
-						prop,
-						tostring(value)
-					)
-			end
+				local perfStats = renderer and renderer.PerfStats or {}
+				for prop, value in pairs(perfStats) do
+					page = page
+						.. string.format(
+							'<tr><td class="prop-name">%s</td><td class="prop-value">%s</td></tr>',
+							prop,
+							tostring(value)
+						)
+				end
 
-			page = page
-				.. [[
+				page = page
+					.. [[
             </tbody>
         </table>
     </div>
@@ -279,13 +331,20 @@ function kinemium_http:Init(renderer)
 </html>
             ]]
 
-			return {
-				status_code = 200,
-				headers = { ["Content-Type"] = "text/html" },
-				body = page,
-			}
-		end,
-	})
+				return {
+					status_code = 200,
+					headers = { ["Content-Type"] = "text/html" },
+					body = page,
+				}
+			end,
+		})
+	end)
+
+	if ok then
+		log(`[HTTP] Started {config.mode} server at {config.address}:{config.port}`)
+	else
+		warn(`[HTTP] Failed to start diagnostics server at {config.address}:{config.port}: {tostring(err)}`)
+	end
 end
 
 return kinemium_http

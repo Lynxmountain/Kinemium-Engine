@@ -4,31 +4,8 @@ local UDim2 = require("@UDim2")
 local _Enum = require("@EnumMap")
 local GuiObject = require("@GuiObject")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local lib = raylib.lib
-
-local function resolveBlendMode(value)
-	if type(value) == "number" then
-		return value
-	end
-	if type(value) ~= "string" then
-		return raylib.const.BlendMode.BLEND_ALPHA
-	end
-
-	local normalized = string.lower(value)
-	if normalized == "additive" or normalized == "add" then
-		return raylib.const.BlendMode.BLEND_ADDITIVE
-	elseif normalized == "multiply" or normalized == "multiplied" then
-		return raylib.const.BlendMode.BLEND_MULTIPLIED
-	elseif normalized == "premultiply" or normalized == "premultipliedalpha" or normalized == "premultiplied" then
-		return raylib.const.BlendMode.BLEND_ALPHA_PREMULTIPLY
-	elseif normalized == "addcolors" then
-		return raylib.const.BlendMode.BLEND_ADD_COLORS
-	elseif normalized == "subtract" or normalized == "subtractcolors" then
-		return raylib.const.BlendMode.BLEND_SUBTRACT_COLORS
-	end
-
-	return raylib.const.BlendMode.BLEND_ALPHA
-end
 
 local roundedShader
 
@@ -54,7 +31,7 @@ local propTable = {
 
 propTable.render = function(lib, object, dt, structs, renderer)
 	if not roundedShader then
-		roundedShader = lib.LoadShader(nil, "./src/assets/shaders/rounded.fs")
+		roundedShader = lib.LoadShader(nil, zembed.AssetPath("kineasset://shaders/rounded.fs"))
 	end
 	local framePos, frameSize = GuiObject.render(lib, object, dt, structs, renderer)
 	if not framePos or not frameSize then
@@ -64,7 +41,7 @@ propTable.render = function(lib, object, dt, structs, renderer)
 	local blend = object:FindFirstChildOfClass("UIBlend")
 	local didBlend = false
 	if blend and blend.Enabled ~= false and blend.AffectSelf ~= false then
-		lib.BeginBlendMode(resolveBlendMode(blend.Mode))
+		lib.BeginBlendMode(GuiObject.resolveBlendMode(raylib, blend.Mode))
 		didBlend = true
 	end
 
@@ -174,7 +151,7 @@ return {
 	render = propTable.render,
 	callback = function(instance, renderer)
 		if type(instance.Image) == "string" and not _G.IsHeadless then
-			instance._cached = lib.LoadTexture(instance.Image)
+			instance._cached = lib.LoadTexture(zembed.AssetPath(instance.Image))
 			lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
 			lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
 			lib.GenTextureMipmaps(instance._cached)
@@ -186,7 +163,7 @@ return {
 					if instance._cached then
 						lib.UnloadTexture(instance._cached)
 					end
-					instance._cached = lib.LoadTexture(instance.Image)
+					instance._cached = lib.LoadTexture(zembed.AssetPath(instance.Image))
 					lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
 					lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
 					lib.GenTextureMipmaps(instance._cached)

@@ -24,6 +24,10 @@ return function(objects, data)
 
 	local wrapper = {}
 
+	wrapper.set = function(prop, value)
+		config[prop] = value
+	end
+
 	wrapper.setValue = function(v)
 		config.value = v
 	end

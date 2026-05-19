@@ -23,6 +23,7 @@ local browser = gui.apibrowser({
 	width = 800,
 	height = 600,
 	fontSize = 25,
+	game = game,
 	font = vend,
 	onItemSelect = function(item)
 		print("Selected:", item.name, item.type)

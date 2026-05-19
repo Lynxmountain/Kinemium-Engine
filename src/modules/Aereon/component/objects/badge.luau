@@ -23,6 +23,10 @@ return function(objects, data)
 		config.text = t
 	end
 
+	wrapper.set = function(prop, value)
+		config[prop] = value
+	end
+
 	wrapper.render = function(dt)
 		local textWidth = raylib.lib.MeasureTextEx(config.font, config.text, config.fontSize, config.spacing).x
 		local badgeWidth = math.max(config.minWidth, textWidth + 8)

@@ -523,10 +523,12 @@ function NavMeshQuery:GetRandomPointReachable(fromPos: Vector3): Vector3?
 	local reachable = {}
 	local visited = {}
 	local queue = { startPolyId }
+	local head = 1
 	visited[startPolyId] = true
 
-	while #queue > 0 do
-		local current = table.remove(queue, 1)
+	while head <= #queue do
+		local current = queue[head]
+		head += 1
 		table.insert(reachable, current)
 
 		local poly = self.mesh.polygons[current]

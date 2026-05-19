@@ -1,6 +1,5 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
-local sandboxer = require("@sandboxer")
 
 export type KinemiumMod = {
 	Name: string,
@@ -47,7 +46,6 @@ KinemiumModService.InitRenderer = function(renderer, renderer_signal)
 			run = function(code)
 				-- dont ask why i added that number
 				-- it was totally random
-				return sandboxer.run(code, "sandboxVM#676767", KinemiumModService.modenv)
 			end,
 		},
 	})

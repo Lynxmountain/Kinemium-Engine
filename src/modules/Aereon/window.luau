@@ -1,4 +1,6 @@
 return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
+	local gui = require("./component/lib")
+	local arect = require("@arect")
 	local windowRegistry = {}
 	local module = {}
 	local draggedWindow = nil
@@ -8,6 +10,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local MouseCursor = require("@Kinemium.MouseCursor")
 	local spring = require("@kispring")
 	local KinemiumFontService = game:GetService("KinemiumFontService")
+	local zembed = require("@zembed")
 
 	local resizingWindow = nil
 	local resizeSide = nil
@@ -18,7 +21,6 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local vend = KinemiumFontService.GetDefaultFont()
 
 	local windowAnimState = {}
-
 	local FADE_DURATION = 0.18
 
 	local shadowTexture, shadowSize
@@ -26,10 +28,11 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		shadowTexture = buffer.create(16)
 		shadowSize = vector.create(0, 0)
 	else
-		shadowTexture = raylib.LoadTexture("./src/assets/images/shadow.png")
+		shadowTexture = raylib.LoadTexture(zembed.AssetPath("kineasset://images/shadow.png"))
 		shadowSize = vector.create(buffer.readi32(shadowTexture, 4), buffer.readi32(shadowTexture, 8))
 	end
 
+	-- Traffic light button layout constants
 	local BTN_RADIUS = 6
 	local BTN_SPACING = 8
 	local BTN_LEFT = 12
@@ -39,6 +42,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local STATUSBAR_H = 18
 	local SEP_H = 1
 
+	-- Traffic light colours
 	local TL_RED = Color3.new(0.988, 0.369, 0.333)
 	local TL_YEL = Color3.new(0.988, 0.733, 0.173)
 	local TL_GRN = Color3.new(0.259, 0.808, 0.388)
@@ -49,6 +53,8 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 	local BLACK = Color3.new(0, 0, 0)
 	local WHITE = Color3.new(1, 1, 1)
+
+	--  Helpers
 
 	local function wcol(wcfg, key, fallback)
 		return wcfg[key] or fallback
@@ -83,54 +89,10 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		return windowAnimState[window.id]
 	end
 
-	local function getResizeSide(window, mousePos)
-		if window.Minimized then
-			return nil
-		end
-		local sides = {}
-		local wx, wy, ww, wh = window.x, window.y, window.width, window.height
-		local t = resizeThreshold
-		if math.abs(mousePos.x - wx) <= t then
-			table.insert(sides, "left")
-		elseif math.abs(mousePos.x - (wx + ww)) <= t then
-			table.insert(sides, "right")
-		end
-		if math.abs(mousePos.y - wy) <= t then
-			table.insert(sides, "top")
-		elseif math.abs(mousePos.y - (wy + wh)) <= t then
-			table.insert(sides, "bottom")
-		end
-		return #sides > 0 and sides or nil
-	end
-
-	local function setCursorForResize(sides)
-		if not sides then
-			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
-			return
-		end
-		local hasH, hasV = false, false
-		for _, s in ipairs(sides) do
-			if s == "left" or s == "right" then
-				hasH = true
-			end
-			if s == "top" or s == "bottom" then
-				hasV = true
-			end
-		end
-		if hasH and hasV then
-			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NWSE.Value)
-		elseif hasH then
-			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_EW.Value)
-		elseif hasV then
-			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NS.Value)
-		end
-	end
+	--  Geometry helpers
 
 	local function getWindowHitHeight(window)
-		if window.Minimized then
-			return window._titleBarH
-		end
-		return window.height
+		return window.Minimized and window._titleBarH or window.height
 	end
 
 	local function isMouseOverWindow(window, mousePos)
@@ -138,41 +100,6 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			and mousePos.x <= window.x + window.width
 			and mousePos.y >= window.y
 			and mousePos.y <= window.y + getWindowHitHeight(window)
-	end
-
-	local function measureTabWidth(text, fontSize)
-		local m = raylib.MeasureTextEx(vend, text, fontSize, 1)
-		return m.x + TAB_PAD_X * 2
-	end
-
-	local function getTabBarHeight(window)
-		if window.Minimized then
-			return 0
-		end
-		return (window.tabs and #window.tabs > 0) and window._tabBarH or 0
-	end
-
-	local function getTabAtPosition(window, mousePos, fontSize)
-		if window.Minimized then
-			return nil
-		end
-		if not window.tabs or #window.tabs == 0 then
-			return nil
-		end
-		local titleH = (window.headerRender ~= false) and window._titleBarH or 0
-		local tabBarY = window.y + titleH
-		if mousePos.y < tabBarY or mousePos.y > tabBarY + window._tabBarH then
-			return nil
-		end
-		local curX = window.x
-		for i, tab in ipairs(window.tabs) do
-			local tw = math.max(measureTabWidth(tab.name, fontSize), TAB_MIN_W)
-			if mousePos.x >= curX and mousePos.x <= curX + tw then
-				return i
-			end
-			curX = curX + tw
-		end
-		return nil
 	end
 
 	local function isMouseOverTitlebar(window, mousePos)
@@ -200,6 +127,97 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		return (dx * dx + dy * dy) <= (BTN_RADIUS + 3) ^ 2
 	end
 
+	local function getResizeSide(window, mousePos)
+				if window.Minimized then
+					return nil
+				end
+				local sides = {}
+				local t = resizeThreshold
+
+				-- Check horizontal position
+				local isLeft = math.abs(mousePos.x - window.x) <= t
+				local isRight = math.abs(mousePos.x - (window.x + window.width)) <= t
+
+				-- Check vertical position
+				local isTop = math.abs(mousePos.y - window.y) <= t
+				local isBottom = math.abs(mousePos.y - (window.y + window.height)) <= t
+
+				-- Only allow resizing at corners (must be on both horizontal and vertical edges)
+				if isLeft and isTop then
+					table.insert(sides, "left")
+					table.insert(sides, "top")
+				elseif isLeft and isBottom then
+					table.insert(sides, "left")
+					table.insert(sides, "bottom")
+				elseif isRight and isTop then
+					table.insert(sides, "right")
+					table.insert(sides, "top")
+				elseif isRight and isBottom then
+					table.insert(sides, "right")
+				table.insert(sides, "bottom")
+			end
+
+	return #sides > 0 and sides or nil
+	end
+
+	local function setCursorForResize(sides)
+		if not sides then
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_DEFAULT.Value)
+			return
+		end
+		local hasH, hasV = false, false
+		for _, s in ipairs(sides) do
+			if s == "left" or s == "right" then
+				hasH = true
+			end
+			if s == "top" or s == "bottom" then
+				hasV = true
+			end
+		end
+		if hasH and hasV then
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NWSE.Value)
+		elseif hasH then
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_EW.Value)
+		elseif hasV then
+			MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_NS.Value)
+		end
+	end
+
+	local function measureTabWidth(text, fontSize)
+		return raylib.MeasureTextEx(vend, text, fontSize, 1).x + TAB_PAD_X * 2
+	end
+
+	local function getTabAtPosition(window, mousePos, fontSize)
+		if window.Minimized or not window.tabs or #window.tabs == 0 then
+			return nil
+		end
+		local titleH = (window.headerRender ~= false) and window._titleBarH or 0
+		local tabBarY = window.y + titleH
+		if mousePos.y < tabBarY or mousePos.y > tabBarY + window._tabBarH then
+			return nil
+		end
+		local curX = window.x
+		for i, tab in ipairs(window.tabs) do
+			local tw = math.max(measureTabWidth(tab.name, fontSize), TAB_MIN_W)
+			if mousePos.x >= curX and mousePos.x <= curX + tw then
+				return i
+			end
+			curX = curX + tw
+		end
+		return nil
+	end
+
+	local function isMouseInViewport(mousePos)
+		local sw, sh = raylib.GetRenderWidth(), raylib.GetRenderHeight()
+		local toolbarH = 160
+		return mousePos.x >= 0
+			and mousePos.x <= sw - 400
+			and mousePos.y >= toolbarH
+			and mousePos.y <= sh - toolbarH - sh * 0.2
+	end
+
+	--  Module events (overridable callbacks)
+
 	module.OutlineColor = TL_GRN
 	module.OutlineTransparency = 1
 	module.dragged = function() end
@@ -215,16 +233,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	module.windowMaximized = function() end
 	module.windowUnmaximized = function() end
 
-	local anyWindowFocused = false
-
-	local function isMouseInViewport(mousePos)
-		local sw, sh = raylib.GetRenderWidth(), raylib.GetRenderHeight()
-		local toolbarH = 160
-		return mousePos.x >= 0
-			and mousePos.x <= sw - 400
-			and mousePos.y >= toolbarH
-			and mousePos.y <= sh - toolbarH - sh * 0.2
-	end
+	--  Window creation
 
 	function module.create(data: {
 		headerRender: boolean?,
@@ -267,8 +276,8 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			Closed = false,
 			Focused = false,
 			IsDragging = false,
-			Minimized = false,
-			Maximized = false,
+			Minimized = data.Minimized or false,
+			Maximized = data.Maximized or false,
 			scrollOffset = vector.create(0, 0),
 			showStatusBar = data.showStatusBar or false,
 			statusText = data.statusText or "",
@@ -288,25 +297,23 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		getOrCreateAnim(window)
 
 		function window:MoveTo(x, y)
-			window.x = x
-			window.y = y
-			if not window.Maximized then
-				window._savedX = x
-				window._savedY = y
+			self.x, self.y = x, y
+			if not self.Maximized then
+				self._savedX, self._savedY = x, y
 			end
 		end
 
-		function window:Resize(x, y)
-			window.width = math.max(x, resizeMinSize.x)
-			window.height = math.max(y, resizeMinSize.y)
-			if not window.Maximized then
-				window._savedW = window.width
-				window._savedH = window.height
+		function window:Resize(w, h)
+			self.width = math.max(w, resizeMinSize.x)
+			self.height = math.max(h, resizeMinSize.y)
+			if not self.Maximized then
+				self._savedW = self.width
+				self._savedH = self.height
 			end
 		end
 
 		function window:Close()
-			local anim = getOrCreateAnim(window)
+			local anim = getOrCreateAnim(self)
 			if not anim.closing then
 				anim.closing = true
 				anim.closeTimer = 0
@@ -314,112 +321,108 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		end
 
 		function window:Open()
-			local anim = getOrCreateAnim(window)
-			window.Closed = false
+			local anim = getOrCreateAnim(self)
+			self.Closed = false
 			anim.closing = false
 			anim.closeTimer = 0
 			anim.fadeAlpha = 1
 		end
 
 		function window:Minimize()
-			if not window.Minimized then
-				window.Minimized = true
-				if window.Maximized then
-					window:Unmaximize()
-				end
-				module.windowMinimized(window)
+			if self.Minimized then
+				return
 			end
+			self.Minimized = true
+			if self.Maximized then
+				self:Unmaximize()
+			end
+			module.windowMinimized(self)
 		end
 
 		function window:Unminimize()
-			if window.Minimized then
-				window.Minimized = false
-				module.windowUnminimized(window)
+			if not self.Minimized then
+				return
 			end
+			self.Minimized = false
+			module.windowUnminimized(self)
 		end
 
 		function window:ToggleMinimize()
-			if window.Minimized then
-				window:Unminimize()
+			if self.Minimized then
+				self:Unminimize()
 			else
-				window:Minimize()
+				self:Minimize()
 			end
 		end
 
 		function window:Maximize()
-			if not window.Maximized then
-				window._savedX = window.x
-				window._savedY = window.y
-				window._savedW = window.width
-				window._savedH = window.height
-
-				local parent = window.parent
-				if parent then
-					window.x = parent.x
-					window.y = parent.y
-					window.width = parent.width
-					window.height = parent.height
-				else
-					window.x = 0
-					window.y = 0
-					window.width = raylib.GetRenderWidth()
-					window.height = raylib.GetRenderHeight()
-				end
-
-				window.Maximized = true
-				if window.Minimized then
-					window.Minimized = false
-				end
-				module.windowMaximized(window)
+			if self.Maximized then
+				return
 			end
+			self._savedX = self.x
+			self._savedY = self.y
+			self._savedW = self.width
+			self._savedH = self.height
+
+			local parent = self.parent
+			if parent then
+				self.x, self.y, self.width, self.height = parent.x, parent.y, parent.width, parent.height
+			else
+				self.x, self.y = 0, 0
+				self.width, self.height = raylib.GetRenderWidth(), raylib.GetRenderHeight()
+			end
+
+			self.Maximized = true
+			self.Minimized = false
+			module.windowMaximized(self)
 		end
 
 		function window:Unmaximize()
-			if window.Maximized then
-				window.x = window._savedX
-				window.y = window._savedY
-				window.width = window._savedW
-				window.height = window._savedH
-				window.Maximized = false
-				module.windowUnmaximized(window)
+			if not self.Maximized then
+				return
 			end
+			self.x, self.y = self._savedX, self._savedY
+			self.width, self.height = self._savedW, self._savedH
+			self.Maximized = false
+			module.windowUnmaximized(self)
 		end
 
 		function window:ToggleMaximize()
-			if window.Maximized then
-				window:Unmaximize()
+			if self.Maximized then
+				self:Unmaximize()
 			else
-				window:Maximize()
+				self:Maximize()
 			end
 		end
 
 		function window:SetStatus(t)
-			window.statusText = t or ""
+			self.statusText = t or ""
 		end
 
 		function window:SetTab(index)
 			if index == nil then
-				local prev = window.activeTab
-				window.activeTab = nil
+				local prev = self.activeTab
+				self.activeTab = nil
 				if prev ~= nil then
-					module.tabChanged(window, nil, nil)
+					module.tabChanged(self, nil, nil)
 				end
-			elseif window.tabs and index >= 1 and index <= #window.tabs then
-				local prev = window.activeTab
-				window.activeTab = index
+			elseif self.tabs and index >= 1 and index <= #self.tabs then
+				local prev = self.activeTab
+				self.activeTab = index
 				if prev ~= index then
-					module.tabChanged(window, index, window.tabs[index])
+					module.tabChanged(self, index, self.tabs[index])
 				end
 			end
 		end
 
 		function window:SetTabByName(name)
-			if window.tabs then
-				for i, tab in ipairs(window.tabs) do
-					if tab.name == name then
-						window:SetTab(i)
-						return
-					end
+			if not self.tabs then
+				return
+			end
+			for i, tab in ipairs(self.tabs) do
+				if tab.name == name then
+					self:SetTab(i)
+					return
 				end
 			end
 		end
@@ -427,30 +430,33 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		return window
 	end
 
+	--  Update
+
 	function module.update(dt, selectedTheme)
 		local wcfg = selectedTheme and selectedTheme.window or {}
-
 		local titleH = wval(wcfg, "TitleHeight", 28)
-		local tabH = wval(wcfg, "TitleHeight", 28)
+
 		for _, w in pairs(windowRegistry) do
 			w._titleBarH = titleH
-			w._tabBarH = tabH
+			w._tabBarH = titleH
 		end
 
+		-- Fade-out animation
 		for _, w in pairs(windowRegistry) do
 			if not w.enabled then
 				continue
 			end
 			local anim = getOrCreateAnim(w)
-			if anim.closing then
-				anim.closeTimer = anim.closeTimer + dt
-				anim.fadeAlpha = math.max(0, 1 - (anim.closeTimer / FADE_DURATION))
-				if anim.closeTimer >= FADE_DURATION then
-					w.Closed = true
-					anim.closing = false
-					anim.fadeAlpha = 0
-					module.windowClosed(w)
-				end
+			if not anim.closing then
+				continue
+			end
+			anim.closeTimer = anim.closeTimer + dt
+			anim.fadeAlpha = math.max(0, 1 - anim.closeTimer / FADE_DURATION)
+			if anim.closeTimer >= FADE_DURATION then
+				w.Closed = true
+				anim.closing = false
+				anim.fadeAlpha = 0
+				module.windowClosed(w)
 			end
 		end
 
@@ -459,10 +465,10 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		local mouseRightPressed = raylib.IsMouseButtonPressed(1)
 		local mouseDown = raylib.IsMouseButtonDown(0)
 		local mouseReleased = raylib.IsMouseButtonReleased(0)
-
 		local tabFontSize = wval(wcfg, "TitleTextSize", 13)
-
 		local speed = 12 * dt
+
+		-- Hover animations
 		for _, w in pairs(windowRegistry) do
 			if w.Closed or not w.enabled then
 				continue
@@ -474,6 +480,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			anim.maxHover = lerp(anim.maxHover, isMouseOverTrafficLight(w, mousePos, 3) and 1 or 0, speed * 1.5)
 		end
 
+		-- Topmost visible window under the cursor
 		local hoveredWindow = nil
 		for i = #windowRegistry, 1, -1 do
 			local w = windowRegistry[i]
@@ -484,13 +491,12 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			end
 		end
 
+		-- Right-click: focus management only
 		if mouseRightPressed == 1 then
 			if hoveredWindow then
 				game.Stop3DInput = true
-				anyWindowFocused = true
 			elseif isMouseInViewport(mousePos) then
 				game.Stop3DInput = false
-				anyWindowFocused = false
 				for _, w in pairs(windowRegistry) do
 					if w.Focused then
 						w.Focused = false
@@ -501,7 +507,9 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			end
 		end
 
+		-- Left click
 		if mousePressed == 1 then
+			-- Traffic-light buttons (iterate front-to-back)
 			for i = #windowRegistry, 1, -1 do
 				local w = windowRegistry[i]
 				local anim = getOrCreateAnim(w)
@@ -510,16 +518,17 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				end
 				if isMouseOverTrafficLight(w, mousePos, 1) then
 					w:Close()
-					continue
+					break
 				elseif isMouseOverTrafficLight(w, mousePos, 2) then
 					w:ToggleMinimize()
-					continue
+					break
 				elseif isMouseOverTrafficLight(w, mousePos, 3) then
 					w:ToggleMaximize()
-					continue
+					break
 				end
 			end
 
+			-- Tab click: raise and switch
 			for i = #windowRegistry, 1, -1 do
 				local w = windowRegistry[i]
 				local anim = getOrCreateAnim(w)
@@ -534,6 +543,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				end
 			end
 
+			-- Focus
 			local focusedThisClick = false
 			for _, w in pairs(windowRegistry) do
 				local anim = getOrCreateAnim(w)
@@ -555,75 +565,76 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					end
 				end
 			end
+
 			if focusedThisClick then
 				game.Stop3DInput = true
-				anyWindowFocused = true
 			elseif isMouseInViewport(mousePos) then
 				game.Stop3DInput = false
-				anyWindowFocused = false
 			end
-		end
 
-		if mousePressed == 1 and not draggedWindow and not resizingWindow then
-			for i = #windowRegistry, 1, -1 do
-				local w = windowRegistry[i]
-				local anim = getOrCreateAnim(w)
-				if w.Closed or anim.closing or not w.enabled then
-					continue
-				end
-				local titleBarH = (w.headerRender ~= false) and w._titleBarH or 0
-				if
-					mousePos.x >= w.x
-					and mousePos.x <= w.x + w.width
-					and mousePos.y >= w.y
-					and mousePos.y <= w.y + titleBarH
-					and not isMouseOverTrafficLight(w, mousePos, 1)
-					and not isMouseOverTrafficLight(w, mousePos, 2)
-					and not isMouseOverTrafficLight(w, mousePos, 3)
-					and not getTabAtPosition(w, mousePos, tabFontSize)
-					and not w.Maximized
-				then
-					draggedWindow = w
-					dragOffset.x = mousePos.x - w.x
-					dragOffset.y = mousePos.y - w.y
-					table.remove(windowRegistry, i)
-					table.insert(windowRegistry, w)
-					break
-				end
-			end
-			if not draggedWindow then
+			-- Begin drag or resize
+			if not draggedWindow and not resizingWindow then
 				for i = #windowRegistry, 1, -1 do
 					local w = windowRegistry[i]
 					local anim = getOrCreateAnim(w)
-					if w.Closed or anim.closing or not w.enabled or w.Minimized or w.Maximized then
+					if w.Closed or anim.closing or not w.enabled then
 						continue
 					end
-					local sides = getResizeSide(w, mousePos)
-					if sides then
-						resizingWindow = w
-						resizeSide = sides
-						resizeStart = vector.create(mousePos.x, mousePos.y)
+					local titleBarH = (w.headerRender ~= false) and w._titleBarH or 0
+					if
+						mousePos.x >= w.x
+						and mousePos.x <= w.x + w.width
+						and mousePos.y >= w.y
+						and mousePos.y <= w.y + titleBarH
+						and not isMouseOverTrafficLight(w, mousePos, 1)
+						and not isMouseOverTrafficLight(w, mousePos, 2)
+						and not isMouseOverTrafficLight(w, mousePos, 3)
+						and not getTabAtPosition(w, mousePos, tabFontSize)
+						and not w.Maximized
+					then
+						draggedWindow = w
+						dragOffset.x = mousePos.x - w.x
+						dragOffset.y = mousePos.y - w.y
 						table.remove(windowRegistry, i)
 						table.insert(windowRegistry, w)
 						break
 					end
 				end
+
+				if not draggedWindow then
+					for i = #windowRegistry, 1, -1 do
+						local w = windowRegistry[i]
+						local anim = getOrCreateAnim(w)
+						if w.Closed or anim.closing or not w.enabled or w.Minimized or w.Maximized then
+							continue
+						end
+						local sides = getResizeSide(w, mousePos)
+						if sides then
+							resizingWindow = w
+							resizeSide = sides
+							resizeStart = vector.create(mousePos.x, mousePos.y)
+							table.remove(windowRegistry, i)
+							table.insert(windowRegistry, w)
+							break
+						end
+					end
+				end
 			end
 		end
 
+		-- Drag / resize held
 		if mouseDown == 1 then
 			if draggedWindow then
 				MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_ALL.Value)
 				draggedWindow.x = mousePos.x - dragOffset.x
 				draggedWindow.y = mousePos.y - dragOffset.y
-				if not draggedWindow.Maximized then
-					draggedWindow._savedX = draggedWindow.x
-					draggedWindow._savedY = draggedWindow.y
-				end
+				draggedWindow._savedX = draggedWindow.x
+				draggedWindow._savedY = draggedWindow.y
 				draggedWindow.IsDragging = true
 				module.dragged(draggedWindow)
 			elseif resizingWindow then
-				local dx, dy = mousePos.x - resizeStart.x, mousePos.y - resizeStart.y
+				local dx = mousePos.x - resizeStart.x
+				local dy = mousePos.y - resizeStart.y
 				for _, side in ipairs(resizeSide) do
 					if side == "left" then
 						resizingWindow.x = resizingWindow.x + dx
@@ -645,6 +656,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				resizeStart = vector.create(mousePos.x, mousePos.y)
 			end
 		else
+			-- Hover-resize cursor when nothing is active
 			if not draggedWindow and not resizingWindow then
 				local anySide = false
 				for i = #windowRegistry, 1, -1 do
@@ -678,6 +690,8 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		end
 	end
 
+	--  Draw
+
 	function module.draw(dt, selectedTheme)
 		dragSpring:step(dt)
 
@@ -706,7 +720,6 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 		local tabActiveColor = titlebarColor
 		local tabInactiveColor = shiftBrightness(titlebarColor, isTitleDark and -0.03 or 0.03)
-		local tabTextColor = titleColor
 		local tabTextDimColor = Color3.new(
 			titleColor.R * 0.45 + titlebarColor.R * 0.55,
 			titleColor.G * 0.45 + titlebarColor.G * 0.55,
@@ -715,7 +728,6 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 
 		local sepColor = shiftBrightness(titlebarColor, isTitleDark and 0.10 or -0.10)
 		local cornerFrac = math.clamp(cornerPx / 200, 0, 0.5)
-		local tabBarH = titleH
 
 		module.OutlineColor = accentColor
 
@@ -731,9 +743,9 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			local alpha = anim.fadeAlpha
 			local wx, wy, ww = wd.x, wd.y, wd.width
 			local focused = wd.Focused
-
 			local drawH = wd.Minimized and titleH or wd.height
 
+			-- Transparency helper: alpha-scale any base transparency
 			local function tr(base)
 				return 1 - (1 - base) * alpha
 			end
@@ -746,9 +758,9 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			local curTitleColor = focused and titleColor or titleColorDim
 			local curBodyTransp = wd.IsDragging and 0 or bodyTransp
 
+			-- Shadow
 			if shadowsOn then
-				local shadowAlpha = focused and (1 - shadowTr) * 1.4 or (1 - shadowTr)
-				shadowAlpha = shadowAlpha * alpha
+				local shadowAlpha = (focused and (1 - shadowTr) * 1.4 or (1 - shadowTr)) * alpha
 				local spread = focused and 18 or 10
 				local yBias = focused and 10 or 4
 				raylib.DrawTexturePro(
@@ -767,10 +779,10 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 			end
 
 			local mainRect = structs.Rectangle:new({ x = wx, y = wy, width = ww, height = drawH })
-
 			raylib.DrawRectangleRounded(mainRect, cornerFrac, 20, bodyColor:ToRaylib(tr(curBodyTransp)))
 			module.backgroundDrawed(wd)
 
+			-- Title bar
 			local titleBarH = 0
 			if wd.headerRender ~= false then
 				titleBarH = titleH
@@ -784,38 +796,39 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					)
 				end
 
+				-- Traffic lights
 				local cx1, cx2, cx3, cy = trafficLightCentres(wd)
 				local showSymbols = anim.titlebarHover > 0.25 and focused
-
-				local function tlColor(base)
+				local function tlCol(base)
 					return Color3.new(base.R, base.G, base.B):ToRaylib(1 - alpha)
 				end
 
-				raylib.DrawCircleV(vector.create(cx1, cy), BTN_RADIUS, tlColor(btnRed))
+				-- Close
+				raylib.DrawCircleV(vector.create(cx1, cy), BTN_RADIUS, tlCol(btnRed))
 				if showSymbols then
-					local r = BTN_SYM_R
-					local sc = TL_SYM_R:ToRaylib(1 - alpha)
+					local r, sc = BTN_SYM_R, TL_SYM_R:ToRaylib(1 - alpha)
 					raylib.DrawLineEx(vector.create(cx1 - r, cy - r), vector.create(cx1 + r, cy + r), 1.2, sc)
 					raylib.DrawLineEx(vector.create(cx1 + r, cy - r), vector.create(cx1 - r, cy + r), 1.2, sc)
 				end
 
-				raylib.DrawCircleV(vector.create(cx2, cy), BTN_RADIUS, tlColor(btnYel))
+				-- Minimise
+				raylib.DrawCircleV(vector.create(cx2, cy), BTN_RADIUS, tlCol(btnYel))
 				if showSymbols then
-					local r = BTN_SYM_R
-					local sc = TL_SYM_Y:ToRaylib(1 - alpha)
+					local r, sc = BTN_SYM_R, TL_SYM_Y:ToRaylib(1 - alpha)
 					raylib.DrawLineEx(vector.create(cx2 - r, cy), vector.create(cx2 + r, cy), 1.2, sc)
 				end
 
-				raylib.DrawCircleV(vector.create(cx3, cy), BTN_RADIUS, tlColor(btnGrn))
+				-- Maximise
+				raylib.DrawCircleV(vector.create(cx3, cy), BTN_RADIUS, tlCol(btnGrn))
 				if showSymbols then
-					local r = BTN_SYM_R - 0.5
-					local sc = TL_SYM_G:ToRaylib(1 - alpha)
+					local r, sc = BTN_SYM_R - 0.5, TL_SYM_G:ToRaylib(1 - alpha)
 					raylib.DrawLineEx(vector.create(cx3 - r, cy + r), vector.create(cx3, cy), 1.1, sc)
 					raylib.DrawLineEx(vector.create(cx3 - r, cy), vector.create(cx3 - r, cy + r), 1.1, sc)
 					raylib.DrawLineEx(vector.create(cx3 + r, cy - r), vector.create(cx3, cy), 1.1, sc)
 					raylib.DrawLineEx(vector.create(cx3 + r, cy), vector.create(cx3 + r, cy - r), 1.1, sc)
 				end
 
+				-- Title text
 				local tm = raylib.MeasureTextEx(vend, wd.title, titleFontSz, 1)
 				raylib.DrawTextEx(
 					vend,
@@ -827,11 +840,10 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				)
 
 				if wd.Minimized then
-					local minimizedLabel = "Minimized"
 					local leftEdge = wx + BTN_LEFT + (BTN_RADIUS * 2 + BTN_SPACING) * 3 + 8
 					raylib.DrawTextEx(
 						vend,
-						minimizedLabel,
+						"Minimized",
 						vector.create(leftEdge, wy + (titleBarH - (titleFontSz - 2)) / 2),
 						titleFontSz - 2,
 						1,
@@ -842,10 +854,12 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 				wd.titleRect = { height = titleBarH, width = ww, x = wx, y = wy }
 			end
 
+			-- Body (non-minimized)
 			if not wd.Minimized then
 				local hasTabs = wd.tabs and #wd.tabs > 0
-				local tabAreaH = hasTabs and tabBarH or 0
+				local tabAreaH = hasTabs and titleH or 0
 
+				-- Tab bar
 				if hasTabs then
 					local tabBarY = wy + titleBarH
 
@@ -865,10 +879,12 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 						)
 
 						if isActive then
+							-- Active indicator bar
 							raylib.DrawRectangleRec(
 								structs.Rectangle:new({ x = curX, y = tabBarY, width = tw, height = 2 }),
 								accentColor:ToRaylib(tr(wval(wcfg, "DragOutlineTransparency", 0)))
 							)
+							-- Erase the bottom separator for the active tab
 							raylib.DrawLineEx(
 								vector.create(curX + 1, tabBarY + tabAreaH),
 								vector.create(curX + tw - 1, tabBarY + tabAreaH),
@@ -877,6 +893,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 							)
 						end
 
+						-- Divider between tabs
 						if i > 1 then
 							raylib.DrawLineEx(
 								vector.create(curX, tabBarY + 5),
@@ -893,7 +910,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 							vector.create(curX + (tw - lm.x) / 2, tabBarY + (tabAreaH - titleFontSz) / 2),
 							titleFontSz,
 							1,
-							(isActive and tabTextColor or tabTextDimColor):ToRaylib(1 - alpha)
+							(isActive and titleColor or tabTextDimColor):ToRaylib(1 - alpha)
 						)
 
 						curX = curX + tw
@@ -907,6 +924,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					)
 				end
 
+				-- Status bar
 				local statusBarH = wd.showStatusBar and STATUSBAR_H or 0
 				if wd.showStatusBar then
 					local sbY = wy + wd.height - statusBarH
@@ -933,54 +951,81 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 					end
 				end
 
+				-- Window outline
 				raylib.DrawRectangleRoundedLinesEx(mainRect, cornerFrac, 20, 0.75, sepColor:ToRaylib(tr(titlebarTr)))
 
+				-- Drag outline
 				if wd.IsDragging then
-					local dragOutRect =
-						structs.Rectangle:new({ x = wx - 1, y = wy - 1, width = ww + 2, height = wd.height + 2 })
 					raylib.DrawRectangleRoundedLinesEx(
-						dragOutRect,
+						structs.Rectangle:new({ x = wx - 1, y = wy - 1, width = ww + 2, height = wd.height + 2 }),
 						cornerFrac,
 						20,
 						1.5,
 						accentColor:ToRaylib(tr(wval(wcfg, "DragOutlineTransparency", 0)))
 					)
 				end
-			else
-				raylib.DrawRectangleRoundedLinesEx(mainRect, cornerFrac, 20, 0.75, sepColor:ToRaylib(tr(titlebarTr)))
-			end
 
-			if not anim.closing and not wd.Minimized then
-				local hasTabs = wd.tabs and #wd.tabs > 0
-				local tabAreaH = hasTabs and tabBarH or 0
-				local statusBarH = wd.showStatusBar and STATUSBAR_H or 0
-				local contentOffsetY = titleBarH + tabAreaH
-				local contentH = wd.height - contentOffsetY - statusBarH
+				-- Content
+				if not anim.closing then
+					local contentOffsetY = titleBarH + tabAreaH
+					local contentH = wd.height - contentOffsetY - statusBarH
 
-				if not wd.DisableClipping then
-					raylib.BeginScissorMode(wx, wy + contentOffsetY, ww, contentH)
-				end
+					if not wd.DisableClipping then
+						raylib.BeginScissorMode(wx, wy + contentOffsetY, ww, contentH)
+					end
 
-				if hasTabs and wd.activeTab then
-					local activeTab = wd.tabs[wd.activeTab]
-					if activeTab and activeTab.render then
-						activeTab.render(wd)
+					if wd.Scrollable then
+						if not wd._scrollArea then
+							wd._scrollArea = gui.scrollable({
+								scrollbarWidth = 6,
+								scrollbarColor = Color3.new(0.3, 0.3, 0.3),
+								scrollbarHoverColor = Color3.new(0.5, 0.5, 0.5),
+								scrollbarBackgroundTransparency = 1,
+								child = {
+									get_rect = function()
+										return arect.new(0, 0, ww, wd._contentHeight or 0)
+									end,
+									set = function(self, prop, value)
+										if prop == "obj_rect" then
+											self.rect = value
+										end
+									end,
+									render = function(self, dt)
+										if hasTabs and wd.activeTab then
+											local activeTab = wd.tabs[wd.activeTab]
+											if activeTab and activeTab.render then
+												activeTab.render(wd)
+											end
+										end
+										module.stepped(wd, dt)
+									end,
+								},
+							})
+						end
+						wd._scrollArea.set("obj_rect", arect.new(wx, wy + contentOffsetY, ww, contentH))
+						wd._scrollArea.render(dt)
+					else
+						if hasTabs and wd.activeTab then
+							local activeTab = wd.tabs[wd.activeTab]
+							if activeTab and activeTab.render then
+								activeTab.render(wd)
+							end
+						end
+
+						module.stepped(wd, dt)
+					end
+
+					if not wd.DisableClipping then
+						raylib.EndScissorMode()
+					end
+
+					if wd.stepped then
+						wd.stepped(wd, dt)
 					end
 				end
-
-				module.stepped(wd, dt)
-
-				if not wd.DisableClipping then
-					raylib.EndScissorMode()
-				end
-
-				if wd.stepped then
-					wd.stepped(wd, dt)
-				end
-			elseif wd.stepped and not anim.closing then
-				if not wd.Minimized then
-					wd.stepped(wd, dt)
-				end
+			else
+				-- Minimized outline only
+				raylib.DrawRectangleRoundedLinesEx(mainRect, cornerFrac, 20, 0.75, sepColor:ToRaylib(tr(titlebarTr)))
 			end
 		end
 	end

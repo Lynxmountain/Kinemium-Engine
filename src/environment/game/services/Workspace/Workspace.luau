@@ -15,10 +15,13 @@ local rlib = r3d.lib
 local material_shader_manager = require("./materialShaders/_main")
 
 local CHUNK_SIZE = 32
+local TERRAIN_CHUNK_SIZE = 16
 local chunks = {}
 local chunkList = {}
 local largeParts = {}
 local TRANSPARENCY_EPSILON = 0.001
+
+local activeMaterialShader = nil
 
 local function isPartOpaque(part)
 	return (part.Transparency or 0) <= TRANSPARENCY_EPSILON
@@ -82,6 +85,22 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		LOD1MinSize = 2,
 		LOD2MinSize = 6,
 		LOD3MinSize = 16,
+
+		ApplyGlobalSurfaceShader = function(shaderObject)
+			if activeMaterialShader then
+				activeMaterialShader = nil
+			end
+
+			if typeof(shaderObject) == "table" then
+				if shaderObject._class == "shader" then
+					if shaderObject._type == "surface" then
+						activeMaterialShader = shaderObject._shader
+						return true
+					end
+				end
+			end
+			return false
+		end,
 
 		IsInPool = function(part)
 			return pool[part.UniqueId] ~= nil
@@ -156,10 +175,32 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		return chunk
 	end
 
+	local function updateLargePartChunkSpan(part)
+		if not part or not part.CFrame or not part.Size then
+			return
+		end
+
+		local cf = part.CFrame
+		local center = cf.Position
+		local half = part.Size * 0.5
+		local right = cf:GetRightVector()
+		local up = cf:GetUpVector()
+		local look = cf:GetLookVector()
+		local extent = Vector3.new(
+			math.abs(right.X) * half.X + math.abs(up.X) * half.Y + math.abs(look.X) * half.Z,
+			math.abs(right.Y) * half.X + math.abs(up.Y) * half.Y + math.abs(look.Y) * half.Z,
+			math.abs(right.Z) * half.X + math.abs(up.Z) * half.Y + math.abs(look.Z) * half.Z
+		)
+		local min = center - extent
+		local max = center + extent
+		rawset(part, "__workspaceLargeMinChunk", Vector3.new(worldToChunk(min)))
+		rawset(part, "__workspaceLargeMaxChunk", Vector3.new(worldToChunk(max)))
+	end
+
 	local function addPart(part)
 		local pos = part.CFrame and part.CFrame.Position or part.Position
 		local cx, cy, cz = worldToChunk(pos)
-		local key = cx .. "," .. cy .. "," .. cz
+		local key = string.format("%d,%d,%d", cx, cy, cz)
 
 		local chunk = chunks[key]
 		if not chunk then
@@ -177,6 +218,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		if part.Size and math.max(part.Size.X, part.Size.Y, part.Size.Z) > CHUNK_SIZE then
 			largeParts[#largeParts + 1] = part
 			rawset(part, "__workspaceLargeIndex", #largeParts)
+			updateLargePartChunkSpan(part)
 		end
 	end
 
@@ -225,6 +267,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		rawset(part, "__workspaceChunkKey", nil)
 		rawset(part, "__workspaceChunkIndex", nil)
 		rawset(part, "__workspaceOpaque", nil)
+		rawset(part, "__workspaceLargeMinChunk", nil)
+		rawset(part, "__workspaceLargeMaxChunk", nil)
 
 		local largeIdx = rawget(part, "__workspaceLargeIndex")
 		if largeIdx then
@@ -257,7 +301,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		local oldKey = rawget(part, "__workspaceChunkKey")
 		local pos = part.CFrame and part.CFrame.Position or part.Position
 		local cx, cy, cz = worldToChunk(pos)
-		local newKey = cx .. "," .. cy .. "," .. cz
+		local newKey = string.format("%d,%d,%d", cx, cy, cz)
 
 		if oldKey == newKey then
 			markChunkDirty(oldChunk, false)
@@ -276,6 +320,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		local conn = part.Changed:Connect(function(prop)
 			if prop == "Position" or prop == "CFrame" then
 				updatePartChunk(part)
+				updateLargePartChunkSpan(part)
 				rawset(part, "__matrixDirty", true)
 				rawset(part, "__partAABB", nil)
 				local batch = rawget(part, "__workspaceBatch")
@@ -286,6 +331,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 
 			if prop == "Size" then
+				updateLargePartChunkSpan(part)
 				rawset(part, "__materialDirty", true)
 				rawset(part, "__matrixDirty", true)
 				rawset(part, "__partAABB", nil)
@@ -399,6 +445,7 @@ Workspace.InitRenderer = function(renderer, signal, game)
 	local OFF_MATERIAL_TRANSPARENCY_MODE = r3d.structs.R3D_Material:offset("transparencyMode")
 	local OFF_MATERIAL_CULL_MODE = r3d.structs.R3D_Material:offset("cullMode")
 	local OFF_MATERIAL_UVSCALE = r3d.structs.R3D_Material:offset("uvScale")
+	local OFF_MATERIAL_SHADER = r3d.structs.R3D_Material:offset("shader")
 	local OFF_ALBEDO_COLOR = r3d.structs.R3D_AlbedoMap:offset("color")
 	local SIZE_MATERIAL = r3d.structs.R3D_Material:size()
 	local SIZE_ALBEDO = r3d.structs.R3D_AlbedoMap:size()
@@ -535,14 +582,17 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		if loadedMaterials[materialName] then
 			return loadedMaterials[materialName]
 		end
-		if not availableMaterials[materialName] or availableMaterials[materialName].loading then
+
+		local mtl_info = availableMaterials[materialName]
+		if not mtl_info then
+			return nil
+		end
+		if mtl_info.loading then
 			return nil
 		end
 
-		zune.task.spawn(function()
-			local mtl_info = availableMaterials[materialName]
+		local function processLoad()
 			local material = mtl_info.material
-
 			mtl_info.loading = true
 
 			local function read(path): (buffer?, string?)
@@ -562,7 +612,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local data_albedo, data_albedo_ext = read(mtl_info.path.albedo)
 			local data_normal, data_normal_ext = read(mtl_info.path.normal)
 			local data_orm, data_orm_ext = read(mtl_info.path.orm)
-			-- local data_emission, data_emission_ext = read(path.emission)
 			iodebug(
 				string.format(
 					"Loaded custom material %s in %.3fms",
@@ -608,9 +657,8 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				mtsh_sh[materialName].Apply(material)
 			end
 
-			availableMaterials[materialName].loading = false
-
-			loadedMaterials[materialName] = availableMaterials[materialName]
+			mtl_info.loading = false
+			loadedMaterials[materialName] = mtl_info
 
 			iodebug(
 				string.format(
@@ -619,27 +667,51 @@ Workspace.InitRenderer = function(renderer, signal, game)
 					(os.clock() - materialProcessStart) * 1000
 				)
 			)
-		end)
+			return mtl_info
+		end
+
+		if sync then
+			return processLoad()
+		end
+
+		zune.task.spawn(processLoad)
 		return nil
 	end
 
-	local function getInstancedMaterial(materialName)
+	local function getInstancedMaterial(materialName, isOpaque)
 		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
 		if not matData then
 			return nil
 		end
-		return matData.material
+
+		local matKey = materialName .. (isOpaque and "_opaque" or "_transparent")
+		if not instancedMaterialCache[matKey] then
+			local materialBuffer = buffer.create(SIZE_MATERIAL)
+			buffer.copy(materialBuffer, 0, matData.material, 0, SIZE_MATERIAL)
+			buffer.writei32(
+				materialBuffer,
+				OFF_MATERIAL_TRANSPARENCY_MODE,
+				isOpaque and const.R3D_TRANSPARENCY_DISABLED or const.R3D_TRANSPARENCY_PREPASS
+			)
+			buffer.writei32(materialBuffer, OFF_MATERIAL_CULL_MODE, R3D_CULL_BACK)
+			instancedMaterialCache[matKey] = materialBuffer
+		end
+
+		return instancedMaterialCache[matKey]
 	end
 
+	local reusableCustomMatData = { material = nil }
 	local function queueSinglePartDraw(part, r3dAABB)
 		local isMeshPart = part:IsA("MeshPart")
 		local shapeName = part.Shape and part.Shape.Value
 		local materialName = part.Material and part.Material.Value
 
 		local mesh = nil
+		local customMaterial = nil
 		if isMeshPart then
 			if part.MeshObject and part.MeshObject._meshgenHandle then
 				mesh = part.MeshObject._meshgenHandle
+				customMaterial = part.MeshObject._materialHandle
 			end
 		elseif shapeName then
 			local meshData = preloadedMeshes and preloadedMeshes[shapeName]
@@ -648,11 +720,21 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 		end
 
-		if not mesh or not materialName then
+		if not mesh then
 			return
 		end
 
-		local matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+		local matData
+		if customMaterial then
+			reusableCustomMatData.material = customMaterial
+			matData = reusableCustomMatData
+		else
+			if not materialName then
+				return
+			end
+			matData = loadedMaterials[materialName] or loadMaterial(materialName) or fallbackMaterial
+		end
+
 		if not matData then
 			return
 		end
@@ -689,11 +771,16 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			end
 			buffer.copy(tmpMaterial, 0, matData.material, 0, SIZE_MATERIAL)
 			buffer.copy(tmpMaterial, OFF_MATERIAL_ALBEDO, tmpAlbedo)
+
 			buffer.writei32(
 				tmpMaterial,
 				OFF_MATERIAL_TRANSPARENCY_MODE,
 				isPartOpaque(part) and const.R3D_TRANSPARENCY_DISABLED or const.R3D_TRANSPARENCY_PREPASS
 			)
+
+			if activeMaterialShader then
+				buffer.copy(tmpMaterial, OFF_MATERIAL_SHADER, activeMaterialShader)
+			end
 
 			buffer.writei32(tmpMaterial, OFF_MATERIAL_CULL_MODE, R3D_CULL_BACK)
 
@@ -943,18 +1030,10 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				if qw < 0 then
 					qx, qy, qz, qw = -qx, -qy, -qz, -qw
 				end
-				local f = math.floor
-				local key = f(pos.X * 10)
-					.. ","
-					.. f(pos.Y * 10)
-					.. ","
-					.. f(pos.Z * 10)
-					.. ","
-					.. f(sz.X * 10)
-					.. ","
-					.. f(sz.Y * 10)
-					.. ","
-					.. f(sz.Z * 10)
+			local f = math.floor
+				local key = string.format("%d,%d,%d,%d,%d,%d",
+					f(pos.X * 10), f(pos.Y * 10), f(pos.Z * 10),
+					f(sz.X * 10), f(sz.Y * 10), f(sz.Z * 10))
 				if globalSeenTransforms[key] then
 					rawset(part, "__workspaceDuplicate", true)
 					continue
@@ -969,10 +1048,12 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 			local mesh = nil
 			local meshKey = ""
+			local customMaterial = nil
 			if isMeshPart then
 				local meshObject = part.MeshObject
 				if meshObject and meshObject._meshgenHandle then
 					mesh = meshObject._meshgenHandle
+					customMaterial = meshObject._materialHandle
 					-- Batch by the actual GPU mesh handle instead of per-object identity.
 					-- This lets repeated MeshParts that share the same uploaded mesh
 					-- collapse into one instanced batch even when their mesh objects
@@ -987,9 +1068,16 @@ Workspace.InitRenderer = function(renderer, signal, game)
 				end
 			end
 
-			local matData = materialName and loadedMaterials[materialName]
-				or loadMaterial(materialName)
-				or fallbackMaterial
+			local matData
+			if customMaterial then
+				reusableCustomMatData.material = customMaterial
+				matData = reusableCustomMatData
+				materialName = "__custom_" .. tostring(customMaterial)
+			else
+				matData = materialName and loadedMaterials[materialName]
+					or loadMaterial(materialName)
+					or fallbackMaterial
+			end
 
 			if not mesh or not matData then
 				continue
@@ -1001,13 +1089,30 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local canInstance = Workspace.UseGpuInstancing
 				and renderer.MeshPool.DrawMeshInstanced ~= nil
 				and not hasPerObjectShader
-				and isOpaque
 
 			if canInstance then
-				local key = meshKey .. "|" .. materialName
+				local key = meshKey .. "|" .. materialName .. "|" .. tostring(isOpaque)
 				local batch = chunk.batches[key]
 				if not batch then
-					local instancedMaterial = getInstancedMaterial(materialName)
+					local instancedMaterial = nil
+					if customMaterial then
+						local matKey = "custom_" .. tostring(customMaterial) .. (isOpaque and "_opaque" or "_transparent")
+						if not instancedMaterialCache[matKey] then
+							local materialBuffer = buffer.create(SIZE_MATERIAL)
+							buffer.copy(materialBuffer, 0, customMaterial, 0, SIZE_MATERIAL)
+							buffer.writei32(
+								materialBuffer,
+								OFF_MATERIAL_TRANSPARENCY_MODE,
+								isOpaque and const.R3D_TRANSPARENCY_DISABLED or const.R3D_TRANSPARENCY_PREPASS
+							)
+							buffer.writei32(materialBuffer, OFF_MATERIAL_CULL_MODE, R3D_CULL_BACK)
+							instancedMaterialCache[matKey] = materialBuffer
+						end
+						instancedMaterial = instancedMaterialCache[matKey]
+					else
+						instancedMaterial = getInstancedMaterial(materialName, isOpaque)
+					end
+
 					if not instancedMaterial then
 						rawset(part, "__materialDirty", true)
 						rawset(part, "__matrixDirty", true)
@@ -1407,13 +1512,270 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 	local activeRaycasts = {}
 
+	local function makeFilterTester(params)
+		params = params or {}
+		local FilterType = Enum.RaycastFilterType
+		local filterType = params.FilterType or FilterType.Exclude
+		local filterInstances = type(params.FilterDescendantsInstances) == "table" and params.FilterDescendantsInstances
+			or {}
+		local filterSet = {}
+		local hasFilter = #filterInstances > 0
+
+		if hasFilter then
+			for _, inst in ipairs(filterInstances) do
+				filterSet[inst] = true
+			end
+		end
+
+		return function(part)
+			if params.RespectCanCollide == true and part.CanCollide == false then
+				return true
+			end
+
+			if not hasFilter then
+				return filterType == FilterType.Include
+			end
+
+			local current = part
+			while current do
+				if filterSet[current] then
+					return filterType ~= FilterType.Include
+				end
+				current = current.Parent
+			end
+
+			return filterType == FilterType.Include
+		end
+	end
+
+	local function partWorldAABB(part, padding)
+		local cf = part.CFrame
+		local size = part.Size
+		if not cf or not cf.Position or not size then
+			return nil, nil
+		end
+
+		padding = padding or Vector3.zero
+		local cached = rawget(part, "__partAABB")
+		local min, max
+		if cached then
+			min, max = cached.min, cached.max
+		else
+			local center = cf.Position
+			local half = size * 0.5
+			local right = cf:GetRightVector()
+			local up = cf:GetUpVector()
+			local look = cf:GetLookVector()
+			local extent = Vector3.new(
+				math.abs(right.X) * half.X + math.abs(up.X) * half.Y + math.abs(look.X) * half.Z,
+				math.abs(right.Y) * half.X + math.abs(up.Y) * half.Y + math.abs(look.Y) * half.Z,
+				math.abs(right.Z) * half.X + math.abs(up.Z) * half.Y + math.abs(look.Z) * half.Z
+			)
+			min = center - extent
+			max = center + extent
+			rawset(part, "__partAABB", { min = min, max = max })
+		end
+
+		if padding.X ~= 0 or padding.Y ~= 0 or padding.Z ~= 0 then
+			return min - padding, max + padding
+		end
+
+		return min, max
+	end
+
+	local function partWorldAABBNoCache(part, padding)
+		local cf = part.CFrame
+		local size = part.Size
+		if not cf or not cf.Position or not size then
+			return nil, nil
+		end
+
+		padding = padding or Vector3.zero
+		local center = cf.Position
+		local half = size * 0.5
+		local right = cf:GetRightVector()
+		local up = cf:GetUpVector()
+		local look = cf:GetLookVector()
+		local extent = Vector3.new(
+			math.abs(right.X) * half.X + math.abs(up.X) * half.Y + math.abs(look.X) * half.Z,
+			math.abs(right.Y) * half.X + math.abs(up.Y) * half.Y + math.abs(look.Y) * half.Z,
+			math.abs(right.Z) * half.X + math.abs(up.Z) * half.Y + math.abs(look.Z) * half.Z
+		) + padding
+
+		return center - extent, center + extent
+	end
+
+	local function raycastAABB(origin, direction, min, max)
+		local maxDistance = direction:Magnitude()
+		if maxDistance <= 1e-6 then
+			return nil
+		end
+
+		local dir = direction / maxDistance
+		local tMin = 0
+		local tMax = maxDistance
+		local hitNormal = Vector3.zero
+
+		local function axis(o, d, mn, mx, normalNegative, normalPositive)
+			if math.abs(d) <= 1e-6 then
+				return o >= mn and o <= mx
+			end
+
+			local inv = 1 / d
+			local t1 = (mn - o) * inv
+			local t2 = (mx - o) * inv
+			local normal = normalNegative
+			if t1 > t2 then
+				t1, t2 = t2, t1
+				normal = normalPositive
+			end
+
+			if t1 > tMin then
+				tMin = t1
+				hitNormal = normal
+			end
+			tMax = math.min(tMax, t2)
+			return tMin <= tMax
+		end
+
+		if not axis(origin.X, dir.X, min.X, max.X, Vector3.new(-1, 0, 0), Vector3.new(1, 0, 0)) then
+			return nil
+		end
+		if not axis(origin.Y, dir.Y, min.Y, max.Y, Vector3.new(0, -1, 0), Vector3.new(0, 1, 0)) then
+			return nil
+		end
+		if not axis(origin.Z, dir.Z, min.Z, max.Z, Vector3.new(0, 0, -1), Vector3.new(0, 0, 1)) then
+			return nil
+		end
+
+		return math.max(tMin, 0), hitNormal
+	end
+
+	local function terrainChunkAABB(terrain, chunk)
+		local vs = terrain.VoxelSize or 2
+		if chunk.aabbMin and chunk.aabbMax and chunk.__workspaceAABBVoxelSize == vs then
+			return chunk.aabbMin, chunk.aabbMax
+		end
+
+		if chunk.cx == nil or chunk.cy == nil or chunk.cz == nil then
+			return nil, nil
+		end
+
+		local min = Vector3.new(
+			chunk.cx * TERRAIN_CHUNK_SIZE * vs,
+			chunk.cy * TERRAIN_CHUNK_SIZE * vs,
+			chunk.cz * TERRAIN_CHUNK_SIZE * vs
+		)
+		local max = Vector3.new(
+			(chunk.cx + 1) * TERRAIN_CHUNK_SIZE * vs,
+			(chunk.cy + 1) * TERRAIN_CHUNK_SIZE * vs,
+			(chunk.cz + 1) * TERRAIN_CHUNK_SIZE * vs
+		)
+		chunk.aabbMin = min
+		chunk.aabbMax = max
+		chunk.__workspaceAABBVoxelSize = vs
+		return min, max
+	end
+
+	local function largePartOverlapsChunkSpan(part, minCx, maxCx, minCy, maxCy, minCz, maxCz)
+		local minChunk = rawget(part, "__workspaceLargeMinChunk")
+		local maxChunk = rawget(part, "__workspaceLargeMaxChunk")
+		if not minChunk or not maxChunk then
+			return true
+		end
+
+		return minChunk.X <= maxCx
+			and maxChunk.X >= minCx
+			and minChunk.Y <= maxCy
+			and maxChunk.Y >= minCy
+			and minChunk.Z <= maxCz
+			and maxChunk.Z >= minCz
+	end
+
+	function Workspace:Blockcast(cf, size, direction, raycastParams)
+		local maxDistance = direction:Magnitude()
+		if maxDistance <= 1e-6 then
+			return nil
+		end
+
+		local origin = cf.Position
+		local padding = size * 0.5
+		local isExcluded = makeFilterTester(raycastParams)
+		local bestPart = nil
+		local bestDist = maxDistance + 0.001
+		local bestNormal = nil
+
+		local function testPart(part)
+			if isExcluded(part) then
+				return
+			end
+
+			local min, max = partWorldAABBNoCache(part, padding)
+			if not min then
+				return
+			end
+			if max.Y <= origin.Y - padding.Y + 0.05 then
+				return
+			end
+
+			local dist, normal = raycastAABB(origin, direction, min, max)
+			if dist and dist <= maxDistance and dist < bestDist then
+				bestPart = part
+				bestDist = dist
+				bestNormal = normal
+			end
+		end
+
+		local endPos = origin + direction
+		local sweepMin = Vector3.new(
+			math.min(origin.X, endPos.X) - padding.X,
+			math.min(origin.Y, endPos.Y) - padding.Y,
+			math.min(origin.Z, endPos.Z) - padding.Z
+		)
+		local sweepMax = Vector3.new(
+			math.max(origin.X, endPos.X) + padding.X,
+			math.max(origin.Y, endPos.Y) + padding.Y,
+			math.max(origin.Z, endPos.Z) + padding.Z
+		)
+
+		local minCx = math.floor(sweepMin.X / CHUNK_SIZE) - 1
+		local maxCx = math.floor(sweepMax.X / CHUNK_SIZE) + 1
+		local minCy = math.floor(sweepMin.Y / CHUNK_SIZE) - 1
+		local maxCy = math.floor(sweepMax.Y / CHUNK_SIZE) + 1
+		local minCz = math.floor(sweepMin.Z / CHUNK_SIZE) - 1
+		local maxCz = math.floor(sweepMax.Z / CHUNK_SIZE) + 1
+
+		for cx = minCx, maxCx do
+			for cy = minCy, maxCy do
+				for cz = minCz, maxCz do
+					local chunk = chunks[cx .. "," .. cy .. "," .. cz]
+					if chunk then
+						for i = 1, #chunk.parts do
+							testPart(chunk.parts[i])
+						end
+					end
+				end
+			end
+		end
+
+		for i = 1, #largeParts do
+			local part = largeParts[i]
+			if largePartOverlapsChunkSpan(part, minCx, maxCx, minCy, maxCy, minCz, maxCz) then
+				testPart(part)
+			end
+		end
+
+		if bestPart then
+			local point = origin + direction:Unit() * bestDist
+			return RaycastResult.new(bestPart, point, bestNormal or Vector3.zero, bestPart.Material, bestDist)
+		end
+
+		return nil
+	end
+
 	function Workspace:Raycast(origin, direction, raycastParams)
 		raycastParams = raycastParams or {}
-		local FilterType = Enum.RaycastFilterType
-		local filterType = raycastParams.FilterType or FilterType.Exclude
-		local filterInstances = type(raycastParams.FilterDescendantsInstances) == "table"
-				and raycastParams.FilterDescendantsInstances
-			or {}
+		local isExcluded = makeFilterTester(raycastParams)
 
 		local maxDistance = direction:Magnitude()
 		local unitDir = direction:Unit()
@@ -1422,16 +1784,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			position = vector.create(origin.X, origin.Y, origin.Z),
 			direction = vector.create(unitDir.X, unitDir.Y, unitDir.Z),
 		})
-
-		-- Build a filter hash-set once so ancestor-chain walks are O(1) per node
-		-- instead of O(filterCount) via table.find.
-		local filterSet = {}
-		local hasFilter = #filterInstances > 0
-		if hasFilter then
-			for _, inst in ipairs(filterInstances) do
-				filterSet[inst] = true
-			end
-		end
 
 		-- Cache RayCollision struct field offsets once per call (each :offset()
 		-- is a keyed table lookup; they are the same values every time).
@@ -1454,28 +1806,19 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			and renderer.Mesh.GetPreloadedMeshes
 			and renderer.Mesh.GetPreloadedMeshes()
 
-		-- Returns true when `part` should be excluded from the raycast based on
-		-- the caller's filter list.  Walks the parent chain using the hash-set
-		-- for O(1) per ancestor (vs O(filterCount) table.find per ancestor).
-		local function isExcluded(part)
-			if not hasFilter then
-				return filterType == FilterType.Include -- Include with no list = exclude everything
-			end
-			local current = part
-			while current do
-				if filterSet[current] then
-					-- Matched: included in the filter list.
-					return filterType ~= FilterType.Include -- Exclude mode → skip; Include → keep
-				end
-				current = current.Parent
-			end
-			-- Not matched: Include mode → skip; Exclude mode → keep
-			return filterType == FilterType.Include
-		end
-
 		-- Test one part and update the best hit if this one is closer.
 		local function testPart(part)
 			if isExcluded(part) then
+				return
+			end
+
+			local aabbMin, aabbMax = partWorldAABB(part)
+			if not aabbMin then
+				return
+			end
+
+			local aabbDist = raycastAABB(origin, direction, aabbMin, aabbMax)
+			if not aabbDist or aabbDist > bestDist then
 				return
 			end
 
@@ -1498,13 +1841,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			if not cpuMeshData then
 				return
 			end
-
-			-- NOTE: Per-part AABB pre-rejection was removed.
-			-- GetRayCollisionBox returns hit=0 / nil when the ray origin is
-			-- inside the bounding box (common when the character stands on or
-			-- inside a large flat ground part whose circumsphere is enormous).
-			-- The chunk-level spatial pruning already provides the major speedup;
-			-- going straight to the mesh test here is correct and safe.
 
 			-- Exact per-triangle mesh test.
 			local matrix = part.CFrame:ToRaylibMatrixScale(part.Size, structs)
@@ -1543,11 +1879,6 @@ Workspace.InitRenderer = function(renderer, signal, game)
 		-- For a short floor-detection ray (≈5 studs) this reduces work from
 		-- O(all_parts) to O(parts_in_1-4_nearby_chunks), a 100-1000× speedup.
 		--
-		-- IMPORTANT: GetRayCollisionBox returns hit=0 / nil when the ray origin
-		-- is *inside* the bounding box (a known raylib behaviour).  During
-		-- normal gameplay the character is nearly always inside the same chunk
-		-- as the ground beneath them, so we MUST bypass the AABB test for any
-		-- chunk whose bounds contain the ray origin and test its parts directly.
 		do
 			local CHUNK_SIZE_INV = 1 / CHUNK_SIZE
 			local ox, oy, oz = origin.X, origin.Y, origin.Z
@@ -1562,23 +1893,17 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			local maxCz = math.floor(math.max(oz, ez) * CHUNK_SIZE_INV) + 1
 
 			-- Returns true when the chunk should have its parts tested.
-			-- Bypasses GetRayCollisionBox when the ray origin is inside the
-			-- chunk AABB, since raylib returns no-hit in that case.
 			local function chunkOverlapsRay(chunk)
 				local mn = chunk.aabbMin
 				local mx = chunk.aabbMax
-				-- Origin-inside check (pure Lua, no FFI, O(1)).
-				if ox >= mn.X and ox <= mx.X and oy >= mn.Y and oy <= mx.Y and oz >= mn.Z and oz <= mx.Z then
-					return true -- always test; AABB call would give wrong result
-				end
-				-- Normal AABB ray intersection test for chunks the origin is outside of.
-				local chunkHit = raylib.lib.GetRayCollisionBox(ray, chunk.r3dAABB)
-				if not chunkHit then
-					return false
-				end
-				local hitBit = buffer.readu8(chunkHit, offHit)
-				local hitDist = buffer.readf32(chunkHit, offDist)
-				return hitBit == 1 and hitDist < bestDist
+				local expansion = (chunk.maxPartSize or 0) * 0.5
+				local hitDist = raycastAABB(
+					origin,
+					direction,
+					Vector3.new(mn.X - expansion, mn.Y - expansion, mn.Z - expansion),
+					Vector3.new(mx.X + expansion, mx.Y + expansion, mx.Z + expansion)
+				)
+				return hitDist ~= nil and hitDist < bestDist
 			end
 
 			-- For very long rays the grid walk could visit too many empty cells;
@@ -1617,7 +1942,10 @@ Workspace.InitRenderer = function(renderer, signal, game)
 			-- Always test large parts that span multiple chunks, as the grid
 			-- walk only tests the single 32x32 chunk at their center.
 			for i = 1, #largeParts do
-				testPart(largeParts[i])
+				local part = largeParts[i]
+				if largePartOverlapsChunkSpan(part, minCx, maxCx, minCy, maxCy, minCz, maxCz) then
+					testPart(part)
+				end
 			end
 		end
 
@@ -1628,30 +1956,25 @@ Workspace.InitRenderer = function(renderer, signal, game)
 
 			if shouldTestTerrain then
 				local identity = raylib.lib.MatrixIdentity()
-				local ox2, oy2, oz2 = origin.X, origin.Y, origin.Z
-				for _, chunk in pairs(terrain._chunks) do
-					if chunk._cpuMeshData then
-						-- Terrain chunks may expose their own AABB; use it for
-						-- pre-rejection but bypass it when origin is inside
-						-- (same GetRayCollisionBox / origin-inside caveat as parts).
-						if chunk.r3dAABB then
-							local originInside = chunk.aabbMin
-								and ox2 >= chunk.aabbMin.X
-								and ox2 <= chunk.aabbMax.X
-								and oy2 >= chunk.aabbMin.Y
-								and oy2 <= chunk.aabbMax.Y
-								and oz2 >= chunk.aabbMin.Z
-								and oz2 <= chunk.aabbMax.Z
+				local vs = terrain.VoxelSize or 2
+				local terrainChunkWorldSize = TERRAIN_CHUNK_SIZE * vs
+				local endPos = origin + direction
+				local minCx = math.floor(math.min(origin.X, endPos.X) / terrainChunkWorldSize) - 1
+				local maxCx = math.floor(math.max(origin.X, endPos.X) / terrainChunkWorldSize) + 1
+				local minCy = math.floor(math.min(origin.Y, endPos.Y) / terrainChunkWorldSize) - 1
+				local maxCy = math.floor(math.max(origin.Y, endPos.Y) / terrainChunkWorldSize) + 1
+				local minCz = math.floor(math.min(origin.Z, endPos.Z) / terrainChunkWorldSize) - 1
+				local maxCz = math.floor(math.max(origin.Z, endPos.Z) / terrainChunkWorldSize) + 1
+				local cellCount = (maxCx - minCx + 1) * (maxCy - minCy + 1) * (maxCz - minCz + 1)
+				local TERRAIN_GRID_WALK_CELL_LIMIT = 4096
 
-							if not originInside then
-								local preHit = raylib.lib.GetRayCollisionBox(ray, chunk.r3dAABB)
-								if not preHit or buffer.readu8(preHit, offHit) == 0 then
-									continue
-								end
-								local preHitDist = buffer.readf32(preHit, offDist)
-								if preHitDist >= bestDist then
-									continue
-								end
+				local function testTerrainChunk(chunk)
+					if chunk._cpuMeshData then
+						local aabbMin, aabbMax = terrainChunkAABB(terrain, chunk)
+						if aabbMin and aabbMax then
+							local preHitDist = raycastAABB(origin, direction, aabbMin, aabbMax)
+							if preHitDist == nil or preHitDist >= bestDist then
+								return
 							end
 						end
 
@@ -1680,6 +2003,23 @@ Workspace.InitRenderer = function(renderer, signal, game)
 								)] or Enum.Material.Grass
 							end
 						end
+					end
+				end
+
+				if cellCount <= TERRAIN_GRID_WALK_CELL_LIMIT then
+					for cx = minCx, maxCx do
+						for cy = minCy, maxCy do
+							for cz = minCz, maxCz do
+								local chunk = terrain._chunks[cx .. "," .. cy .. "," .. cz]
+								if chunk then
+									testTerrainChunk(chunk)
+								end
+							end
+						end
+					end
+				else
+					for _, chunk in pairs(terrain._chunks) do
+						testTerrainChunk(chunk)
 					end
 				end
 			end

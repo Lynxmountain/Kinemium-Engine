@@ -1,11 +1,15 @@
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local KinemiumFontService = game:GetService("KinemiumFontService")
 
 local ProjectLoaderService = game:GetService("ProjectLoaderService")
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local rl = KinemiumRaylib.GetLib()
 local renderer = KinemiumRaylib.GetRenderer()
@@ -31,7 +35,6 @@ end
 
 local backgroundColor = Theme.BackgroundColor:ToRaylib(Theme.BackgroundTransparency)
 local TextColor = Theme.TextColor:ToRaylib(Theme.TextTransparency)
-local SecondaryBackgroundColor = Theme.SecondaryBackgroundColor:ToRaylib(Theme.SecondaryBackgroundColorTransparency)
 local ImageColor = Theme.ImageColor:ToRaylib(Theme.ImageTransparency)
 
 export type elementTitle = string
@@ -65,7 +68,9 @@ end)
 
 local aereon = import("@Aereon")
 local window = aereon.window(game, nil, 1)
-local aRect = require("@Arect")
+local arectlib = require("@arect")
+local aRect = arectlib
+local scrollableToolbar
 local gui = aereon.gui
 local componentCache = {}
 
@@ -109,12 +114,6 @@ local fileMenu = gui.menu({
 			end,
 		},
 		{
-			label = "Editor Preferences",
-			onClick = function()
-				print("Editor Preferences")
-			end,
-		},
-		{
 			label = "Input Bindings",
 			onClick = function()
 				print("Input Bindings")
@@ -129,12 +128,6 @@ local fileMenu = gui.menu({
 			label = "Game Settings",
 			onClick = function()
 				print("Game Settings")
-			end,
-		},
-		{
-			label = "Build Settings",
-			onClick = function()
-				print("Build Settings")
 			end,
 		},
 		{
@@ -197,16 +190,18 @@ local fileMenu = gui.menu({
 })
 
 local function create_window(title, frame)
-	repeat
-		task.wait()
-	until frame.AbsolutePosition and frame.AbsoluteSize
+	local initialPos = frame.AbsolutePosition or vector.create(0, 0)
+	local initialSize = frame.AbsoluteSize or vector.create(800, 170)
+
 	local myWindow = window.create({
 		title = title,
-		x = frame.AbsolutePosition.X,
-		y = frame.AbsolutePosition.Y,
-		width = frame.AbsoluteSize.X,
+		x = initialPos.X,
+		y = initialPos.Y,
+		width = initialSize.X,
 		DisableClipping = true,
-		height = frame.AbsoluteSize.Y,
+		height = initialSize.Y,
+		headerRender = true,
+		Minimized = true,
 
 		tabs = {
 			{
@@ -465,7 +460,15 @@ end
 
 local function renderDropdownButton(xPos, name, element, windowData, dt)
 	local winX, winY = windowData.x, windowData.y + 80
-	local cellWidth = element.width or 80
+	local maxItemWidth = 0
+	if element.options then
+		for _, opt in ipairs(element.options) do
+			local itemWidth = measureTextWidth(opt.label or "")
+			maxItemWidth = math.max(maxItemWidth, itemWidth)
+		end
+	end
+	local labelWidth = name and measureTextWidth(name) or 0
+	local cellWidth = element.width or math.max(maxItemWidth, labelWidth) + 20
 	local cellHeight = element.height or 30
 
 	local key = element
@@ -648,68 +651,248 @@ end
 
 fileMenu:hide()
 
-propback:Minimize()
+-- propback:Minimize()
 
 RunService.RenderStepped:Connect(function(a0: number)
-	propback.x = frame.AbsolutePosition.X
-	propback.y = frame.AbsolutePosition.Y
-	propback.width = frame.AbsoluteSize.X
-	propback.height = frame.AbsoluteSize.Y
+	if frame.AbsolutePosition and frame.AbsoluteSize then
+		propback.x = frame.AbsolutePosition.X
+		propback.y = frame.AbsolutePosition.Y
+		propback.width = frame.AbsoluteSize.X
+		propback.height = frame.AbsoluteSize.Y
+	end
 end)
+
+local StudioThemeService = game:GetService("StudioThemeService")
+renderer.Pool.new("2d", function(data)
+	if game.Context ~= Enum.GameContext.Editor then
+		return
+	end
+
+	local dt = rl.GetFrameTime()
+	local mainTheme = StudioThemeService.SelectedTheme
+
+	window.update(dt)
+	window.draw(dt, mainTheme.aereon)
+end)
+
+local function renderImageDropdownButton(xPos, name, element, windowData, dt)
+	local winX, winY = windowData.x, windowData.y + 80
+	local cellWidth = element.width or 60
+	local cellHeight = element.height or 60
+	local dropHeight = element.dropHeight or 22
+	local totalHeight = cellHeight + dropHeight
+	local labelWidth = name and measureTextWidth(name) or 0
+	local effectiveWidth = math.max(cellWidth, labelWidth + 10)
+
+	local btnKey = element
+	local aereonElement = componentCache[btnKey]
+	if not aereonElement then
+		aereonElement = gui.button({
+			x = winX + xPos,
+			y = winY,
+			width = effectiveWidth,
+			height = cellHeight,
+			text = "",
+			backgroundTransparency = 1,
+			backgroundColor = element.backgroundColor or Color3.new(0.18, 0.18, 0.18),
+			hoverColor = element.hoverColor or Color3.new(0.35, 0.35, 0.35),
+			onClick = function()
+				if element.callback then
+					element.callback(element, aRect.new(winX + xPos, winY, effectiveWidth, cellHeight))
+				end
+			end,
+		})
+		componentCache[btnKey] = aereonElement
+	end
+
+	local btnRect = aRect.new(winX + xPos, winY, effectiveWidth, cellHeight)
+	aereonElement.set("obj_rect", btnRect)
+	aereonElement.render(dt)
+
+	if element.texture then
+		local scale = element.scale or 2.0
+		local texW = element.texture.x * scale
+		local texH = element.texture.y * scale
+		local iconX = btnRect.x + effectiveWidth / 2 - texW / 2
+		local iconY = btnRect.y + cellHeight / 2 - texH / 2
+		rl.DrawTexturePro(
+			element.texture.texture,
+			structs.Rectangle:new({ x = 0, y = 0, width = element.texture.x, height = element.texture.y }),
+			aRect:translate(aRect.new(iconX, iconY, texW, texH)),
+			vector.create(0, 0),
+			element.rotation or 0,
+			ImageColor
+		)
+	end
+
+	local dropKey = tostring(element) .. "_idd_drop"
+	local dropElement = componentCache[dropKey]
+	if not dropElement then
+		local opts = {}
+		local maxItemWidth = 0
+		for _, opt in ipairs(element.options or {}) do
+			table.insert(opts, opt.label)
+			local itemWidth = measureTextWidth(opt.label or "")
+			maxItemWidth = math.max(maxItemWidth, itemWidth)
+		end
+		effectiveWidth = math.max(effectiveWidth, maxItemWidth + 20)
+
+		dropElement = gui.dropdown({
+			x = winX + xPos,
+			y = winY + cellHeight,
+			width = effectiveWidth,
+			height = dropHeight,
+			options = opts,
+			selectedIndex = element.defaultIndex or 1,
+			backgroundColor = element.dropBackgroundColor or Color3.new(0.13, 0.13, 0.13),
+			hoverColor = element.hoverColor or Color3.new(0.3, 0.3, 0.3),
+			textColor = Theme.TextColor,
+			backgroundTransparency = 1,
+			borderTransparency = 1,
+			onSelect = function(idx, optLabel)
+				local opt
+				for _, o in ipairs(element.options or {}) do
+					if o.label == optLabel then
+						opt = o
+						break
+					end
+				end
+				if opt then
+					element._selected = opt.label
+					if opt.onClick then
+						opt.onClick(opt)
+					end
+					if element.onSelect then
+						element.onSelect(opt)
+					elseif element.callback then
+						element.callback(opt)
+					end
+				end
+			end,
+		})
+		componentCache[dropKey] = dropElement
+	end
+
+	local dropRect = aRect.new(winX + xPos, winY + cellHeight, effectiveWidth + 100, dropHeight)
+	dropElement.set("obj_rect", dropRect)
+
+	if element._selected then
+		local idx = 1
+		for i, o in ipairs(element.options or {}) do
+			if o.label == element._selected then
+				idx = i
+				break
+			end
+		end
+		dropElement.set("selectedIndex", idx)
+	end
+
+	dropElement.render(dt)
+
+	local fullRect = aRect.new(winX + xPos, winY, effectiveWidth, totalHeight)
+	if aRect.MouseIsInRect(fullRect) and element.tooltip then
+		local mx = rl.GetMouseX and rl.GetMouseX() or winX + xPos
+		local my = rl.GetMouseY and rl.GetMouseY() or winY
+		updateTooltip(dt, tostring(element) .. "_idd", element.tooltip, mx, my)
+	end
+
+	return effectiveWidth + (element.padding or 5)
+end
 
 propback.stepped = function(propback)
 	if propback.title == "Toolbar" then
 		local dt = KinemiumRaylib.GetLib().GetFrameTime()
-		local currentX = 15
-		local category = categoryRegistry[currentlySelected]
-
-		local prevKey = tooltipState.hoveredKey
 		tooltipState.hoveredKey = nil
-
+		local totalElementsWidth = 0
+		local category = categoryRegistry[currentlySelected]
 		if category then
-			local elements = category.elements
-			for _, element in pairs(elements) do
-				if element.type == "ImageButton" then
-					local width = renderButton(currentX, element.text, element, propback, dt)
-					currentX = currentX + width
-				elseif element.type == "ToggleButton" then
-					local width = renderToggleButton(currentX, element.text, element, propback, dt)
-					currentX = currentX + width
-				elseif element.type == "DropdownButton" then
-					local width = renderDropdownButton(currentX, element.text, element, propback, dt)
-					currentX = currentX + width
-				elseif element.type == "Separator" then
-					local width = renderSeperator(currentX, propback, element, dt)
-					currentX = currentX + width
+			for _, element in pairs(category.elements) do
+				if element.type == "Separator" then
+					totalElementsWidth = totalElementsWidth + 20
 				elseif element.type == "Custom" then
-					if element.render then
-						local cellWidth = element.width or 50
-						local cellHeight = element.height or 50
-						local padding = element.padding or 20
-
-						local x = propback.x + currentX
-						local y = propback.y + 80
-
-						element.render(aRect, {
-							x = x,
-							y = y,
-							width = cellWidth,
-							height = cellHeight,
-							window = propback,
-						})
-
-						currentX = currentX + cellWidth + padding
-					end
+					totalElementsWidth = totalElementsWidth + (element.width or 50) + (element.padding or 20)
+				else
+					totalElementsWidth = totalElementsWidth + (element.width or 100) + (element.padding or 5)
 				end
 			end
 		end
+
+		drawCategories(propback, dt)
+
+		local toolbarContent
+		toolbarContent = {
+			get_rect = function()
+				return aRect.new(0, 0, totalElementsWidth + 30, 50)
+			end,
+			set = function(prop, value)
+				if prop == "obj_rect" then
+					toolbarContent.rect = value
+				end
+			end,
+			render = function(dt)
+				local r = toolbarContent.rect
+				local renderX = r.x
+				local winY = propback.y + 80
+
+				if category then
+					local elements = category.elements
+					for _, element in pairs(elements) do
+						if element.type == "ImageButton" then
+							local width = renderButton(renderX - propback.x, element.text, element, propback, dt)
+							renderX = renderX + width
+						elseif element.type == "ToggleButton" then
+							local width = renderToggleButton(renderX - propback.x, element.text, element, propback, dt)
+							renderX = renderX + width
+						elseif element.type == "DropdownButton" then
+							local width = renderDropdownButton(renderX - propback.x, element.text, element, propback, dt)
+							renderX = renderX + width
+						elseif element.type == "ImageDropdownButton" then
+							local width = renderImageDropdownButton(renderX - propback.x, element.text, element, propback, dt)
+							renderX = renderX + width
+						elseif element.type == "Separator" then
+							local width = renderSeperator(renderX - propback.x, propback, element, dt)
+							renderX = renderX + width
+						elseif element.type == "Custom" then
+							if element.render then
+								local cellWidth = element.width or 50
+								local cellHeight = element.height or 50
+								local padding = element.padding or 20
+								element.render(aRect, {
+									x = renderX,
+									y = winY,
+									width = cellWidth,
+									height = cellHeight,
+									window = propback,
+								})
+								renderX = renderX + cellWidth + padding
+							end
+						end
+					end
+				end
+			end,
+		}
+
+		if not scrollableToolbar then
+			scrollableToolbar = gui.scrollable({
+				child = toolbarContent,
+				direction = "horizontal",
+				scrollbarWidth = 4,
+				scrollbarColor = Theme.Accent,
+				scrollbarHoverColor = Theme.Accent,
+				scrollbarBackgroundTransparency = 1,
+			})
+		end
+
+		scrollableToolbar.set("child", toolbarContent)
+		local toolbarWidth = propback.width - 30
+		scrollableToolbar.set("obj_rect", aRect.new(propback.x + 15, propback.y + 80, toolbarWidth, 100))
+		scrollableToolbar.set("contentWidth", totalElementsWidth + 30)
+		scrollableToolbar.render(dt)
 
 		if tooltipState.hoveredKey == nil then
 			tooltipState.hoverTimer = 0
 			tooltipState.visible = false
 		end
-
-		drawCategories(propback, dt)
 
 		if tooltipState.visible then
 			drawTooltip(tooltipState.text, tooltipState.x, tooltipState.y)

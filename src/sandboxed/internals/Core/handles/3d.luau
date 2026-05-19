@@ -1,5 +1,10 @@
 -- devcell
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local StudioThemeService = game:GetService("StudioThemeService")
 local rlservice = game:GetService("KinemiumRaylib")

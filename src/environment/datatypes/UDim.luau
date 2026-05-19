@@ -1,4 +1,4 @@
-local UDim = {}
+local UDim = { __type = "UDim" }
 UDim.__index = UDim
 
 -- Constructor

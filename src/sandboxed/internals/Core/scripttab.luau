@@ -1,3 +1,8 @@
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 repeat
 	task.wait()
 until ishared.NewCategoryToolbar

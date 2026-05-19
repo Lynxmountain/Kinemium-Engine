@@ -104,15 +104,30 @@ return function(objects, config)
 	end
 
 	local wrapper = {}
+	local overallRect = arect.new(defaults.x, defaults.y, defaults.width, currentY)
+
+	wrapper.set = function(prop, value)
+		if prop == "obj_rect" then
+			overallRect = value
+			wrapper.setPosition(value.x, value.y)
+		elseif prop == "width" then
+			overallRect.width = value
+			wrapper.setWidth(value)
+		end
+		return wrapper
+	end
+
+	wrapper.get = function(prop)
+		if prop == "obj_rect" then
+			return overallRect
+		end
+		return cellRefs[prop]
+	end
 
 	wrapper.render = function(dt)
 		for _, cell in ipairs(cells) do
 			cell.render(dt)
 		end
-	end
-
-	wrapper.get = function(name)
-		return cellRefs[name]
 	end
 
 	wrapper.getAll = function()

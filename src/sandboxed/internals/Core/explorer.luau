@@ -1,5 +1,10 @@
 -- devcell
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
 local KinemiumFontService = game:GetService("KinemiumFontService")
@@ -11,7 +16,7 @@ local KineFileService = game:GetService("KineFileService")
 local RBXModelImporter = game:GetService("RBXModelImporter")
 local Selection = game:GetService("Selection")
 
-if game.Context ~= Enum.GameContext.Editor or FlagExists("cli") or FlagExists("headless") then
+if game.Context ~= Enum.GameContext.Editor or FlagExists("cli") or FlagExists("headless") or FlagExists("client") then
 	return
 end
 
@@ -101,37 +106,95 @@ local function getClassCategory(className)
 	end
 
 	-- UI
-	if lowerName:find("gui") or lowerName:find("screen") or lowerName:find("frame") or lowerName:find("text") or lowerName:find("button") or lowerName:find("scroll") or lowerName:find("image") or lowerName:find("textbox") or lowerName:find("viewport") or lowerName:find("billboard") or lowerName:find("surface") then
+	if
+		lowerName:find("gui")
+		or lowerName:find("screen")
+		or lowerName:find("frame")
+		or lowerName:find("text")
+		or lowerName:find("button")
+		or lowerName:find("scroll")
+		or lowerName:find("image")
+		or lowerName:find("textbox")
+		or lowerName:find("viewport")
+		or lowerName:find("billboard")
+		or lowerName:find("surface")
+	then
 		return "UI"
 	end
 
 	-- Effects
-	if lowerName:find("particle") or lowerName:find("light") or lowerName:find("beam") or lowerName:find("trail") or lowerName:find("fire") or lowerName:find("smoke") or lowerName:find("sparkles") or lowerName:find("constraint") then
+	if
+		lowerName:find("particle")
+		or lowerName:find("light")
+		or lowerName:find("beam")
+		or lowerName:find("trail")
+		or lowerName:find("fire")
+		or lowerName:find("smoke")
+		or lowerName:find("sparkles")
+		or lowerName:find("constraint")
+	then
 		return "Effects"
 	end
 
 	-- Scripting
-	if lowerName:find("script") or lowerName:find("module") or lowerName:find("bindable") or lowerName:find("remote") then
+	if
+		lowerName:find("script")
+		or lowerName:find("module")
+		or lowerName:find("bindable")
+		or lowerName:find("remote")
+	then
 		return "Scripting"
 	end
 
 	-- Objects
-	if lowerName:find("part") or lowerName:find("mesh") or lowerName:find("model") or lowerName:find("attachment") or lowerName:find("motor") or lowerName:find("weld") then
+	if
+		lowerName:find("part")
+		or lowerName:find("mesh")
+		or lowerName:find("model")
+		or lowerName:find("attachment")
+		or lowerName:find("motor")
+		or lowerName:find("weld")
+	then
 		return "Objects"
 	end
 
 	-- Data
-	if lowerName:find("value") or lowerName:find("object") or lowerName:find("bool") or lowerName:find("number") or lowerName:find("string") or lowerName:find("vector") or lowerName:find("color") or lowerName:find("cframe") or lowerName:find("udim") or lowerName:find("brick") then
+	if
+		lowerName:find("value")
+		or lowerName:find("object")
+		or lowerName:find("bool")
+		or lowerName:find("number")
+		or lowerName:find("string")
+		or lowerName:find("vector")
+		or lowerName:find("color")
+		or lowerName:find("cframe")
+		or lowerName:find("udim")
+		or lowerName:find("brick")
+	then
 		return "Data"
 	end
 
 	-- Audio
-	if lowerName:find("sound") or lowerName:find("audio") or lowerName:find("reverb") or lowerName:find("echo") or lowerName:find("distortion") or lowerName:find("flange") or lowerName:find("chorus") or lowerName:find("equalizer") then
+	if
+		lowerName:find("sound")
+		or lowerName:find("audio")
+		or lowerName:find("reverb")
+		or lowerName:find("echo")
+		or lowerName:find("distortion")
+		or lowerName:find("flange")
+		or lowerName:find("chorus")
+		or lowerName:find("equalizer")
+	then
 		return "Audio"
 	end
 
 	-- Animation
-	if lowerName:find("animation") or lowerName:find("animator") or lowerName:find("humanoid") or lowerName:find("character") then
+	if
+		lowerName:find("animation")
+		or lowerName:find("animator")
+		or lowerName:find("humanoid")
+		or lowerName:find("character")
+	then
 		return "Animation"
 	end
 
@@ -156,6 +219,9 @@ local searchBox = textbox.new({
 	padding = 5,
 })
 
+KinemiumIconLoader.new("Filter", "./src/assets/images/icons/Configuration.png")
+local filterIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Filter"))
+
 local addMenuSearchBox = textbox.new({
 	multiline = false,
 	placeholder = "Search classes..",
@@ -172,31 +238,119 @@ local addMenuSearchBox = textbox.new({
 local searchQuery = searchBox:getText() or ""
 local isSearching = #searchQuery > 0
 
-local function matchesSearch(instance, query)
-	if instance.Name:lower():find(query:lower(), 1, true) then
+local searchFilterOptions = { "Name", "ClassName", "Property", "Tags", "Attributes", "All" }
+local searchFilterMode = "Name"
+local searchFilterButton
+local searchFilterMenu
+local searchFilterMenuVisible = false
+
+local function getTagsForInstance(instance)
+	local ok, tags = pcall(function()
+		if instance.GetTags then
+			return instance:GetTags()
+		end
+		local CollectionService = game:GetService("CollectionService")
+		return CollectionService:GetTags(instance)
+	end)
+	if ok and type(tags) == "table" then
+		return tags
+	end
+	return {}
+end
+
+local function getAttributesForInstance(instance)
+	local ok, attrs = pcall(function()
+		return instance:GetAttributes()
+	end)
+	if ok and type(attrs) == "table" then
+		return attrs
+	end
+	return {}
+end
+
+local function instanceMatches(instance, query, mode)
+	local q = string.lower(query or "")
+	if q == "" then
+		return true
+	end
+
+	if mode == "Name" then
+		return string.find(instance.Name:lower(), q, 1, true) ~= nil
+	elseif mode == "ClassName" then
+		return string.find((instance.ClassName or ""):lower(), q, 1, true) ~= nil
+	elseif mode == "Property" then
+		local propName, propValue = q:match("^%s*([^:]+)%s*:%s*(.+)%s*$")
+		if not propName then
+			propName = q
+		end
+		local ok, value = pcall(function()
+			return instance[propName]
+		end)
+		if ok then
+			if propValue then
+				return string.find(tostring(value):lower(), propValue, 1, true) ~= nil
+			end
+			return true
+		end
+		return false
+	elseif mode == "Tags" then
+		for _, tag in ipairs(getTagsForInstance(instance)) do
+			if string.find(string.lower(tag), q, 1, true) then
+				return true
+			end
+		end
+		return false
+	elseif mode == "Attributes" then
+		local attrName, attrValue = q:match("^%s*([^:]+)%s*:%s*(.+)%s*$")
+		local attrs = getAttributesForInstance(instance)
+		if attrName then
+			local value = attrs[attrName]
+			if value == nil then
+				return false
+			end
+			return string.find(tostring(value):lower(), attrValue, 1, true) ~= nil
+		end
+		for key, value in pairs(attrs) do
+			if string.find(string.lower(key), q, 1, true) or string.find(tostring(value):lower(), q, 1, true) then
+				return true
+			end
+		end
+		return false
+	elseif mode == "All" then
+		if string.find(instance.Name:lower(), q, 1, true) then
+			return true
+		end
+		if string.find((instance.ClassName or ""):lower(), q, 1, true) then
+			return true
+		end
+		if instanceMatches(instance, query, "Property") then
+			return true
+		end
+		if instanceMatches(instance, query, "Tags") then
+			return true
+		end
+		if instanceMatches(instance, query, "Attributes") then
+			return true
+		end
+		return false
+	end
+
+	return string.find(instance.Name:lower(), q, 1, true) ~= nil
+end
+
+local function matchesSearch(instance, query, mode)
+	if instanceMatches(instance, query, mode) then
 		return true
 	end
 	for _, child in ipairs(instance:GetChildren()) do
-		if matchesSearch(child, query) then
+		if matchesSearch(child, query, mode) then
 			return true
 		end
 	end
 	return false
 end
 
-task.spawn(function()
-	local classes = Instance.getClasses()
 
-	for class in pairs(classes) do
-		if not loadedIcon[class] then
-			local asset = KinemiumIconLoader.Get(class .. ".png") or KinemiumIconLoader.Get(class .. ".png")
-
-			if asset then
-				loadedIcon[class] = KinemiumIconLoader.ToTexture(asset)
-			end
-		end
-	end
-end)
 
 -- Selection menu
 local SelectionMenu = gui.menu({
@@ -608,7 +762,10 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 
 	local totalItems = totalVisibleItems
 
-	local menuHeight = math.min(totalItems, MAX_VISIBLE_ITEMS) * ADD_MENU_ITEM_HEIGHT + MENU_PADDING * 2 + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT
+	local menuHeight = math.min(totalItems, MAX_VISIBLE_ITEMS) * ADD_MENU_ITEM_HEIGHT
+		+ MENU_PADDING * 2
+		+ ADD_MENU_SEARCH_HEIGHT
+		+ ADD_MENU_TITLE_HEIGHT
 	local contentHeight = totalItems * ADD_MENU_ITEM_HEIGHT + #categoryOrder * CATEGORY_HEADER_HEIGHT
 	local menuX = toggleX - ADD_MENU_WIDTH - 10
 	local menuY = btnY + 30
@@ -622,10 +779,22 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 	)
 
 	-- Draw title
-	rl.DrawTextEx(vend, "Add Object", vector.create(menuX + MENU_PADDING, menuY + MENU_PADDING), 18, 1, ThemeColors.text)
+	rl.DrawTextEx(
+		vend,
+		"Add Object",
+		vector.create(menuX + MENU_PADDING, menuY + MENU_PADDING),
+		18,
+		1,
+		ThemeColors.text
+	)
 
 	local menuRect = { x = menuX, y = menuY, width = ADD_MENU_WIDTH, height = menuHeight }
-	local itemsRect = { x = menuX, y = menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT, width = ADD_MENU_WIDTH, height = menuHeight - MENU_PADDING * 2 - ADD_MENU_SEARCH_HEIGHT - ADD_MENU_TITLE_HEIGHT }
+	local itemsRect = {
+		x = menuX,
+		y = menuY + MENU_PADDING + ADD_MENU_SEARCH_HEIGHT + ADD_MENU_TITLE_HEIGHT,
+		width = ADD_MENU_WIDTH,
+		height = menuHeight - MENU_PADDING * 2 - ADD_MENU_SEARCH_HEIGHT - ADD_MENU_TITLE_HEIGHT,
+	}
 
 	-- Handle mouse wheel scrolling on items area
 	if isMouseInRect(itemsRect, mousePos) then
@@ -641,7 +810,8 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 	local dt = rl.GetFrameTime()
 	local maxScroll = math.max(0, contentHeight - (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT))
 	addMenuScrollTarget[instance] = math.clamp(addMenuScrollTarget[instance], 0, maxScroll)
-	addMenuScroll[instance] = addMenuScroll[instance] + (addMenuScrollTarget[instance] - addMenuScroll[instance]) * math.min(dt * 18, 1)
+	addMenuScroll[instance] = addMenuScroll[instance]
+		+ (addMenuScrollTarget[instance] - addMenuScroll[instance]) * math.min(dt * 18, 1)
 
 	-- Draw search textbox
 	local searchBoxX = menuX + MENU_PADDING
@@ -734,7 +904,8 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 				local itemKey = instance.UniqueId .. class
 				addMenuHoverAnim[itemKey] = addMenuHoverAnim[itemKey] or 0
 				local hoverTarget = isHovered and 1 or 0
-				addMenuHoverAnim[itemKey] = addMenuHoverAnim[itemKey] + (hoverTarget - addMenuHoverAnim[itemKey]) * math.min(dt * 15, 1)
+				addMenuHoverAnim[itemKey] = addMenuHoverAnim[itemKey]
+					+ (hoverTarget - addMenuHoverAnim[itemKey]) * math.min(dt * 15, 1)
 
 				if addMenuHoverAnim[itemKey] > 0.01 then
 					rl.DrawRectangle(
@@ -759,7 +930,16 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 					addMenuSearchBox:setText("")
 				end
 
-				local iconTex = loadedIcon[class] or notfound_tex
+				local iconTex = loadedIcon[class]
+				if not iconTex then
+					local svg = KinemiumIconLoader.Get(class .. ".png") or KinemiumIconLoader.Get(class .. ".svg")
+					if svg then
+						iconTex = KinemiumIconLoader.ToTexture(svg)
+						loadedIcon[class] = iconTex
+					else
+						iconTex = notfound_tex
+					end
+				end
 				if iconTex and iconTex.texture then
 					local iconSize = ADD_MENU_ITEM_HEIGHT - 6
 					rl.DrawTexturePro(
@@ -773,7 +953,14 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 				end
 
 				-- Draw text
-				rl.DrawTextEx(vend, class, vector.create(menuX + ADD_MENU_ITEM_HEIGHT + 4, itemY + 3), 17, 1, ThemeColors.text)
+				rl.DrawTextEx(
+					vend,
+					class,
+					vector.create(menuX + ADD_MENU_ITEM_HEIGHT + 4, itemY + 3),
+					17,
+					1,
+					ThemeColors.text
+				)
 			end
 		end
 	end
@@ -791,9 +978,7 @@ local function drawAdditionMenu(instance, mousePos, btnY, toggleX)
 		local thumbHeight =
 			math.max(20, (scrollbarTrackHeight * (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT)) / contentHeight)
 		local maxScroll = contentHeight - (MAX_VISIBLE_ITEMS * ADD_MENU_ITEM_HEIGHT)
-		local thumbY = scrollbarY
-			+ 2
-			+ (addMenuScroll[instance] / maxScroll) * (scrollbarTrackHeight - thumbHeight)
+		local thumbY = scrollbarY + 2 + (addMenuScroll[instance] / maxScroll) * (scrollbarTrackHeight - thumbHeight)
 
 		-- Track
 		rl.DrawRectangleRounded(
@@ -828,7 +1013,7 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 	if instance.Destroyed or instance.ExplorerHidden then
 		return
 	end
-	if isSearching and not matchesSearch(instance, searchQuery) then
+	if isSearching and not matchesSearch(instance, searchQuery, searchFilterMode) then
 		return
 	end
 
@@ -855,22 +1040,10 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 
 			-- Vertical line - only go up to the middle for last child, otherwise go through entire node
 			local lineEndY = isLastChild and (btnY + NODE_HEIGHT / 2) or (btnY + NODE_HEIGHT)
-			rl.DrawLine(
-				lineX,
-				btnY,
-				lineX,
-				lineEndY,
-				lineColor:ToRaylib(0.3)
-			)
+			rl.DrawLine(lineX, btnY, lineX, lineEndY, lineColor:ToRaylib(0.3))
 
 			-- Horizontal line connecting to node
-			rl.DrawLine(
-				lineX,
-				btnY + NODE_HEIGHT / 2,
-				btnX - 2,
-				btnY + NODE_HEIGHT / 2,
-				lineColor:ToRaylib(0.3)
-			)
+			rl.DrawLine(lineX, btnY + NODE_HEIGHT / 2, btnX - 2, btnY + NODE_HEIGHT / 2, lineColor:ToRaylib(0.3))
 		end
 		-- Determine visual state
 		local isHovered = isMouseInRect(rectData, mousePos)
@@ -885,6 +1058,8 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 			local svg = KinemiumIconLoader.Get(instance.ClassName .. ".png")
 			if svg then
 				loadedIcon[instance.ClassName] = KinemiumIconLoader.ToTexture(svg)
+			else
+				loadedIcon[instance.ClassName] = notfound_tex
 			end
 		end
 
@@ -987,7 +1162,7 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 	yOffset = yOffset + NODE_HEIGHT + 2
 
 	local shouldExpand = expanded[instance]
-		or (isSearching and matchesSearch(instance, searchQuery))
+		or (isSearching and matchesSearch(instance, searchQuery, searchFilterMode))
 		or hasSelectedDescendant(instance)
 
 	if hasChildren and shouldExpand then
@@ -996,81 +1171,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 			DrawTree(child, indent + 1, winX, winY, winWidth, isLastChild)
 		end
 	end
-end
-
-local function drawScrollbar(windowData)
-	local scrollbarX = windowData.x + windowData.width - SCROLLBAR_WIDTH - 4
-	local scrollbarY = windowData.y + 30
-	local scrollbarHeight = windowData.height - 40
-	local trackHeight = scrollbarHeight - 8
-
-	local thumbHeight = math.max(30, (scrollbarHeight * scrollbarHeight) / contentHeight)
-	local thumbY = scrollbarY + 4 + (scrollOffset / maxScroll) * (trackHeight - thumbHeight)
-
-	local mousePos = rl.GetMousePosition()
-	local mousePressed = rl.IsMouseButtonPressed(0) == 1
-	local mouseDown = rl.IsMouseButtonDown(0) == 1
-
-	local scrollbarRect = { x = scrollbarX, y = thumbY, width = SCROLLBAR_WIDTH, height = thumbHeight }
-	local trackRect = { x = scrollbarX, y = scrollbarY + 4, width = SCROLLBAR_WIDTH, height = trackHeight }
-	local isThumbHovered = isMouseInRect(scrollbarRect, mousePos)
-	local isTrackHovered = isMouseInRect(trackRect, mousePos)
-
-	-- Handle thumb drag start
-	if mousePressed and isThumbHovered then
-		scrollbarDrag.active = true
-		scrollbarDrag.offset = mousePos.y - thumbY
-	end
-
-	-- Handle track click
-	if mousePressed and isTrackHovered and not isThumbHovered then
-		local newThumbY = math.clamp(mousePos.y - thumbHeight / 2, scrollbarY + 4, scrollbarY + 4 + trackHeight - thumbHeight)
-		local percent = (newThumbY - (scrollbarY + 4)) / (trackHeight - thumbHeight)
-		scrollTarget = percent * maxScroll
-		scrollbarDrag.active = true
-		scrollbarDrag.offset = mousePos.y - newThumbY
-	end
-
-	-- Handle dragging
-	if scrollbarDrag.active then
-		if mouseDown then
-			local newThumbY = math.clamp(mousePos.y - scrollbarDrag.offset, scrollbarY + 4, scrollbarY + 4 + trackHeight - thumbHeight)
-			local percent = (newThumbY - (scrollbarY + 4)) / (trackHeight - thumbHeight)
-			scrollTarget = percent * maxScroll
-		else
-			scrollbarDrag.active = false
-		end
-	end
-
-	-- Recalculate thumbY after potential drag
-	thumbY = scrollbarY + 4 + (scrollOffset / maxScroll) * (trackHeight - thumbHeight)
-
-	-- Track
-	rl.DrawRectangleRounded(
-		structs.Rectangle:new({
-			x = scrollbarX,
-			y = scrollbarY + 4,
-			width = SCROLLBAR_WIDTH,
-			height = trackHeight,
-		}),
-		0.5,
-		4,
-		Color3.new(0.1, 0.1, 0.1):ToRaylib(0)
-	)
-
-	-- Thumb
-	local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.5, 0.5, 0.5) or Color3.new(0.4, 0.4, 0.4)
-	rl.DrawRectangleRounded(
-		structs.Rectangle:new({
-			x = scrollbarX,
-			y = thumbY,
-			width = SCROLLBAR_WIDTH,
-			height = thumbHeight,
-		}),
-		0.5,
-		4,
-		thumbColor:ToRaylib(0)
-	)
 end
 
 local screenGui = Instance.new("ScreenGui")
@@ -1096,6 +1196,23 @@ local explorerWindow = window.create({
 	width = frame.AbsoluteSize.X,
 	height = frame.AbsoluteSize.Y,
 })
+explorerWindow.Scrollable = true
+explorerWindow._contentHeight = 0
+
+local renderer = KinemiumRaylib.GetRenderer()
+local StudioThemeService = game:GetService("StudioThemeService")
+
+renderer.Pool.new("2d", function(data)
+	if game.Context ~= Enum.GameContext.Editor then
+		return
+	end
+
+	local dt = rl.GetFrameTime()
+	local mainTheme = StudioThemeService.SelectedTheme
+
+	window.update(dt)
+	window.draw(dt, mainTheme.aereon)
+end)
 
 explorerWindow.stepped = function(windowData)
 	if windowData.title ~= "Explorer" then
@@ -1111,6 +1228,11 @@ explorerWindow.stepped = function(windowData)
 
 	windowObject = windowData
 	yOffset = 0
+	if windowData._scrollArea and windowData._scrollArea.get then
+		scrollOffset = windowData._scrollArea.get("scrollOffset") or 0
+	else
+		scrollOffset = 0
+	end
 
 	if rl.IsWindowResized() == 1 then
 		windowData.x = frame.AbsolutePosition.X
@@ -1120,6 +1242,7 @@ explorerWindow.stepped = function(windowData)
 	end
 
 	local mousePos = rl.GetMousePosition()
+	local titleBarH = windowData._titleBarH or 28
 	local windowRect = {
 		x = windowData.x,
 		y = windowData.y,
@@ -1129,22 +1252,72 @@ explorerWindow.stepped = function(windowData)
 
 	local boxWidth = windowRect.width * 0.95
 	local boxX = windowRect.x + (windowRect.width - boxWidth) * 0.5
+	local filterBtnSize = 30
+	local filterGap = 8
+	local searchWidth = boxWidth - filterBtnSize - filterGap
 
-	searchBox:drawWithExtras(boxX, windowRect.y + 35, boxWidth, 30)
+	local contentY = windowData.y + titleBarH
+	rl.BeginScissorMode(windowData.x, contentY, windowData.width, windowData.height - titleBarH)
 
-	if isMouseInRect(windowRect, mousePos) and not activeAddMenu then
-		local mouseWheel = rl.GetMouseWheelMove()
-		if math.abs(mouseWheel) > 0.01 and windowData.Focused == true then
-			scrollTarget -= mouseWheel * NODE_HEIGHT * SCROLL_SPEED
+	searchBox:drawWithExtras(boxX, windowRect.y + 35, searchWidth, 30)
+	if not searchFilterButton then
+		searchFilterButton = gui.imageButton({
+			image = filterIcon,
+			imageScale = 0.7,
+			backgroundColor = Theme.SecondaryBackgroundColor,
+			hoverColor = Theme.BackgroundColor,
+			pressColor = Theme.BackgroundColor,
+			onClick = function()
+				searchFilterMenuVisible = not searchFilterMenuVisible
+				if searchFilterMenuVisible then
+					local menuW = 180
+					local itemH = 24
+					local menuH = (#searchFilterOptions * itemH) + 8
+					local menuX = boxX + searchWidth + filterGap
+					local menuY = windowRect.y + 35 + filterBtnSize + 6
+					local maxX = windowRect.x + windowRect.width - menuW - 4
+					local maxY = windowRect.y + windowRect.height - menuH - 4
+					menuX = math.max(windowRect.x + 4, math.min(menuX, maxX))
+					menuY = math.max(windowRect.y + 4, math.min(menuY, maxY))
+					searchFilterMenu.set("obj_rect", arect.new(menuX, menuY, menuW, 0))
+					searchFilterMenu:show()
+				else
+					searchFilterMenu:hide()
+				end
+			end,
+		})
+	end
+	searchFilterButton.set(
+		"obj_rect",
+		arect.new(boxX + searchWidth + filterGap, windowRect.y + 35, filterBtnSize, filterBtnSize)
+	)
+	searchFilterButton.render(dt)
+
+	if not searchFilterMenu then
+		local items = {}
+		for _, opt in ipairs(searchFilterOptions) do
+			table.insert(items, {
+				label = opt,
+				onClick = function()
+					searchFilterMode = opt
+					searchFilterMenuVisible = false
+					searchFilterMenu:hide()
+				end,
+			})
 		end
+		searchFilterMenu = gui.menu({
+			x = 0,
+			y = 0,
+			width = 180,
+			Font = vend,
+			backgroundColor = Theme.SecondaryBackgroundColor,
+			textColor = Theme.TextColor,
+			hoverColor = Theme.BackgroundColor,
+			items = items,
+		})
+		searchFilterMenu:hide()
 	end
 
-	rl.BeginScissorMode(
-		math.floor(windowData.x),
-		math.floor(windowData.y + 30),
-		math.floor(windowData.width),
-		math.floor(windowData.height - 30)
-	)
 
 	local services = getServicesInOrder()
 	for _, child in ipairs(services) do
@@ -1153,13 +1326,7 @@ explorerWindow.stepped = function(windowData)
 
 	rl.EndScissorMode()
 
-	contentHeight = yOffset
-	maxScroll = math.max(0, contentHeight - (windowData.height - 40))
-
-	scrollTarget = math.clamp(scrollTarget, 0, maxScroll)
-	scrollOffset = scrollOffset + (scrollTarget - scrollOffset) * math.min(dt * 18, 1)
-
-	drawScrollbar(windowData)
+	windowData._contentHeight = yOffset + 100
 
 	if activeAddMenu then
 		drawAdditionMenu(activeAddMenu.instance, rl.GetMousePosition(), activeAddMenu.btnY, activeAddMenu.toggleX)
@@ -1186,5 +1353,9 @@ explorerWindow.stepped = function(windowData)
 				clone.Parent = v.Parent
 			end
 		end
+	end
+
+	if searchFilterMenuVisible then
+		searchFilterMenu.render(dt)
 	end
 end

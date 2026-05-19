@@ -1,5 +1,4 @@
-local BrickColor = require("../environment/datatypes/BrickColor")
-local Color3 = require("../environment/datatypes/Color3")
+local BrickColor = require("@BrickColor")
 
 local testing = zune.testing
 local expect = testing.expect

@@ -7,6 +7,11 @@ local CFrame = require("@CFrame")
 local Vector3 = require("@Vector3")
 local Enum = require("@EnumMap")
 local InputActionService = require("../InputActionService/InputActionService")
+local GNS = require("@GNS")
+
+local OWNED_STATE_SEND_RATE = 15
+local NO_OWNED_STATE_LOG_INTERVAL_SECONDS = 10
+local DEBUG_CREATE_TRACE = false
 
 local function packArgs(...)
 	return table.pack(...)
@@ -14,7 +19,6 @@ end
 
 function Client.init(context)
 	print("[Replicator][Client] ===== Client.init START =====")
-	local KiNet = require("@KiNet")
 	local game = context.game
 	local serializationService = context.SerializationService
 	local networkService = context.NetworkService
@@ -26,7 +30,7 @@ function Client.init(context)
 
 	-- Register custom serializer adapters with error handling
 	local ok, SerializerAdapters = pcall(function()
-		return KiNet.SerializerAdapters
+		return GNS.SerializerAdapters
 	end)
 	if ok and SerializerAdapters and SerializerAdapters.EnsureRegistered then
 		SerializerAdapters.EnsureRegistered()
@@ -36,6 +40,8 @@ function Client.init(context)
 
 	local lookup = {}
 	local singletonByClass = {}
+	local ignoredCreateNetIds = {}
+	local processedCreateNetIds = {} -- Track all NetworkIds we've successfully created
 	local deferredReferencePatches = {}
 	local MAX_DEFERRED_PATCHES = 256
 	local DEFERRED_PATCH_TTL = 30 -- seconds; discard entries older than this
@@ -47,8 +53,12 @@ function Client.init(context)
 	local mutedObjects = setmetatable({}, { __mode = "k" })
 	local predictionBuffer = PredictionBuffer.new(128)
 	local clientBaselineCache = {}
-	local MAX_BASELINE_CACHE_SIZE = 64  -- Limit cache size to prevent memory leaks
+	local MAX_BASELINE_CACHE_SIZE = 64 -- Limit cache size to prevent memory leaks
 	local workspace = game:GetService("Workspace")
+	local protectedWorkspaceSingletonClasses = {
+		Camera = true,
+		Terrain = true,
+	}
 	local ownedStateSequence = 0
 	local outboundOwnedPatchEntries = {}
 	local lastNoOwnedStateLogTick = -math.huge
@@ -139,7 +149,8 @@ function Client.init(context)
 		local livePos = (object.CFrame and object.CFrame.Position) or object.Position
 		--[[
 		local statePos = decodeStatePosition(state)
-		print(
+		if DEBUG_CREATE_TRACE then
+			print(
 			`[HumanoidDebug][Client][{stage}] object={object.Name}#{object.NetworkId or "?"} owner={owner} live={formatVector3(
 				livePos
 			)} state={formatVector3(statePos)} {extra or ""}`
@@ -174,6 +185,16 @@ function Client.init(context)
 		return terrain
 	end
 
+	local function tryGetService(className)
+		local ok, service = pcall(function()
+			return game:GetService(className)
+		end)
+		if ok then
+			return service
+		end
+		return nil
+	end
+
 	local coreServices = {
 		["DataModel"] = game,
 		["Workspace"] = game:GetService("Workspace"),
@@ -181,18 +202,35 @@ function Client.init(context)
 		["ReplicatedStorage"] = game:GetService("ReplicatedStorage"),
 		["InternalStorage"] = game:GetService("InternalStorage"),
 		["StarterGui"] = game:GetService("StarterGui"),
+		["CoreGui"] = tryGetService("CoreGui"),
+		["StarterPlayer"] = tryGetService("StarterPlayer"),
+		["ServerScriptService"] = tryGetService("ServerScriptService"),
+		["ServerStorage"] = tryGetService("ServerStorage"),
+		["Lighting"] = tryGetService("Lighting"),
 	}
 
 	for className, service in pairs(coreServices) do
 		singletonByClass[className] = service
 	end
 
+	local localCamera = workspace:FindFirstChild("Camera")
+	if localCamera then
+		singletonByClass["Camera"] = localCamera
+	end
+	local localTerrain = getTerrain()
+	if localTerrain then
+		singletonByClass["Terrain"] = localTerrain
+	end
+
 	lookup[0] = game
 	lookup[1] = game:GetService("Workspace")
 	lookup[2] = game:GetService("Players")
 	lookup[3] = game:GetService("ReplicatedStorage")
-	lookup[6] = game:GetService("InternalStorage")
 	lookup[4] = game:GetService("StarterGui")
+	lookup[5] = coreServices["CoreGui"]
+	lookup[6] = game:GetService("InternalStorage")
+
+	local pendingParentQueue = {}
 
 	local function isReplicationSettled()
 		return pendingSnapshotsCount == 0 and #deferredReferencePatches == 0
@@ -221,14 +259,17 @@ function Client.init(context)
 	end
 
 	local function sendObjectInventoryToServer()
+		if game.GetMetadata and game:GetMetadata("__blobLoading") == true then
+			task.delay(0.25, sendObjectInventoryToServer)
+			return
+		end
+
 		local netIds = collectKnownNetworkIds()
 		print(`[Replicator][Client] Sending object inventory to server: {#netIds} netIds`)
-		networkService:SendToServer(
-			Protocol.Channels.Control,
-			Protocol.Kinds.ClientObjectInventoryResponse,
-			{ netIds = netIds },
-			true
-		)
+		networkService:SendToServer(Protocol.Channels.Control, Protocol.Kinds.ClientObjectInventoryResponse, {
+			netIds = netIds,
+			blobFingerprint = game.GetMetadata and game:GetMetadata("__blobFingerprint") or nil,
+		}, true)
 	end
 
 	local function withMutedObject(object, callback)
@@ -500,8 +541,73 @@ function Client.init(context)
 		end
 	end
 
+	local function destroyInstanceTree(rootObject)
+		if not rootObject then
+			return
+		end
+
+		local stack = { rootObject }
+		while #stack > 0 do
+			local object = table.remove(stack)
+			for _, child in ipairs(object:GetChildren()) do
+				table.insert(stack, child)
+			end
+			if object.Destroy then
+				object:Destroy()
+			end
+		end
+	end
+
+	local function adoptReplicatedWorkspaceTree(localRoot, replicatedRoot)
+		local function adoptPair(localNode, replicatedNode)
+			local netId = replicatedNode._props and replicatedNode._props.NetworkId or replicatedNode.NetworkId
+			if netId ~= nil then
+				if localNode.NetworkId == nil then
+					localNode.NetworkId = netId
+				end
+				lookup[netId] = localNode
+				processedCreateNetIds[netId] = true
+			end
+
+			local localByName = {}
+			for _, child in ipairs(localNode:GetChildren()) do
+				localByName[child.Name] = child
+			end
+
+			for _, replicatedChild in ipairs(replicatedNode:GetChildren()) do
+				local match = localByName[replicatedChild.Name]
+				if match and match.ClassName == replicatedChild.ClassName then
+					adoptPair(match, replicatedChild)
+				end
+			end
+		end
+
+		adoptPair(localRoot, replicatedRoot)
+		destroyInstanceTree(replicatedRoot)
+		return localRoot
+	end
+
+	local function tryAdoptLocalWorkspaceRoot(object, parentNetId)
+		if parentNetId ~= 1 then
+			return nil
+		end
+
+		local localRoot = workspace:FindFirstChild(object.Name)
+		if not localRoot or localRoot.ClassName ~= object.ClassName or localRoot.NetworkId ~= nil then
+			return nil
+		end
+
+		return adoptReplicatedWorkspaceTree(localRoot, object)
+	end
+
 	local function assignCharacterToPlayer(player, character)
+		if DEBUG_CREATE_TRACE then
+			print(
+				`[Replicator][Client] assignCharacterToPlayer: player=${player and player.Name or "nil"}, character=${character and character.Name or "nil"}`
+			)
+		end
 		if not player or not character or player.Character == character then
+			print(`[Replicator][Client]   -> skipped`)
 			return
 		end
 
@@ -511,8 +617,10 @@ function Client.init(context)
 		end
 
 		player.Character = character
+		print(`[Replicator][Client]   -> player.Character SET`)
 		if player.CharacterAdded then
 			player.CharacterAdded:Fire(character)
+			print(`[Replicator][Client]   -> CharacterAdded fired`)
 		end
 	end
 
@@ -544,8 +652,57 @@ function Client.init(context)
 		return nil
 	end
 
-	local function syncPlayerCharacterBindingForModel(model)
+	local function detachCharacterModel(model)
 		if not model or model.ClassName ~= "Model" then
+			return
+		end
+
+		local playersService = game:GetService("Players")
+		local uid = model.GetAttribute and model:GetAttribute("__characterUserId")
+		local player = nil
+		if type(uid) == "number" then
+			player = playersService:GetPlayerByUserId(uid)
+		end
+		if not player then
+			player = playersService:GetPlayerByName(model.Name)
+		end
+
+		if player and player.Character == model then
+			if player.CharacterRemoving then
+				player.CharacterRemoving:Fire(model)
+			end
+			player.Character = nil
+		end
+	end
+
+	local function destroyCharacterModelsForPlayer(player)
+		local workspace = game:GetService("Workspace")
+		if not workspace or not player then
+			return
+		end
+
+		for _, child in ipairs(workspace:GetChildren()) do
+			if child.ClassName == "Model" and child.FindFirstChildOfClass then
+				local humanoid = child:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					local uid = child.GetAttribute and child:GetAttribute("__characterUserId")
+					if (type(uid) == "number" and uid == player.UserId) or child.Name == player.Name then
+						detachCharacterModel(child)
+						child:Destroy()
+					end
+				end
+			end
+		end
+	end
+
+	local function syncPlayerCharacterBindingForModel(model)
+		if DEBUG_CREATE_TRACE then
+			print(
+				`[Replicator][Client] syncCharBindingForModel: ${model and model.Name or "nil"} class=${model and model.ClassName or "?"}`
+			)
+		end
+		if not model or model.ClassName ~= "Model" then
+			print(`[Replicator][Client]   -> skipped (not a Model)`)
 			return
 		end
 
@@ -596,19 +753,46 @@ function Client.init(context)
 	end
 
 	local function syncPlayerCharacterBindingForPlayer(player)
+		print(`[Replicator][Client] syncCharBindingForPlayer: ${player and player.Name or "nil"}`)
 		if not player then
 			return
 		end
 
 		local workspace = game:GetService("Workspace")
 		local character = findCharacterModelForPlayer(workspace, player)
+		print(`[Replicator][Client]   findCharacterModelForPlayer = ${character and character.Name or "nil"}`)
 		if character then
 			assignCharacterToPlayer(player, character)
 		end
 	end
 
+	local function flushPendingParentQueue()
+		if #pendingParentQueue == 0 then
+			return
+		end
+
+		local remaining = {}
+		for _, entry in ipairs(pendingParentQueue) do
+			local parent = lookup[entry.parentNetId]
+			if parent then
+				entry.object.Parent = parent
+				if entry.object.ClassName == "Model" then
+					syncPlayerCharacterBindingForModel(entry.object)
+					restoreHumanoidRigForModel(entry.object)
+				end
+			else
+				table.insert(remaining, entry)
+			end
+		end
+		pendingParentQueue = remaining
+	end
+
 	local function handleCreate(serializedBuffer)
-		print(`[Replicator][Client] handleCreate: deserializing {buffer.len(serializedBuffer)} bytes...`)
+		flushPendingParentQueue()
+
+		if DEBUG_CREATE_TRACE then
+			print(`[Replicator][Client] handleCreate: deserializing {buffer.len(serializedBuffer)} bytes...`)
+		end
 		local deserStart = os.clock()
 		local ok, deserialized = pcall(serializationService.Deserialize, serializedBuffer)
 		local deserTime = os.clock() - deserStart
@@ -616,12 +800,29 @@ function Client.init(context)
 			warn(`[Replicator][Client] handleCreate: failed to deserialize batch — {deserialized}`)
 			return
 		end
-		print(
-			`[Replicator][Client] handleCreate: deserialized {#deserialized} objects in {string.format(
-				"%.1f",
-				deserTime * 1000
-			)}ms`
-		)
+		if DEBUG_CREATE_TRACE then
+			print(
+				`[Replicator][Client] handleCreate: deserialized {#deserialized} objects in {string.format(
+					"%.1f",
+					deserTime * 1000
+				)}ms`
+			)
+		end
+
+		-- Check for duplicate Create messages
+		local duplicateCount = 0
+		for _, object in ipairs(deserialized) do
+			local netId = object._props and object._props.NetworkId
+			if netId and processedCreateNetIds[netId] then
+				duplicateCount += 1
+			end
+		end
+
+		if duplicateCount > 0 then
+			warn(
+				`[Replicator][Client] Received duplicate Create message with {duplicateCount}/{#deserialized} already-created objects — rejecting duplicates`
+			)
+		end
 
 		local modelNames = {}
 		for _, object in ipairs(deserialized) do
@@ -630,14 +831,17 @@ function Client.init(context)
 			end
 		end
 
-		print(
-			`[Replicator][Client] Received create batch: objects={#deserialized}, bytes={buffer.len(serializedBuffer)}, models=[{table.concat(
-				modelNames,
-				", "
-			)}]`
-		)
+		if DEBUG_CREATE_TRACE then
+			print(
+				`[Replicator][Client] Received create batch: objects={#deserialized}, bytes={buffer.len(
+					serializedBuffer
+				)}, models=[{table.concat(modelNames, ", ")}]`
+			)
+		end
 
-		print(`[Replicator][Client] handleCreate: processing {#deserialized} objects...`)
+		if DEBUG_CREATE_TRACE then
+			print(`[Replicator][Client] handleCreate: processing {#deserialized} objects...`)
+		end
 		local processStart = os.clock()
 		local deferred = {}
 		local skippedCount = 0
@@ -649,9 +853,43 @@ function Client.init(context)
 			local netId = object._props.NetworkId
 			local parentNetId = object._props._parentID
 
-			if netId == nil or lookup[netId] then
+			if netId == nil then
 				skippedCount += 1
 				continue
+			end
+
+			if ignoredCreateNetIds[netId] then
+				skippedCount += 1
+				continue
+			end
+
+			-- Reject duplicate Create for already-existing NetworkId
+			if lookup[netId] then
+				skippedCount += 1
+				print(
+					`[Replicator][Client] Rejecting duplicate Create for {object.ClassName}:{object.Name} with NetworkId={netId} (already exists)`
+				)
+				continue
+			end
+
+			if protectedWorkspaceSingletonClasses[object.ClassName] then
+				local existingSingleton = singletonByClass[object.ClassName]
+					or (parentNetId == 1 and workspace:FindFirstChild(object.Name))
+				if existingSingleton and existingSingleton.ClassName == object.ClassName then
+					singletonByClass[object.ClassName] = existingSingleton
+					if existingSingleton.NetworkId == nil then
+						singletonCount += 1
+						existingSingleton.NetworkId = netId
+						lookup[netId] = existingSingleton
+					else
+						ignoredCreateNetIds[netId] = true
+						skippedCount += 1
+						print(
+							`[Replicator][Client] Ignoring duplicate {object.ClassName} create for netId={netId}; preserving local singleton`
+						)
+					end
+					continue
+				end
 			end
 
 			if object.ClassName == "Player" then
@@ -695,6 +933,16 @@ function Client.init(context)
 				continue
 			end
 
+			local adoptedRoot = tryAdoptLocalWorkspaceRoot(object, parentNetId)
+			if adoptedRoot then
+				singletonCount += 1
+				if adoptedRoot.ClassName == "Model" then
+					syncPlayerCharacterBindingForModel(adoptedRoot)
+					restoreHumanoidRigForModel(adoptedRoot)
+				end
+				continue
+			end
+
 			local treeEntries, conflictingNetId = collectTreeEntries(object)
 			if not treeEntries then
 				warn(
@@ -713,15 +961,19 @@ function Client.init(context)
 			})
 
 			-- Progress report and yield every 50 objects to keep network alive
-			if i % 10 == 0 then
-				print(`[Replicator][Client]   Progress: {i}/{#deserialized} objects processed...`)
+			if i % 50 == 0 then
+				if DEBUG_CREATE_TRACE then
+					print(`[Replicator][Client]   Progress: {i}/{#deserialized} objects processed...`)
+				end
 				task.wait()
 			end
 		end
 
-		print(
-			`[Replicator][Client] handleCreate: classification done — deferred={#deferred}, skipped={skippedCount}, players={playerCount}, singletons={singletonCount}, trees={treeCount}`
-		)
+		if DEBUG_CREATE_TRACE then
+			print(
+				`[Replicator][Client] handleCreate: classification done — deferred={#deferred}, skipped={skippedCount}, players={playerCount}, singletons={singletonCount}, trees={treeCount}`
+			)
+		end
 
 		local function tryParent(entry)
 			local parent = lookup[entry.parentNetId]
@@ -745,18 +997,20 @@ function Client.init(context)
 			return true
 		end
 
-		print(`[Replicator][Client] handleCreate: parenting {#deferred} deferred objects...`)
+		if DEBUG_CREATE_TRACE then
+			print(`[Replicator][Client] handleCreate: parenting {#deferred} deferred objects...`)
+		end
 		local retryQueue = {}
 		for i, entry in ipairs(deferred) do
 			if not tryParent(entry) then
 				table.insert(retryQueue, entry)
 			end
-			if i % 10 == 0 then
+			if i % 50 == 0 then
 				task.wait()
 			end
 		end
 
-		if #retryQueue > 0 then
+		if DEBUG_CREATE_TRACE and #retryQueue > 0 then
 			print(`[Replicator][Client] handleCreate: {#retryQueue} objects need retry parenting...`)
 		end
 
@@ -770,20 +1024,37 @@ function Client.init(context)
 				table.insert(retryQueue, entry)
 			end
 			retryYieldCount += 1
-			if retryYieldCount % 10 == 0 then
+			if retryYieldCount % 50 == 0 then
 				task.wait()
 			end
 		end
 
 		for _, entry in ipairs(retryQueue) do
-			print(`[Replicator][Client]   Fallback parenting {entry.object.ClassName}:{entry.object.Name} to Workspace`)
-			entry.object.Parent = game.Workspace
+			if entry.parentNetId == 1 or entry.parentNetId == nil then
+				if DEBUG_CREATE_TRACE then
+					print(
+						`[Replicator][Client]   Fallback parenting {entry.object.ClassName}:{entry.object.Name} to Workspace`
+					)
+				end
+				entry.object.Parent = game.Workspace
+			else
+				table.insert(pendingParentQueue, entry)
+				if DEBUG_CREATE_TRACE then
+					print(
+						`[Replicator][Client]   Deferring orphan {entry.object.ClassName}:{entry.object.Name} until parent netId={entry.parentNetId} arrives`
+					)
+				end
+			end
 		end
+
+		flushPendingParentQueue()
 
 		-- Final sync pass: Player objects and character Models may both arrive in the
 		-- same Create batch in unpredictable order. After all objects are parented
 		-- we retry bindings so neither side misses the other.
-		print(`[Replicator][Client] handleCreate: final sync pass...`)
+		if DEBUG_CREATE_TRACE then
+			print(`[Replicator][Client] handleCreate: final sync pass...`)
+		end
 		for i, entry in ipairs(deferred) do
 			if entry.object.ClassName == "Player" then
 				syncPlayerCharacterBindingForPlayer(entry.object)
@@ -794,17 +1065,26 @@ function Client.init(context)
 			-- Apply any snapshot state that arrived before this object was in lookup
 			flushPendingSnapshot(entry.object)
 
-			if i % 10 == 0 then
+			if i % 50 == 0 then
 				task.wait()
 			end
 		end
 
 		flushDeferredReferencePatches()
 
+		-- Mark all successfully created NetworkIds to reject future duplicate Creates
+		for _, entry in ipairs(deferred) do
+			if entry.netId then
+				processedCreateNetIds[entry.netId] = true
+			end
+		end
+
 		local totalTime = os.clock() - processStart
-		print(
-			`[Replicator][Client] handleCreate: COMPLETE in {string.format("%.1f", totalTime * 1000)}ms — {#deferred} objects parented`
-		)
+		if DEBUG_CREATE_TRACE or totalTime > 0.1 or deserTime > 0.1 then
+			print(
+				`[Replicator][Client] handleCreate: COMPLETE in {string.format("%.1f", totalTime * 1000)}ms — {#deferred} objects parented`
+			)
+		end
 	end
 
 	local function applyPatchEntry(entry)
@@ -954,9 +1234,16 @@ function Client.init(context)
 
 		for _, stateOrDelta in ipairs(payload.states or {}) do
 			local netId = stateOrDelta.id
+			if netId == nil then
+				warn(`[Replicator][Client] Dropping snapshot state without id at tick {payload.tick}`)
+				continue
+			end
 			local baseline = newBaselineMap[netId] or baselineMap[netId]
 			local fullState = stateRegistry.ApplyDelta(baseline, stateOrDelta)
 			if fullState ~= nil then
+				if fullState.id == nil then
+					fullState.id = netId
+				end
 				newBaselineMap[netId] = fullState
 				table.insert(statesToApply, fullState)
 			elseif stateOrDelta.__isDelta then
@@ -972,7 +1259,7 @@ function Client.init(context)
 		end
 
 		clientBaselineCache[payload.tick] = newBaselineMap
-		
+
 		-- Clean up old entries and enforce maximum cache size
 		local cacheEntries = {}
 		for t in pairs(clientBaselineCache) do
@@ -982,7 +1269,7 @@ function Client.init(context)
 				table.insert(cacheEntries, t)
 			end
 		end
-		
+
 		-- If cache exceeds maximum size, remove oldest entries
 		if #cacheEntries > MAX_BASELINE_CACHE_SIZE then
 			table.sort(cacheEntries)
@@ -1064,7 +1351,9 @@ function Client.init(context)
 	end
 
 	local function shouldSendOwnedStates(tick, states)
-		if tick - lastOwnedStateSendTick < (1 / 20) then
+		local tickRate = tonumber(networkService.TickRate) or 30
+		local minTicksBetweenSends = math.max(1, math.ceil(tickRate / OWNED_STATE_SEND_RATE))
+		if tick - lastOwnedStateSendTick < minTicksBetweenSends then
 			return false
 		end
 
@@ -1138,6 +1427,7 @@ function Client.init(context)
 				lookup[descendant.NetworkId] = nil
 				remoteTargets[descendant.NetworkId] = nil
 				outboundOwnedPatchEntries[descendant.NetworkId] = nil
+				processedCreateNetIds[descendant.NetworkId] = nil
 				if pendingSnapshots[descendant.NetworkId] then
 					pendingSnapshotsCount = math.max(0, pendingSnapshotsCount - 1)
 					pendingSnapshots[descendant.NetworkId] = nil
@@ -1161,8 +1451,18 @@ function Client.init(context)
 	end)
 
 	networkService:RegisterMessageHandler(Protocol.Channels.Replication, Protocol.Kinds.Remove, function(_, payload)
+		if ignoredCreateNetIds[payload.object] then
+			ignoredCreateNetIds[payload.object] = nil
+			return
+		end
+
 		local object = lookup[payload.object]
 		if object then
+			if object.ClassName == "Player" then
+				destroyCharacterModelsForPlayer(object)
+			elseif object.ClassName == "Model" then
+				detachCharacterModel(object)
+			end
 			lookup[payload.object] = nil
 			remoteTargets[payload.object] = nil
 			outboundOwnedPatchEntries[payload.object] = nil
@@ -1182,7 +1482,7 @@ function Client.init(context)
 		handleSnapshot(payload)
 		networkService:SendToServer(Protocol.Channels.Replication, Protocol.Kinds.SnapshotAck, {
 			tick = payload.tick,
-		}, true)
+		}, false)
 	end)
 
 	networkService:RegisterMessageHandler(
@@ -1345,6 +1645,33 @@ function Client.init(context)
 		end
 	end)
 
+	-- Fallback: periodically retry character binding for the local player.
+	-- If the initial Create message was dropped or arrived before the Player
+	-- object existed, the character model sits in Workspace without being
+	-- bound to player.Character.  This background loop catches that case.
+	task.spawn(function()
+		task.wait(2) -- give initial sync time to complete
+		local MAX_RETRIES = 30
+		local RETRY_INTERVAL = 1
+		for attempt = 1, MAX_RETRIES do
+			local playersService = game:GetService("Players")
+			local localPlayer = playersService and playersService.LocalPlayer
+			if localPlayer and localPlayer.Character ~= nil then
+				break -- character already bound
+			end
+
+			if localPlayer then
+				syncPlayerCharacterBindingForPlayer(localPlayer)
+				if localPlayer.Character ~= nil then
+					print(`[Replicator][Client] Fallback character binding succeeded on attempt {attempt}`)
+					break
+				end
+			end
+
+			task.wait(RETRY_INTERVAL)
+		end
+	end)
+
 	runService:BindToSimulation(function(dt)
 		if workspace.ServerAuthority and workspace.ServerAuthority.AuthorityMode == Enum.AuthorityMode.Server then
 			local inputs = InputActionService:SampleLocalInputs()
@@ -1380,7 +1707,9 @@ function Client.init(context)
 			if ownedStateSequence == 1 or ownedStateSequence % 30 == 0 then
 				print(`[Replicator][Client] Sending owned state batch: sequence={ownedStateSequence}, count={#states}`)
 			end
-		elseif tick - lastNoOwnedStateLogTick >= 60 then
+		elseif
+			tick - lastNoOwnedStateLogTick >= (networkService.TickRate or 30) * NO_OWNED_STATE_LOG_INTERVAL_SECONDS
+		then
 			lastNoOwnedStateLogTick = tick
 			print(`[Replicator][Client] No owned state objects for {localPlayer.Name} at tick {tick}`)
 		end

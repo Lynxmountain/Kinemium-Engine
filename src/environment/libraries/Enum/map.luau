@@ -368,6 +368,7 @@ enumTable.Font = {
 	Legacy = "Legacy",
 	Arial = "Arial",
 	ArialBold = "ArialBold",
+	EvenStevens = "EvenStevens",
 	SourceSans = "SourceSans",
 	SourceSansBold = "SourceSansBold",
 	SourceSansLight = "SourceSansLight",

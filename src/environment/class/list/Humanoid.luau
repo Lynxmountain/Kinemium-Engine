@@ -157,9 +157,11 @@ local function controller()
 	local ray = RaycastParams.new()
 	ray.FilterType = Enum.RaycastFilterType.Exclude
 	ray.IgnoreWater = true
+	ray.RespectCanCollide = true
 	return {
 		animClock = 0,
 		animStride = 0,
+		accessories = {},
 		bindings = {},
 		currentPos = nil,
 		dashCooldownUntil = 0,
@@ -334,7 +336,7 @@ local function partFor(name, parent, spec, isRoot, createInstance)
 		part.Anchored = if spec.Anchored ~= nil then spec.Anchored else true
 	end
 	if spec.CanCollide ~= nil or not existing then
-		part.CanCollide = if spec.CanCollide ~= nil then spec.CanCollide else false
+		part.CanCollide = if spec.CanCollide ~= nil then spec.CanCollide else isRoot ~= true
 	end
 	if spec.CastsShadow ~= nil or not existing then
 		part.CastsShadow = if spec.CastsShadow ~= nil then spec.CastsShadow else true
@@ -648,6 +650,8 @@ local function applyPose(h, rootCF, pose)
 	if not c then
 		return
 	end
+	-- Track final CFrames per binding name for accessory attachment
+	local partCFrames = {}
 	for bindingName, binding in pairs(c.bindings) do
 		local bindPose = pose[bindingName]
 		for i, seg in ipairs(binding.Segments) do
@@ -660,7 +664,23 @@ local function applyPose(h, rootCF, pose)
 					* seg.CenterOffset
 
 				seg.Part.CFrame = finalCF
+				-- Store the first segment's CFrame as the binding's CFrame
+				if not partCFrames[bindingName] then
+					partCFrames[bindingName] = finalCF
+				end
 			end
+		end
+	end
+
+	-- Position accessories relative to their parent body part
+	for _, accEntry in ipairs(c.accessories) do
+		local accessory = accEntry.accessory
+		local attachPoint = accEntry.attachmentPoint
+		if accessory and accessory.Parent ~= nil then
+			local parentCF = partCFrames[attachPoint] or rootCF
+			local att = accessory.GetAttachment and accessory:GetAttachment() or nil
+			local offset = att and att.CFrame or ID
+			accessory.CFrame = parentCF * offset
 		end
 	end
 end
@@ -1289,6 +1309,84 @@ return {
 			end
 		end
 
+		--- Adds an Accessory to the character. The accessory is parented to the
+		--- character model and its CFrame is updated every tick by applyPose,
+		--- following the body part named by `accessory.AttachmentPoint`.
+		--- The Attachment child on the Accessory describes the local offset.
+		function h:AddAccessory(accessory)
+			if not accessory or accessory.ClassName ~= "Accessory" then
+				return
+			end
+
+			local char = characterOf(self)
+			if not char then
+				return
+			end
+
+			-- Parent the accessory to the character model
+			accessory.Parent = char
+
+			local attachPoint = accessory.AttachmentPoint or "Head"
+
+			-- Initial snap: position the accessory at its attachment point
+			local rigPart = self:GetRigPart(attachPoint)
+			if rigPart and rigPart.CFrame then
+				local att = accessory.GetAttachment and accessory:GetAttachment() or nil
+				local offset = att and att.CFrame or CFrame.new()
+				accessory.CFrame = rigPart.CFrame * offset
+			end
+
+			-- Track in the controller for per-frame updates
+			local ctrl = rawget(self, "_humanoidController")
+			if ctrl then
+				-- Avoid duplicates
+				for _, entry in ipairs(ctrl.accessories) do
+					if entry.accessory == accessory then
+						return
+					end
+				end
+				table.insert(ctrl.accessories, {
+					accessory = accessory,
+					attachmentPoint = attachPoint,
+				})
+			end
+		end
+
+		--- Removes a previously added Accessory from the character.
+		function h:RemoveAccessory(accessory)
+			if not accessory then
+				return
+			end
+
+			local ctrl = rawget(self, "_humanoidController")
+			if ctrl then
+				for i, entry in ipairs(ctrl.accessories) do
+					if entry.accessory == accessory then
+						table.remove(ctrl.accessories, i)
+						break
+					end
+				end
+			end
+
+			if accessory.Parent ~= nil then
+				accessory.Parent = nil
+			end
+		end
+
+		--- Returns a list of all currently tracked Accessory instances.
+		function h:GetAccessories()
+			local result = {}
+			local ctrl = rawget(self, "_humanoidController")
+			if ctrl then
+				for _, entry in ipairs(ctrl.accessories) do
+					if entry.accessory and entry.accessory.Parent ~= nil then
+						table.insert(result, entry.accessory)
+					end
+				end
+			end
+			return result
+		end
+
 		function h:Move(dir)
 			self.MoveDirection = dir or ZERO
 		end
@@ -1784,33 +1882,25 @@ return {
 
 				if minHorizDist > 0.001 then
 					local hasBlockcast = type(workspace.Blockcast) == "function"
-					for _, binding in pairs(c.bindings) do
-						for _, seg in ipairs(binding.Segments) do
-							if seg.Part and seg.Part.Parent ~= nil then
-								local sweepHit
-								if hasBlockcast then
-									local cf = seg.Part.CFrame + Vector3.new(0, 0.05, 0)
-									local size = seg.Part.Size * 0.95
-									pcall(function()
-										sweepHit = workspace:Blockcast(cf, size, horizOffset, c.rayParams)
-									end)
-								end
-								if not sweepHit then
-									pcall(function()
-										sweepHit = workspace:Raycast(seg.Part.Position, horizOffset, c.rayParams)
-									end)
-								end
+					local sweepHit
+					if hasBlockcast then
+						local bodyHeight = math.max(h.HipHeight * 2.4, 2.5)
+						local bodySize = Vector3.new(2, bodyHeight, 1.25)
+						local bodyCenter = c.currentPos + Vector3.new(0, bodyHeight * 0.35, 0)
+						local bodyCF = CFrame.new(bodyCenter, bodyCenter + c.lookXZ)
+						pcall(function()
+							sweepHit = workspace:Blockcast(bodyCF, bodySize, horizOffset, c.rayParams)
+						end)
+					end
+					if not sweepHit then
+						pcall(function()
+							sweepHit = workspace:Raycast(c.currentPos, horizOffset, c.rayParams)
+						end)
+					end
 
-								if
-									sweepHit
-									and math.abs(sweepHit.Normal.Y) < 0.7
-									and sweepHit.Distance < minHorizDist
-								then
-									minHorizDist = sweepHit.Distance
-									slideNormal = sweepHit.Normal
-								end
-							end
-						end
+					if sweepHit and math.abs(sweepHit.Normal.Y) < 0.7 and sweepHit.Distance < minHorizDist then
+						minHorizDist = sweepHit.Distance
+						slideNormal = sweepHit.Normal
 					end
 				end
 

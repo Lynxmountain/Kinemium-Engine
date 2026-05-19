@@ -7,6 +7,7 @@ local NumberRange = require("@NumberRange")
 local ColorSequence = require("@ColorSequence")
 local ColorSequenceKeypoint = require("@ColorSequenceKeypoint")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 
 local lib = raylib.lib
 local structs = raylib.structs
@@ -278,7 +279,7 @@ return {
 				texture = nil
 			end
 			if type(instance.Texture) == "string" and instance.Texture ~= "" then
-				texture = lib.LoadTexture(instance.Texture)
+				texture = lib.LoadTexture(zembed.AssetPath(instance.Texture))
 				if texture then
 					lib.SetTextureFilter(texture, const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
 					lib.SetTextureWrap(texture, const.TextureWrap.TEXTURE_WRAP_REPEAT)

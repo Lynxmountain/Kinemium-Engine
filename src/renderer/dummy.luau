@@ -687,10 +687,18 @@ function KiRend.new(config: KiRendConf)
 		isRunning = true
 		lastFrameTime = os.clock()
 
-		while lib and isRunning do
+		while isRunning do
+			local frameStart = os.clock()
 			time += frameTime
 			frameCount += 1
 			rendererObject:step(time)
+
+			local sleepTime = frameTime - (os.clock() - frameStart)
+			if sleepTime > 0 then
+				task.wait(sleepTime)
+			else
+				task.wait(0) -- yield to avoid starving other threads
+			end
 
 			if maxFrames and frameCount >= maxFrames then
 				break

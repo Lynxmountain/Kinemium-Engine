@@ -1,6 +1,7 @@
 local Instance = require("@Instance")
 local Vector3 = require("@Vector3")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local const = raylib.const
 local lib = raylib.lib
 local Lighting = Instance.new("Lighting")
@@ -60,8 +61,6 @@ local function setSkyObject(r3d_sky)
 
 	local iden = lib.QuaternionIdentity()
 
-	print(3)
-
 	local envbackground = r3d.structs.R3D_EnvBackground:new({
 		sky = r3d_sky,
 		energy = 1.0,
@@ -69,21 +68,19 @@ local function setSkyObject(r3d_sky)
 		skyBlur = 0,
 	})
 
-	print(4)
-
 	local offset = r3d.structs.R3D_Environment:offset("background")
 	environment:write(offset, envbackground, 0, r3d.structs.R3D_EnvBackground:size())
 
-	print(5)
-
 	rlib.R3D_SetEnvironment(environment)
-
-	print(6)
 end
 
 local function loadSky(cubemapPath)
+	cubemapPath = zembed.AssetPath(cubemapPath)
 	local r3d_sky = rlib.R3D_LoadCubemap(cubemapPath, 5)
 	setSkyObject(r3d_sky)
+	return function()
+		rlib.R3D_UnloadCubemap(r3d_sky)
+	end
 end
 
 local function setAllEnvironmentEffects()
@@ -91,21 +88,10 @@ local function setAllEnvironmentEffects()
 	rlib.R3D_SetEnvironment(environment)
 end
 
-local function handleSky(skyObject, renderer)
-	if skyObject.ClassName == "Sky" then
-		loadSky(skyObject.Cubemap)
-		skyObject.Changed:Connect(function()
-			loadSky(skyObject.Cubemap)
-		end)
-	end
-end
-
 Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 	if _G.IsHeadless then
 		return
 	end
-
-	print("loading lighting")
 
 	Lighting:SetProperties({
 		Ambient = Color3.new(1, 1, 1),
@@ -124,36 +110,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end,
 	})
 
-	local sunDirection = Lighting:GetSunDirection()
-
-	local skyObject = r3d.structs.R3D_ProceduralSky:new({
-		sunEnergy = 2,
-		sunSize = 0.1,
-		sunColor = Color3.new(1, 1, 1):ToRaylib(0),
-		sunDirection = sunDirection:ToZuneVector(),
-		skyEnergy = 1,
-
-		groundHorizonCurve = 0.5,
-		groundHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
-		groundEnergy = 1,
-		groundBottomColor = Color3.new(0.7, 0.7, 0.7):ToRaylib(0),
-
-		skyHorizonCurve = 0.2,
-		skyTopColor = Color3.new(0.090196, 0.6, 0.839216):ToRaylib(0),
-		skyHorizonColor = Color3.new(1, 1, 1):ToRaylib(0),
-	})
-
-	print("1")
-	if zune.platform.os == "linux" then
-		loadSky("./src/assets/sky/test/images/sky.png")
-	else
-		print(1)
-		local cloudShader = rlib.R3D_LoadSkyShader("./src/assets/sky/shaders/default.glsl")
-		print(cloudShader, 2)
-		local sky = rlib.R3D_GenCustomSky(512, cloudShader)
-		print(sky, 3)
-		setSkyObject(sky)
-	end
+	local unload = loadSky("kineasset://sky/test/images/sky.png")
 	setAllEnvironmentEffects()
 
 	local light = rlib.R3D_CreateLight(0) -- R3D_LIGHT_DIR
@@ -219,44 +176,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 				applyEffectToEnv(child)
 			end)
 		end
-		handleSky(child, renderer)
 	end
-
-	renderer_signal:Connect(function(route, dt)
-		if route == "RenderStepped" then
-			if Lighting.EnableDayCycle == true then
-				Lighting.ClockTime += dt * 1.5
-
-				local sunY = -Lighting:GetSunDirection().Y
-				local daylight = math.clamp((sunY + 0.1) / 0.6, 0, 1)
-
-				local skyTop = NIGHT_TOP:Lerp(DAY_TOP, daylight)
-				local horizonDay = Color3.new(1, 1, 1)
-				local groundDay = Color3.new(1, 1, 1)
-
-				local skyHorizon = Color3.new(0, 0, 0):Lerp(horizonDay, daylight)
-				local groundHorizon = Color3.new(0, 0, 0):Lerp(groundDay, daylight)
-
-				buffer.copy(skyObject, r3d.structs.R3D_ProceduralSky:offset("skyTopColor"), skyTop:ToRaylib(0))
-
-				buffer.copy(skyObject, r3d.structs.R3D_ProceduralSky:offset("skyHorizonColor"), skyHorizon:ToRaylib(0))
-
-				buffer.copy(
-					skyObject,
-					r3d.structs.R3D_ProceduralSky:offset("groundHorizonColor"),
-					groundHorizon:ToRaylib(0)
-				)
-
-				buffer.copy(
-					skyObject,
-					r3d.structs.R3D_ProceduralSky:offset("sunDirection"),
-					Lighting:GetSunDirection():ToBuffer()
-				)
-
-				--rlib.R3D_UpdateProceduralSky(skyObject, skyObject)
-			end
-		end
-	end)
 
 	renderer.Pool.new("3d", function()
 		if blurCacheDirty then
@@ -287,6 +207,32 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 			invalidateBlurCache()
 		end
 	end)
+
+	local currentCustomSky = nil
+
+	function Lighting.SetSkyShader(shaderobject)
+		if type(shaderobject) ~= "table" then
+			return
+		end
+		if shaderobject._class ~= "shader" then
+			return
+		end
+		local shader = shaderobject._shader
+
+		if currentCustomSky then
+			-- Update the existing cubemap instead of reallocating
+			rlib.R3D_UpdateCustomSky(currentCustomSky, shader)
+			return
+		end
+
+		local sky = rlib.R3D_GenCustomSky(512, shader)
+		unload()
+		unload = function()
+			rlib.R3D_UnloadCubemap(sky)
+		end
+		setSkyObject(sky)
+		currentCustomSky = sky
+	end
 end
 
 return Lighting

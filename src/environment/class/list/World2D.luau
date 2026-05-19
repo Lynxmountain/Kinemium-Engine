@@ -3,7 +3,7 @@ local UDim2 = require("@UDim2")
 
 local propTable = {
 	-- world state
-	Gravity = Vector2.new(0, -9.81),
+	Gravity = Vector2.new(0, 981),
 	TimeScale = 1,
 	Paused = false,
 
@@ -19,8 +19,8 @@ local propTable = {
 	Accumulator = 0,
 	contactHertz = 60,
 	contactDampingRatio = 1,
-	maximumLinearSpeed = 40,
-	maximumAngularSpeed = 40,
+	maximumLinearSpeed = 4000,
+	maximumAngularSpeed = 4000,
 
 	restitutionThreshold = 1.0,
 	hitEventThreshold = 0.0,
@@ -34,12 +34,6 @@ local propTable = {
 		LinearY = false,
 		AngularZ = false,
 	},
-
-	--[[ 
-	Credits = function()
-		return "This class uses Box2D, Thank you for running this function even though it serves no purpose other than informing what the UI physics backend is, Your welcome."
-	end,
-	--]]
 
 	-- storage
 	Bodies = {}, -- [Body2D] = true

@@ -1,3 +1,8 @@
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local rlservice = game:GetService("KinemiumRaylib")
 local raylib = require("@raylib")
 local MouseCursor = require("@Kinemium.MouseCursor")
@@ -16,7 +21,6 @@ local localServerProcess = nil
 local localServerInfo = nil
 local localServerLogs = {}
 local logBuffer = ""
-local scrollY = 0
 
 local vend = KinemiumFontService.GetDefaultFont()
 local boldFont = KinemiumFontService.GetBoldFont()
@@ -60,57 +64,6 @@ local serverPort_Textbox = textbox.new({
 	font = vend,
 	maxLength = 56,
 })
-
---[[
-example server preview data:
-
-[RUNTIME]       <table: 0x1c8dcfbbd20> {
-    port = 1234,
-    motd = "A Kinemium server is online.",
-    server = <table: 0x1c8dcfbbcf0> {
-        tickRate = 30,
-        startedAt = 1775734828,
-        uptime = 98,
-        tick = 2950,
-    },
-    players = <table: 0x1c8dcfbbc30> {
-        max = 16,
-        online = 1,
-        sample = <table: 0x1c8dcfbbc00> {
-            [1] = <table: 0x1c8dcfbbbd0> {
-                name = "devcell",
-                id = 579995,
-                connectedAt = 1775734903,
-            },
-        },
-    },
-    type = "preview_response",
-    tags = <table: 0x1c8dcfbbcc0> {
-    },
-    extra = <table: 0x1c8dcfbbc90> {
-    },
-    resolvedAddress = "147.185.221.31",
-    latency = 351,
-    map = "datamodel",
-    version = 1,
-    __preview = "kinemium_server_preview_v1",
-    name = "Kinemium Server",
-    features = <table: 0x1c8dcfbbc60> {
-        requiresAuth = false,
-        preview = true,
-        includePlayers = true,
-    },
-    address = "0.0.0.0",
-    timestamp = 1775734926,
-    software = <table: 0x1c8dcfbbba0> {
-        name = "Kinemium",
-        preview = "kinemium_server_preview_v1",
-        protocol = "kinetica_net_v2",
-        transport = "KiNet/UDP",
-    },
-    requestId = "preview_1775734926_817415",
-}
---]]
 
 -- Host Server textboxes
 local hostPortTextbox = textbox.new({
@@ -298,7 +251,22 @@ local function startServer()
 	})
 end
 
-local itemSlots = {}
+local serverStack = gui.vstack({
+	spacing = 10,
+	padding = 0,
+	autoSize = true,
+	backgroundColor = Color3.new(0, 0, 0),
+	backgroundTransparency = 1,
+})
+
+local scrollArea = gui.scrollable({
+	child = serverStack,
+	scrollbarWidth = 8,
+	scrollbarColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+	scrollbarHoverColor = StudioThemeService.SelectedTheme.Accent,
+	scrollbarBackground = StudioThemeService.SelectedTheme.ThirdBackgroundColor,
+	scrollbarBackgroundTransparency = 0.7,
+})
 
 group = aereon.create({
 	addButton = {
@@ -476,7 +444,7 @@ group = aereon.create({
 						for prop, value in pairs(info) do
 							serverCardData[prop] = value
 						end
-						table.insert(itemSlots, gui.servercard(serverCardData))
+						serverStack.add(gui.servercard(serverCardData))
 					end
 				end,
 			},
@@ -550,21 +518,12 @@ ishared.Home.pages["Servers"] = function(dt, alpha, slideOffset)
 
 	screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 
-	-- Handle scrolling
-	local wheel = lib.GetMouseWheelMove()
-	if wheel ~= 0 then
-		scrollY = scrollY - wheel * 40
-		if scrollY < 0 then
-			scrollY = 0
-		end
-	end
-
 	local startX = 100
 	local headerY = 80 + slideOffset
 	local headerDesc = 120 + slideOffset
 
-	group.addButton.set("obj_rect", arect.new(screenx - 50, 110 + slideOffset - scrollY, 30, 30))
-	group.hostServerButton.set("obj_rect", arect.new(screenx - 190, 110 + slideOffset - scrollY, 130, 30))
+	group.addButton.set("obj_rect", arect.new(screenx - 50, 110 + slideOffset, 30, 30))
+	group.hostServerButton.set("obj_rect", arect.new(screenx - 190, 110 + slideOffset, 130, 30))
 	group.render(dt, { "newProjectPrompt", "manageServerPrompt" })
 
 	if vend then
@@ -586,19 +545,10 @@ ishared.Home.pages["Servers"] = function(dt, alpha, slideOffset)
 		)
 	end
 
-	-- render each card
-	local currentY = 150 - scrollY + slideOffset
-	for i, card in ipairs(itemSlots) do
-		card.set("obj_rect", arect.new(120, currentY, screenx - 135, 80))
-		card.render(dt)
-		currentY = currentY + 90
-	end
-
-	local contentHeight = #itemSlots * 90 + 150
-	local maxScroll = math.max(0, contentHeight - screeny + 100)
-	if scrollY > maxScroll then
-		scrollY = maxScroll
-	end
+	-- Render scroll area
+	scrollArea.set("obj_rect", arect.new(startX, 150 + slideOffset, screenx - 170, screeny - 200))
+	serverStack.set("width", screenx - 180)
+	scrollArea.render(dt)
 
 	group.manageServerPrompt.render(dt)
 	group.newProjectPrompt.render(dt)

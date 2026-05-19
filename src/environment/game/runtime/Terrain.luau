@@ -1840,7 +1840,7 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 
 		local identity = raylib.lib.MatrixIdentity()
 		local grassWindBuf = buffer.create(4)
-		buffer.writef32(grassWindBuf, 0, 0.08)
+		buffer.writef32(grassWindBuf, 0, 0.22)
 		local grassTimeBuf = buffer.create(4)
 
 		renderer.Pool.new("3d", function()
@@ -1863,9 +1863,11 @@ Terrain.InitRenderer = function(renderer, renderer_signal, datamodel)
 					and renderer.MeshPool
 					and renderer.MeshPool.DrawMeshInstanced
 				then
-					buffer.writef32(grassTimeBuf, 0, raylib.lib.GetTime())
-					rlib.R3D_SetSurfaceShaderUniform(grassShader, "u_windStrength", grassWindBuf)
-					rlib.R3D_SetSurfaceShaderUniform(grassShader, "u_time", grassTimeBuf)
+					if grassShader then
+						buffer.writef32(grassTimeBuf, 0, raylib.lib.GetTime())
+						rlib.R3D_SetSurfaceShaderUniform(grassShader, "u_windStrength", grassWindBuf)
+						rlib.R3D_SetSurfaceShaderUniform(grassShader, "u_time", grassTimeBuf)
+					end
 
 					renderer.MeshPool.DrawMeshInstanced(
 						quadMesh,

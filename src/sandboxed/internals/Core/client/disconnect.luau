@@ -1,6 +1,11 @@
 local NetworkService = game:GetService("NetworkService")
 local Players = game:GetService("Players")
 
+local RunService = game:GetService("RunService")
+if RunService:IsServer() then
+	return
+end
+
 local Gui = Instance.new("ScreenGui")
 Gui.Parent = Players.LocalPlayer.PlayerGui
 

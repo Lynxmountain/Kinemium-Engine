@@ -56,17 +56,18 @@ void fragment() {
 
     blade *= mix(0.4, 1.0, smoothstep(0.0, 0.4, uv.y));
 
-    ALBEDO = blade;
-    ROUGHNESS = mix(0.85, 0.4, uv.y);
-    METALNESS = 0.0;
-    ALPHA = mix(0.7, 1.0, uv.y);
-}]]
-end
+    	ALBEDO = blade;
+    	ROUGHNESS = mix(0.85, 0.4, uv.y);
+    	METALNESS = 0.0;
+    	ALPHA = 1.0;
+    }]]
+    end
 
 local function setMaterialShaderField(matBuf: buffer, shaderPtr: any)
 	local off = r3dstructs.R3D_Material:offset("shader")
 	local staging = ffi.dupe(buffer.create(8))
-	staging:writeptr(0, shaderPtr)
+	local toptr = ffi.ptrFromAddress(shaderPtr)
+	staging:writeptr(0, toptr)
 	for i = 0, 7 do
 		buffer.writeu8(matBuf, off + i, staging:readu8(i))
 	end
@@ -81,7 +82,7 @@ function grassgen.getGrassMaterial(): buffer?
 	local matBuf = buffer.create(r3dstructs.R3D_Material:size())
 	buffer.copy(matBuf, 0, defaultMat, 0, r3dstructs.R3D_Material:size())
 
-	buffer.writei32(matBuf, r3dstructs.R3D_Material:offset("transparencyMode"), r3dconst.R3D_TRANSPARENCY_ALPHA)
+	buffer.writei32(matBuf, r3dstructs.R3D_Material:offset("transparencyMode"), r3dconst.R3D_TRANSPARENCY_DISABLED)
 	buffer.writei32(matBuf, r3dstructs.R3D_Material:offset("cullMode"), r3dconst.R3D_CULL_NONE)
 
 	local src = readGrassShaderSource()

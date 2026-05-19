@@ -641,7 +641,7 @@ function Schema.url()
 		if type(value) ~= "string" then
 			return false
 		end
-		return value:match("^https?://[%w%.-]+%.[%a]+[/%%?&=%w%-_%.]*$") ~= nil
+		return value:match("^https?://[%w%.%-]+%.%a+[/%%?&=%w%-_%.]*$") ~= nil
 	end
 end
 

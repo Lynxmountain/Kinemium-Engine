@@ -21,6 +21,7 @@ return function(renderer, Kinemium_camera)
 			return Object
 		end,
 		getClasses = Registry.getClasses,
+		GetActiveInstances = Registry.GetActiveInstances,
 	}
 
 	data.Filesystem = zune.fs
@@ -152,6 +153,20 @@ return function(renderer, Kinemium_camera)
 			local thread = zune.task.delay(dt, fn, ...)
 			return thread
 		end,
+		desynchronize = function()
+			local thread = coroutine.running()
+			if thread then
+				zune.task.defer(thread)
+				coroutine.yield()
+			end
+		end,
+		synchronize = function()
+			local thread = coroutine.running()
+			if thread then
+				zune.task.defer(thread)
+				coroutine.yield()
+			end
+		end,
 	}
 	data.game = mainDatamodel
 	data.ishared = {}
@@ -198,19 +213,23 @@ return function(renderer, Kinemium_camera)
 	data.print = function(...)
 		runtime(...)
 
-		return LogService.CreateLog("print", tostring(...))
+		return LogService.CreateLog("print", ...)
+	end
+
+	data.printConsole = function(...)
+		runtime(...)
 	end
 
 	data.warn = function(...)
 		runtime(...)
 
-		return LogService.CreateLog("warn", tostring(...))
+		return LogService.CreateLog("warn", ...)
 	end
 
 	data.error = function(...)
 		runtime(...)
 
-		return LogService.CreateLog("error", tostring(...))
+		return LogService.CreateLog("error", ...)
 	end
 
 	data.regex = zune.regex

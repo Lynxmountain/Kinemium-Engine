@@ -24,7 +24,11 @@ local KNOWN_STRINGS = {
 	"State", "WalkSpeed", "JumpPower", "Health", "MaxHealth",
 	"Color", "LightEmission", "LightInfluence", "Texture",
 	"ZOffset", "Rate", "RotSpeed", "Speed", "SpreadAngle", "Acceleration",
-	"EmissionDirection", "Lifetime",
+	"EmissionDirection", "Lifetime", "id", "states", "tick", "baseTick",
+	"lastProcessedOwnedStateSequence", "ownerNetId", "linear", "angular",
+	"force", "target", "stance", "state", "sprinting", "crouching",
+	"facingDir", "channel", "payload", "fragment", "fragmentIndex",
+	"totalFragments", "reset", "chunks", "blobFingerprint", "netIds",
 }
 local KNOWN_STRING_TO_ID = {}
 for i, str in ipairs(KNOWN_STRINGS) do

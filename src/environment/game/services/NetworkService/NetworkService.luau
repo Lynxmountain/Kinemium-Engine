@@ -252,12 +252,19 @@ end
 local function sendEnvelope(sendFn, recipient, channel, kind, payload, reliable)
 	local envelope = Protocol.MakeEnvelope(channel, kind, payload, currentTick)
 	envelope.reliable = reliable == true
-	recordTraffic("sent", envelope, reliable == true)
+	local sent
 	if recipient then
-		sendFn(normalizeRecipient(recipient), envelope, reliable == true)
+		sent = sendFn(normalizeRecipient(recipient), envelope, reliable == true)
 	else
-		sendFn(envelope, reliable == true)
+		sent = sendFn(envelope, reliable == true)
 	end
+
+	if sent == false then
+		return false
+	end
+
+	recordTraffic("sent", envelope, reliable == true)
+	return true
 end
 
 local function withMouseInjection(player, renderer, datamodel)
@@ -300,10 +307,40 @@ local function attachPlayerSession(datamodel, session)
 	return player
 end
 
+local function isCharacterModelForSession(model, session)
+	if not model or model.ClassName ~= "Model" or not session then
+		return false
+	end
+	if model.FindFirstChildOfClass and not model:FindFirstChildOfClass("Humanoid") then
+		return false
+	end
+
+	local uid = model.GetAttribute and model:GetAttribute("__characterUserId")
+	if type(uid) == "number" and uid == session.userId then
+		return true
+	end
+
+	return model.Name == session.name
+end
+
+local function destroyCharacterModelsForSession(datamodel, session)
+	local workspace = datamodel and datamodel:GetService("Workspace")
+	if not workspace then
+		return
+	end
+
+	for _, child in ipairs(workspace:GetChildren()) do
+		if isCharacterModelForSession(child, session) then
+			child:Destroy()
+		end
+	end
+end
+
 local function cleanupPlayerSession(datamodel, session)
 	local players = datamodel:GetService("Players")
 	local player = session.player
 	if not player then
+		destroyCharacterModelsForSession(datamodel, session)
 		return
 	end
 
@@ -311,6 +348,7 @@ local function cleanupPlayerSession(datamodel, session)
 		player.Character:Destroy()
 		player.Character = nil
 	end
+	destroyCharacterModelsForSession(datamodel, session)
 
 	if session.guiMirrorController then
 		session.guiMirrorController:Destroy()
@@ -357,22 +395,33 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		bindTickLoop(datamodel:GetService("RunService"))
 
 		local function sendToClient(recipient, channel, kind, payload, reliable)
+			-- Force Create messages to be unreliable to prevent blocking reliable traffic (chat, input, remotes)
+			local actualReliable = reliable
+			if channel == Protocol.Channels.Replication and kind == Protocol.Kinds.Create then
+				actualReliable = false
+			end
+
 			sendEnvelope(function(client, envelope, shouldBeReliable)
-				KiNet.Server:Send(client, envelope, shouldBeReliable)
-			end, recipient, channel, kind, payload, reliable)
+				if KiNet.Server.IsClientConnected and not KiNet.Server:IsClientConnected(client) then
+					return false
+				end
+				return KiNet.Server:Send(client, envelope, shouldBeReliable)
+			end, recipient, channel, kind, payload, actualReliable)
 		end
 
 		local function broadcast(channel, kind, payload, reliable)
 			sendEnvelope(function(envelope, shouldBeReliable)
-				KiNet.Server:SendAll(envelope, shouldBeReliable)
+				return KiNet.Server:SendAll(envelope, shouldBeReliable)
 			end, nil, channel, kind, payload, reliable)
 		end
 
 		local function broadcastFiltered(channel, kind, payload, reliable, filterFn)
 			local envelope = Protocol.MakeEnvelope(channel, kind, payload, currentTick)
 			envelope.reliable = reliable == true
-			recordTraffic("sent", envelope, reliable == true)
-			KiNet.Server:SendFiltered(envelope, reliable == true, filterFn)
+			local sent = KiNet.Server:SendFiltered(envelope, reliable == true, filterFn)
+			if sent ~= false then
+				recordTraffic("sent", envelope, reliable == true)
+			end
 		end
 
 		local function sendToMultipleClients(sessions, channel, kind, payload, reliable)
@@ -382,12 +431,18 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end
 
 		local function sendToServer(channel, kind, payload, reliable)
+			-- Force Create messages to be unreliable to prevent blocking reliable traffic
+			local actualReliable = reliable
+			if channel == Protocol.Channels.Replication and kind == Protocol.Kinds.Create then
+				actualReliable = false
+			end
+
 			if not NetworkService.IsClientConnected or not KiNet.Client.Socket then
 				return
 			end
 			sendEnvelope(function(envelope, shouldBeReliable)
-				KiNet.Client:Send(envelope, shouldBeReliable)
-			end, nil, channel, kind, payload, reliable)
+				return KiNet.Client:Send(envelope, shouldBeReliable)
+			end, nil, channel, kind, payload, actualReliable)
 		end
 
 		function NetworkService:StartServer(address, port, allowedTokens)
@@ -424,6 +479,71 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 			KiNet.Client:Listen()
 		end
 
+		local function isCharacterModelForPlayer(model, payload)
+			if not model or model.ClassName ~= "Model" or not payload then
+				return false
+			end
+			if model.FindFirstChildOfClass and not model:FindFirstChildOfClass("Humanoid") then
+				return false
+			end
+
+			local uid = model.GetAttribute and model:GetAttribute("__characterUserId")
+			if type(uid) == "number" and uid == payload.id then
+				return true
+			end
+
+			return model.Name == payload.name
+		end
+
+		local function findClientCharacterModel(payload)
+			local workspace = datamodel:GetService("Workspace")
+			if not workspace or type(payload) ~= "table" then
+				return nil
+			end
+
+			for _, child in ipairs(workspace:GetChildren()) do
+				if isCharacterModelForPlayer(child, payload) then
+					return child
+				end
+			end
+
+			return nil
+		end
+
+		local function bindClientPlayerCharacter(player, payload)
+			if not player then
+				return
+			end
+
+			local character = findClientCharacterModel(payload)
+			if not character or player.Character == character then
+				return
+			end
+
+			local previous = player.Character
+			if previous and previous ~= character and player.CharacterRemoving then
+				player.CharacterRemoving:Fire(previous)
+			end
+
+			player.Character = character
+			if player.CharacterAdded then
+				player.CharacterAdded:Fire(character)
+			end
+		end
+
+		local function destroyClientCharacterModels(payload)
+			local workspace = datamodel:GetService("Workspace")
+			if not workspace or type(payload) ~= "table" then
+				return
+			end
+
+			for _, child in ipairs(workspace:GetChildren()) do
+				if isCharacterModelForPlayer(child, payload) then
+					child:Destroy()
+				end
+			end
+		end
+
 		local function ensureClientPlayerInstance(payload)
 			if type(payload) ~= "table" then
 				return nil
@@ -441,11 +561,14 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 				if player.Parent ~= players then
 					player.Parent = players
 				end
+				bindClientPlayerCharacter(player, payload)
 				return player
 			end
 
 			if players.AddPlayer then
-				return players:AddPlayer(payload.name, payload.id, datamodel)
+				player = players:AddPlayer(payload.name, payload.id, datamodel)
+				bindClientPlayerCharacter(player, payload)
+				return player
 			end
 
 			return nil
@@ -493,27 +616,55 @@ NetworkService.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end)
 
 		registerMessageHandler(Protocol.Channels.Control, Protocol.Kinds.PlayerLeft, function(_, payload)
+			if type(payload) ~= "table" then
+				return
+			end
+
 			local players = datamodel:GetService("Players")
 			local player = players:GetPlayerByUserId(payload.id)
 			if player then
 				if player.Character then
 					player.Character:Destroy()
+					player.Character = nil
 				end
 				players:RemovePlayer(player)
 				player:Destroy()
 			end
+			destroyClientCharacterModels(payload)
 		end)
 
 		registerMessageHandler(Protocol.Channels.Control, Protocol.Kinds.ClientReady, function(session, payload)
+			print(`[NetworkService] ClientReady handler fired`)
 			if not session or not session.player then
 				warn("[NetworkService] ClientReady received but session or player is missing")
+				warn(
+					`[NetworkService]   session={tostring(session)}, session.player={session and tostring(
+						session.player
+					) or "nil"}`
+				)
 				return
 			end
 			print(`[NetworkService] Client {session.key} is ready — loading character for {session.player.Name}`)
 			task.spawn(function()
 				local players = datamodel:GetService("Players")
+				print(
+					`[NetworkService] Players service: {tostring(players)}, LoadCharacter type: {type(
+						players and players.LoadCharacter
+					)}`
+				)
 				if players and type(players.LoadCharacter) == "function" then
-					players:LoadCharacter(session.player, datamodel)
+					print(`[NetworkService] Calling Players:LoadCharacter for {session.player.Name}...`)
+					local ok, err = pcall(function()
+						players:LoadCharacter(session.player, datamodel)
+					end)
+					if ok then
+						print(`[NetworkService] LoadCharacter completed for {session.player.Name}`)
+						print(`[NetworkService]   Character = {tostring(session.player.Character)}`)
+					else
+						warn(`[NetworkService] LoadCharacter FAILED for {session.player.Name}: {tostring(err)}`)
+					end
+				else
+					warn(`[NetworkService] LoadCharacter not available on Players service`)
 				end
 			end)
 		end)

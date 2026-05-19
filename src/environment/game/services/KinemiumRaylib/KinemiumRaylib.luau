@@ -1,11 +1,15 @@
 local Instance = require("@Instance")
 local signal = require("@Kinemium.signal")
 
+local Enum = require("@EnumMap")
+
 local KinemiumRaylib = Instance.new("KinemiumRaylib")
 KinemiumRaylib.ExplorerHidden = true
 
 KinemiumRaylib.InitRenderer = function(renderer, renderer_signal)
 	KinemiumRaylib:SetProperties({
+		_SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+
 		GetLib = function()
 			return renderer.Raylib.lib
 		end,

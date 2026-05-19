@@ -18,12 +18,23 @@ local propTable = {
 	Focus = CFrame.new(0, 0, 0),
 }
 
+local cameraSingleton = nil
+
 return {
 	class = "Camera",
+	singleton = true,
 	callback = function(instance, renderer)
+		if cameraSingleton and not cameraSingleton.Destroyed then
+			return cameraSingleton
+		end
+
 		instance:SetProperties(propTable)
 
-		if IsHeadless then return instance end
+		cameraSingleton = instance
+
+		if IsHeadless then
+			return instance
+		end
 
 		local camera = structs.Camera3D:new({
 			position = vector.create(0, 0, 0),
@@ -37,7 +48,7 @@ return {
 
 		local function syncRaylibCamera()
 			local camCF = instance.CFrame
-			local rollRad = math.rad(instance.Roll)
+			local rollRad = math.rad(instance.Roll or 0)
 
 			instance.Position = instance.CFrame.Position
 			local dpiScale = lib.GetWindowScaleDPI()

@@ -18,7 +18,7 @@ local dir = getPath("src/external/box2d")
 local result = dir .. "/bin/box2d." .. fileFormat
 local zembed = require("@zembed")
 if zembed.IsEmbedded() then
-	result = "./box2d." .. fileFormat
+	result = zembed.RuntimePath("box2d." .. fileFormat)
 end
 local box2d: typeof(info.funcs) = ffi.dlopen(result, info.funcs)
 

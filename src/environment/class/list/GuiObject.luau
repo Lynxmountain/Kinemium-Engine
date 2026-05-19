@@ -12,6 +12,19 @@ local SQUIRCLE_SEGMENTS = 10
 local ZERO_V = vector.create(0, 0, 0)
 local MAX_AUTOMATIC_SIZE_DEPTH = 8
 
+local function resolveUDim2(val, parentDim)
+	if val then
+		if val.ToPixels then
+			return val:ToPixels(parentDim)
+		elseif val.X and val.Y then
+			local x = (type(val.X) == "table" and ((val.X.Scale or 0) * parentDim.X + (val.X.Offset or 0))) or 0
+			local y = (type(val.Y) == "table" and ((val.Y.Scale or 0) * parentDim.Y + (val.Y.Offset or 0))) or 0
+			return vector.create(x, y, 0)
+		end
+	end
+	return ZERO_V
+end
+
 local function resolveBlendMode(raylib, value)
 	if type(value) == "number" then
 		return value
@@ -154,7 +167,7 @@ local function precomputeLayoutChildren(object, lib, dt, structs, renderer)
 end
 
 local function calculateResolvedSize(object, parentSize, lib, dt, structs, renderer, depth)
-	local size = object.Size:ToPixels(parentSize)
+	local size = resolveUDim2(object.Size, parentSize)
 	local autoX, autoY = resolveAutomaticSizeAxes(object.AutomaticSize)
 
 	if (not autoX and not autoY) or (depth or 0) >= MAX_AUTOMATIC_SIZE_DEPTH then
@@ -179,8 +192,8 @@ local function calculateResolvedSize(object, parentSize, lib, dt, structs, rende
 			if child._LayoutControlled and child._LayoutRelativePosition then
 				relX = child._LayoutRelativePosition.X - childSize.X * anchor.X
 				relY = child._LayoutRelativePosition.Y - childSize.Y * anchor.Y
-			elseif child.Position and child.Position.ToPixels then
-				local childPos = child.Position:ToPixels(contentSize)
+			elseif child.Position then
+				local childPos = resolveUDim2(child.Position, contentSize)
 				relX = left + childPos.X - childSize.X * anchor.X
 				relY = top + childPos.Y - childSize.Y * anchor.Y
 			end
@@ -232,7 +245,7 @@ local function getAbsoluteDrawPos(object, lib, dt, structs, renderer, depth)
 			0
 		)
 	else
-		local pos = object.Position:ToPixels(parentContentSize)
+		local pos = resolveUDim2(object.Position, parentContentSize)
 		drawPos = vector.create(
 			parentAbsPos.X + parentPaddingOffset.X + pos.X - size.X * anchor.X,
 			parentAbsPos.Y + parentPaddingOffset.Y + pos.Y - size.Y * anchor.Y,
@@ -848,32 +861,32 @@ local propTable = {
 	ZIndex = 1,
 	AnchorPoint = ZERO_V,
 	MouseIsInObject = false,
-	GetBounds = function()
-		return getGuiMetrics()
+	GetBounds = function(self)
+		return getGuiMetrics(self)
 	end,
-	GetCenter = function()
-		local pos, size = getGuiMetrics()
+	GetCenter = function(self)
+		local pos, size = getGuiMetrics(self)
 		return Vector2.new(pos.X + size.X * 0.5, pos.Y + size.Y * 0.5)
 	end,
-	IsPointInside = function(point)
+	IsPointInside = function(self, point)
 		local resolvedPoint = resolveGuiPoint(point)
 		if not resolvedPoint then
 			return false
 		end
 
-		local pos, size = getGuiMetrics()
+		local pos, size = getGuiMetrics(self)
 		return resolvedPoint.X >= pos.X
 			and resolvedPoint.X <= pos.X + size.X
 			and resolvedPoint.Y >= pos.Y
 			and resolvedPoint.Y <= pos.Y + size.Y
 	end,
-	GetRelativePoint = function(point)
+	GetRelativePoint = function(self, point)
 		local resolvedPoint = resolveGuiPoint(point)
 		if not resolvedPoint then
 			return nil
 		end
 
-		local pos = getGuiMetrics()
+		local pos = getGuiMetrics(self)
 		return Vector2.new(resolvedPoint.X - pos.X, resolvedPoint.Y - pos.Y)
 	end,
 	CancelGuiTweens = function(self)
@@ -890,8 +903,9 @@ local propTable = {
 			end
 		end
 	end,
-	TweenPosition = function(endPosition, easingDirection, easingStyle, time, override, callback)
+	TweenPosition = function(self, endPosition, easingDirection, easingStyle, time, override, callback)
 		return playGuiTween(
+			self,
 			{ "Position" },
 			{ Position = endPosition },
 			easingDirection,
@@ -901,11 +915,21 @@ local propTable = {
 			callback
 		)
 	end,
-	TweenSize = function(endSize, easingDirection, easingStyle, time, override, callback)
-		return playGuiTween({ "Size" }, { Size = endSize }, easingDirection, easingStyle, time, override, callback)
-	end,
-	TweenSizeAndPosition = function(endSize, endPosition, easingDirection, easingStyle, time, override, callback)
+	TweenSize = function(self, endSize, easingDirection, easingStyle, time, override, callback)
 		return playGuiTween(
+			self,
+			{ "Size" },
+			{ Size = endSize },
+			easingDirection,
+			easingStyle,
+			time,
+			override,
+			callback
+		)
+	end,
+	TweenSizeAndPosition = function(self, endSize, endPosition, easingDirection, easingStyle, time, override, callback)
+		return playGuiTween(
+			self,
 			{ "Size", "Position" },
 			{ Size = endSize, Position = endPosition },
 			easingDirection,
@@ -924,7 +948,37 @@ local propTable = {
 		local drawPos, size = calculateDrawParams(object, lib, dt, structs, renderer)
 		local mousePos = vector.create(lib.GetMouseX(), lib.GetMouseY(), 0)
 		local mouseIsInObject = isMouseInRect(mousePos, drawPos, size)
-		local tilt = object:FindFirstChildOfClass("UITilt")
+
+		local tilt, corner, stroke, gradient, shadow, glow, ripple, vignette, bevel, squircle, blend, blur
+		for _, child in ipairs(object.Children) do
+			local cls = child.ClassName
+			if cls == "UITilt" then
+				tilt = child
+			elseif cls == "UICorner" then
+				corner = child
+			elseif cls == "UIStroke" then
+				stroke = child
+			elseif cls == "UIGradient" then
+				gradient = child
+			elseif cls == "UIShadow" then
+				shadow = child
+			elseif cls == "UIGlow" then
+				glow = child
+			elseif cls == "UIRipple" then
+				ripple = child
+			elseif cls == "UIVignette" then
+				vignette = child
+			elseif cls == "UIBevel" then
+				bevel = child
+			elseif cls == "UISquircle" then
+				squircle = child
+			elseif cls == "UIBlend" then
+				blend = child
+			elseif cls == "BlurEffect" then
+				blur = child
+			end
+		end
+
 		if tilt and tilt.Enabled ~= false and mouseIsInObject then
 			local maxOffset = tilt.MaxOffset or Vector2.new(6, 6)
 			local nx = (((mousePos.X - drawPos.X) / math.max(size.X, 1)) - 0.5) * 2
@@ -937,22 +991,9 @@ local propTable = {
 		object.MouseLeave:FireOncePerPress("MouseLeave", not mouseIsInObject)
 
 		local color = object.BackgroundColor3:ToRaylib(object.BackgroundTransparency)
-		local corner = object:FindFirstChildOfClass("UICorner")
-		local stroke = object:FindFirstChildOfClass("UIStroke")
-		local gradient = object:FindFirstChildOfClass("UIGradient")
-		local shadow = object:FindFirstChildOfClass("UIShadow")
-		local glow = object:FindFirstChildOfClass("UIGlow")
-		local ripple = object:FindFirstChildOfClass("UIRipple")
-		local vignette = object:FindFirstChildOfClass("UIVignette")
-		local bevel = object:FindFirstChildOfClass("UIBevel")
-		local squircle = object:FindFirstChildOfClass("UISquircle")
-		local blend = object:FindFirstChildOfClass("UIBlend")
-		local blur = object:FindFirstChild("BlurEffect")
 		local shapeModifier = squircle or corner
 		local shapeExponent = squircle and squircle.Exponent or 2
 
-		local rec = structs.Rectangle:new({ x = drawPos.X, y = drawPos.Y, width = size.X, height = size.Y })
-		local origin = vector.create(0, 0, 0)
 		local minDim = math.min(size.X, size.Y)
 
 		local selfBlendActive = false
@@ -977,6 +1018,8 @@ local propTable = {
 				or 0
 			cornerRadius = math.min(cornerRadius, minDim / 2)
 
+			local gradRec = structs.Rectangle:new({ x = 0, y = 0, width = 0, height = 0 })
+
 			for i = 0, steps - 1 do
 				local t1, t2 = i / steps, (i + 1) / steps
 				local color1 = gradient.ColorSequence:Evaluate(t1)
@@ -992,13 +1035,13 @@ local propTable = {
 					offsetRight = offsetLeft
 				end
 
+				gradRec.x = drawPos.X + offsetLeft
+				gradRec.y = drawPos.Y + i * stepHeight
+				gradRec.width = size.X - offsetLeft - offsetRight
+				gradRec.height = stepHeight
+
 				lib.DrawRectangleGradientEx(
-					structs.Rectangle:new({
-						x = drawPos.X + offsetLeft,
-						y = drawPos.Y + i * stepHeight,
-						width = size.X - offsetLeft - offsetRight,
-						height = stepHeight,
-					}),
+					gradRec,
 					color1:ToRaylib(0),
 					color1:ToRaylib(0),
 					color2:ToRaylib(0),
@@ -1007,107 +1050,37 @@ local propTable = {
 			end
 
 			if stroke and stroke.Transparency ~= 1 then
-				if squircle then
-					local tl, tr, bl, br = resolveCornerRadii(squircle, minDim)
-					drawSquircleOutline(
-						lib,
-						drawPos.X,
-						drawPos.Y,
-						size.X,
-						size.Y,
-						tl,
-						tr,
-						bl,
-						br,
-						shapeExponent,
-						stroke.Thickness,
-						stroke.Color:ToRaylib(stroke.Transparency)
-					)
-				elseif corner then
-					local _, _, _, _, base = resolveCornerRadii(corner, minDim)
-					lib.DrawRectangleRoundedLinesEx(
-						rec,
-						base / minDim,
-						SEGMENTS,
-						stroke.Thickness,
-						stroke.Color:ToRaylib(stroke.Transparency)
-					)
-				else
-					lib.DrawRectangleLinesEx(rec, stroke.Thickness, stroke.Color:ToRaylib(stroke.Transparency))
-				end
-			end
-		elseif squircle then
-			local tl, tr, bl, br = resolveCornerRadii(squircle, minDim)
-
-			if object.BackgroundTransparency ~= 1 then
-				if object.Rotation ~= 0 then
-					lib.DrawRectanglePro(rec, origin, object.Rotation, color)
-				else
-					drawSquircleFilled(lib, drawPos.X, drawPos.Y, size.X, size.Y, tl, tr, bl, br, shapeExponent, color)
-				end
-			end
-
-			if stroke and stroke.Transparency ~= 1 then
-				if object.Rotation ~= 0 then
-					lib.DrawRectangleLinesEx(rec, stroke.Thickness, stroke.Color:ToRaylib(stroke.Transparency))
-				else
-					drawSquircleOutline(
-						lib,
-						drawPos.X,
-						drawPos.Y,
-						size.X,
-						size.Y,
-						tl,
-						tr,
-						bl,
-						br,
-						shapeExponent,
-						stroke.Thickness,
-						stroke.Color:ToRaylib(stroke.Transparency)
-					)
-				end
-			end
-		elseif corner then
-			local tl, tr, bl, br, base, useIndividual = resolveCornerRadii(corner, minDim)
-			local roundness = base / minDim
-
-			if object.BackgroundTransparency ~= 1 then
-				if object.Rotation ~= 0 then
-					lib.DrawRectanglePro(rec, origin, object.Rotation, color)
-				elseif useIndividual then
-					drawRoundedRectangleEx(lib, drawPos.X, drawPos.Y, size.X, size.Y, tl, tr, bl, br, color)
-				else
-					lib.DrawRectangleRounded(rec, roundness, SEGMENTS, color)
-				end
-			end
-
-			if stroke and stroke.Transparency ~= 1 then
-				if object.Rotation ~= 0 then
-					lib.DrawRectangleLinesEx(rec, stroke.Thickness, stroke.Color:ToRaylib(stroke.Transparency))
-				else
-					lib.DrawRectangleRoundedLinesEx(
-						rec,
-						roundness,
-						SEGMENTS,
-						stroke.Thickness,
-						stroke.Color:ToRaylib(stroke.Transparency)
-					)
-				end
-			end
-		elseif stroke then
-			if object.BackgroundTransparency ~= 1 then
-				if object.Rotation ~= 0 then
-					lib.DrawRectanglePro(rec, origin, object.Rotation, color)
-				else
-					lib.DrawRectangleRec(rec, color)
-				end
-			end
-			if stroke.Transparency ~= 1 then
-				lib.DrawRectangleLinesEx(rec, stroke.Thickness, stroke.Color:ToRaylib(stroke.Transparency))
+				drawShapeOutline(
+					lib,
+					structs,
+					object,
+					shapeModifier,
+					drawPos.X,
+					drawPos.Y,
+					size.X,
+					size.Y,
+					stroke.Thickness,
+					stroke.Color:ToRaylib(stroke.Transparency)
+				)
 			end
 		else
 			if object.BackgroundTransparency ~= 1 then
-				lib.DrawRectanglePro(rec, origin, object.Rotation, color)
+				drawShapeFill(lib, structs, object, shapeModifier, drawPos.X, drawPos.Y, size.X, size.Y, color)
+			end
+
+			if stroke and stroke.Transparency ~= 1 then
+				drawShapeOutline(
+					lib,
+					structs,
+					object,
+					shapeModifier,
+					drawPos.X,
+					drawPos.Y,
+					size.X,
+					size.Y,
+					stroke.Thickness,
+					stroke.Color:ToRaylib(stroke.Transparency)
+				)
 			end
 		end
 
@@ -1144,6 +1117,7 @@ end
 return {
 	class = "GuiObject",
 	non_creatable = true,
+	resolveBlendMode = resolveBlendMode,
 	render = propTable.render,
 
 	IsParentGuiContainer = function(object)
@@ -1167,7 +1141,7 @@ return {
 			local insetX, insetY = 0, 0
 
 			if mask and mask.Inset and object.AbsoluteSize then
-				local inset = mask.Inset:ToPixels(object.AbsoluteSize)
+				local inset = resolveUDim2(mask.Inset, object.AbsoluteSize)
 				insetX = inset.X
 				insetY = inset.Y
 			end

@@ -1,7 +1,17 @@
 local raylib = require("@raylib")
 local structs = raylib.structs
 
-local rect = require("@arect")
+local function c3tr(c, transparency)
+	local r, g, b = c:ToRGB()
+	return structs.Color:new({
+		r = r,
+		g = g,
+		b = b,
+		a = math.floor(255 * (1 - transparency)),
+	})
+end
+
+local rect = require("@arect")(raylib.lib)
 local color3 = require("@Color3")
 
 return function(objects, data)
@@ -158,7 +168,7 @@ return function(objects, data)
 		local screenHeight = raylib.lib.GetScreenHeight()
 
 		-- Draw overlay
-		raylib.lib.DrawRectangle(0, 0, screenWidth, screenHeight, color3.new(0:ToRaylib(0, 0), 1 - config.animAlpha * 0.7))
+		raylib.lib.DrawRectangle(0, 0, screenWidth, screenHeight, c3tr(color3.new(0, 0, 0), 1 - config.animAlpha * 0.7))
 
 		-- Calculate keyboard position
 		local kbX = config.obj_rect.x
@@ -184,7 +194,7 @@ return function(objects, data)
 				),
 				config.rounded[1],
 				config.rounded[2],
-				color3.new(0:ToRaylib(0, 0), 0.9 + i * 0.02)
+				c3tr(color3.new(0, 0, 0), 0.9 + i * 0.02)
 			)
 		end
 
@@ -193,7 +203,7 @@ return function(objects, data)
 			rect:translate(kbRect),
 			config.rounded[1],
 			config.rounded[2],
-			config.backgroundColor:ToRaylib(0)
+			c3tr(config.backgroundColor, 0)
 		)
 
 		-- Draw title
@@ -202,7 +212,7 @@ return function(objects, data)
 			kbRect.x + config.padding,
 			kbRect.y + config.padding,
 			16,
-			config.textColor:ToRaylib(0)
+			c3tr(config.textColor, 0)
 		)
 
 		-- Text input field
@@ -210,7 +220,7 @@ return function(objects, data)
 		local inputHeight = 45
 		local inputRect = rect.new(kbRect.x + config.padding, inputY, kbRect.width - config.padding * 2, inputHeight)
 
-		raylib.lib.DrawRectangleRounded(rect:translate(inputRect), 0.15, 8, color3.new(0.08:ToRaylib(0.08, 0.1), 0))
+		raylib.lib.DrawRectangleRounded(rect:translate(inputRect), 0.15, 8, c3tr(color3.new(0.08, 0.08, 0.1), 0))
 
 		local displayText = config.text
 		if #displayText == 0 then
@@ -219,10 +229,10 @@ return function(objects, data)
 				inputRect.x + 12,
 				inputRect.y + 14,
 				14,
-				config.dimTextColor:ToRaylib(0)
+				c3tr(config.dimTextColor, 0)
 			)
 		else
-			raylib.lib.DrawText(displayText, inputRect.x + 12, inputRect.y + 14, 14, config.textColor:ToRaylib(0))
+			raylib.lib.DrawText(displayText, inputRect.x + 12, inputRect.y + 14, 14, c3tr(config.textColor, 0))
 
 			-- Blinking cursor
 			if config.cursorBlink < 1 then
@@ -232,7 +242,7 @@ return function(objects, data)
 					inputRect.y + 12,
 					2,
 					20,
-					config.selectedKeyColor:ToRaylib(0)
+					c3tr(config.selectedKeyColor, 0)
 				)
 			end
 		end
@@ -408,11 +418,11 @@ return function(objects, data)
 					rect:translate(rect.new(keyRect.x + 2, keyRect.y + 2, keyRect.width, keyRect.height)),
 					0.2,
 					6,
-					color3.new(0:ToRaylib(0, 0), 0.75)
+					c3tr(color3.new(0, 0, 0), 0.75)
 				)
 
 				-- Key background
-				raylib.lib.DrawRectangleRounded(rect:translate(keyRect), 0.2, 6, displayColor:ToRaylib(0))
+				raylib.lib.DrawRectangleRounded(rect:translate(keyRect), 0.2, 6, c3tr(displayColor, 0))
 
 				-- Key text
 				local displayKey = key
@@ -428,7 +438,7 @@ return function(objects, data)
 				local textX = keyRect.x + (keyRect.width - textSize) / 2
 				local textY = keyRect.y + 11
 
-				raylib.lib.DrawText(displayKey, textX, textY, 13, config.textColor:ToRaylib(0))
+				raylib.lib.DrawText(displayKey, textX, textY, 13, c3tr(config.textColor, 0))
 
 				-- Handle mouse click
 				if isHovered and mousePressed then

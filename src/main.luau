@@ -19,8 +19,14 @@ local filesystem = require("@filesystem")
 
 filesystem.createFolder(".", ".temp")
 filesystem.createFolder(".", "plugins")
-filesystem.createFolder("./src", "projects")
-filesystem.createFile("./src", "projects.toml", "")
+
+if zembed.IsEmbedded() then
+	filesystem.createFolder(".", "projects")
+	filesystem.createFile(".", "projects.toml", "")
+else
+	filesystem.createFolder("./src", "projects")
+	filesystem.createFile("./src", "projects.toml", "")
+end
 
 _G.ENGINE_PROFILER = require("@profiler")
 _G.ENGINE_VERSION = "1.10.7"
@@ -77,7 +83,31 @@ _G.plug = function(lib)
 	return lib
 end
 
+_G.GetFlagShell = function(flag)
+	local args = zune.process.env
+
+	if args[flag] then
+		return args[flag]
+	end
+
+	local upperFlag = string.upper(flag)
+	if args[upperFlag] then
+		return args[upperFlag]
+	end
+
+	for i, v in ipairs(args) do
+		if v == "--" .. flag then
+			return args[i + 1]
+		end
+	end
+	return nil
+end
+
 _G.GetFlagValue = function(flag)
+	local shellValue = GetFlagShell(flag)
+	if shellValue then
+		return shellValue
+	end
 	local args = zune.process.args
 	for i, v in ipairs(args) do
 		if v == "--" .. flag then
@@ -128,14 +158,6 @@ _G.printi = function(tbl)
 end
 
 -- DEPENDENCIES
-local sandboxer = require("./modules/sandboxer")
-local Instance = require("@Instance")
-local filesystem = require("./modules/filesystem")
-local Enum = require("@EnumMap")
-local kilang = require("@kilang")
-local task = zune.task
-local cam = require("@camera")
-
 -- DETERMINE ENGINE MODE
 _G.IsClient = false
 _G.IsServer = false
@@ -145,22 +167,37 @@ if FlagExists("client") then
 	_G.IsClient = true
 elseif FlagExists("server") then
 	_G.IsServer = true
-	_G.IsHeadless = true
-	log("Running engine in headless mode (Server).")
 end
 
-if FlagExists("headless") then
+if FlagExists("headless") or FlagExists("cli") or (_G.IsServer and not FlagExists("editor")) then
 	_G.IsHeadless = true
 end
 
 if FlagExists("cli") then
-	_G.IsHeadless = true
 	task.spawn(function()
 		task.wait(10)
 		iodebug("Ran CLI successfully")
 		zune.process.exit(0)
 	end)
 end
+
+if _G.IsServer then
+	if _G.IsHeadless then
+		log("Running engine in headless server mode.")
+	else
+		log("Running engine in graphical server mode.")
+	end
+elseif _G.IsClient then
+	log("Running engine in client mode.")
+elseif _G.IsHeadless then
+	log("Running engine in headless mode.")
+end
+
+local Instance = require("@Instance")
+local Enum = require("@EnumMap")
+local kilang = require("@kilang")
+local task = zune.task
+local cam = require("@camera")
 
 -- LOAD APPROPRIATE RENDERER
 local renderer
@@ -180,6 +217,7 @@ else
 	local autoScale3D = not FlagExists("native3d")
 	local max3DRenderPixels = tonumber(GetFlagValue("max3dpixels")) or 1280000
 	local min3DRenderScale = math.clamp(tonumber(GetFlagValue("min3dscale")) or 0.5, 0.1, 1)
+
 	renderer = KiRend.new({
 		width = 1000,
 		height = 800,
@@ -200,7 +238,7 @@ end
 local instancePointer = Instance.new("Camera")
 
 local Kinemium_camera = cam.callback(instancePointer, renderer)
-Kinemium_camera.Parent = sandboxer.environment.Workspace
+Kinemium_camera.Parent = kilang.env.Workspace
 
 -- SETUP KILANG
 kilang.renderer = renderer
@@ -255,14 +293,16 @@ local function loadInternals()
 		end
 
 		if string.find(path, ".luau") or string.find(path, ".lua") then
-			local threadid, success, result = kilang:execute(code, {
-				SecurityCapabilities = Enum.SecurityCapabilities.Internals,
-				StackId = path,
-			})
+			task.spawn(function()
+				local threadid, success, result = kilang:execute(code, {
+					SecurityCapabilities = Enum.SecurityCapabilities.Internals,
+					StackId = path,
+				})
 
-			if not success and result ~= nil then
-				error(`Error loading internal {threadid}: {tostring(result)}`)
-			end
+				if not success and result ~= nil then
+					error(`Error loading internal {threadid}: {tostring(result)}`)
+				end
+			end)
 		elseif string.find(path, ".c") then
 			iodebug("Found C file!", path)
 			CEnv.runC(code)
@@ -295,14 +335,16 @@ function Kinemium:run()
 			superset = "typescript"
 		end
 
-		local id, success, result = kilang:execute(code, {
-			superset = superset,
-			SecurityCapabilities = Enum.SecurityCapabilities.UserScript,
-			StackId = path,
-		})
-		if not success then
-			evalError(`{id}: {tostring(result)}`)
-		end
+		task.spawn(function()
+			local id, success, result = kilang:execute(code, {
+				superset = superset,
+				SecurityCapabilities = Enum.SecurityCapabilities.UserScript,
+				StackId = path,
+			})
+			if not success then
+				evalError(`{id}: {tostring(result)}`)
+			end
+		end)
 	end)
 end
 
@@ -314,7 +356,7 @@ game.EngineSignal:Connect(function(route)
 end)
 
 -- KILANG REPL
-if FlagExists("kilang") or IsServer then
+if FlagExists("kilang") then
 	require("./repl"):init(function(line)
 		task.spawn(function()
 			local _, success, result = kilang:execute(line, {

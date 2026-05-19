@@ -24,6 +24,58 @@ local SKIP_PROPS = {
 	Parent = true,
 	Children = true,
 	UniqueId = true,
+	ClassName = true,
+	BaseClass = true,
+	tags = true,
+	attributes = true,
+	_childByName = true,
+	-- Humanoid runtime state — contains live Part references that cause
+	-- CyclicReference errors in the thread encoder. These are rebuilt
+	-- on the client via RestoreRig / inferRigDescriptorFromCharacter.
+	RigBindings = true,
+	RigParts = true,
+	RigPartIndex = true,
+	RigChains = true,
+	RigDescriptor = true,
+	SpeedModifiers = true,
+	PoseOffsets = true,
+	StateMachine = true,
+	Animator = true,
+	-- Signal objects — runtime only, never serialized
+	Died = true,
+	HealthChanged = true,
+	MoveToFinished = true,
+	Running = true,
+	Jumping = true,
+	FreeFalling = true,
+	Seated = true,
+	Landed = true,
+	StateChanged = true,
+	StanceChanged = true,
+	RigBuilt = true,
+	SprintStarted = true,
+	SprintEnded = true,
+	CrouchStarted = true,
+	CrouchEnded = true,
+	Dashed = true,
+	-- Instance signals — runtime only
+	ChildAdded = true,
+	ChildRemoved = true,
+	DescendantAdded = true,
+	DescendantRemoving = true,
+	DescendantChanged = true,
+	AncestryChanged = true,
+	Changed = true,
+	Destroying = true,
+	-- Other instance internals
+	NetworkOwner = true,
+	NetworkOwnerType = true,
+	CanReplicate = true,
+	IsPlaytesting = true,
+	PlayerAdded = true,
+	PlayerRemoving = true,
+	CharacterAdded = true,
+	CharacterRemoving = true,
 }
 
 local TYPE_DESERIALIZERS = {
@@ -75,26 +127,125 @@ local TYPE_DESERIALIZERS = {
 
 local warnedUnknownTypeTags = {}
 
+local function isSignalLikeTable(value)
+	return type(value) == "table"
+		and rawget(value, "_connections") ~= nil
+		and rawget(value, "_queuedFires") ~= nil
+		and rawget(value, "_history") ~= nil
+end
+
 for name, datatype in pairs(Datatypes) do
 	if datatype.FromTable then
 		TYPE_DESERIALIZERS[name] = datatype.FromTable
 	end
 end
 
+local workers = {}
+local pendingRequests = {}
+local reqIdCounter = 0
+local nextWorkerIndex = 1
+local MAX_WORKERS = 14
+
+local function initWorkers()
+	if #workers > 0 then
+		return
+	end
+
+	for i = 1, MAX_WORKERS do
+		local w = zune.thread.fromModule("./_worker")
+		w:start()
+		table.insert(workers, w)
+
+		task.spawn(function()
+			while true do
+				local res = w:receive()
+				if res and res.id and pendingRequests[res.id] then
+					print(`[SerializationService] Worker {i} finished task {res.id}`)
+					local t = pendingRequests[res.id]
+					pendingRequests[res.id] = nil
+					task.spawn(t, res)
+				end
+			end
+		end)
+	end
+end
+
+local function getNextWorker()
+	initWorkers()
+	local w = workers[nextWorkerIndex]
+	nextWorkerIndex = (nextWorkerIndex % MAX_WORKERS) + 1
+	return w
+end
+
+local UseWorkers = true
+
+local function sanitizeForThread(value, seen)
+	local valueType = type(value)
+	if valueType == "number" or valueType == "string" or valueType == "boolean" or value == nil then
+		return value
+	end
+
+	if valueType ~= "table" then
+		return nil
+	end
+
+	seen = seen or {}
+	if seen[value] then
+		return nil
+	end
+	seen[value] = true
+
+	local copy = {}
+	for key, child in pairs(value) do
+		local keyType = type(key)
+		if keyType == "string" or keyType == "number" or keyType == "boolean" then
+			copy[key] = sanitizeForThread(child, seen)
+		end
+	end
+
+	seen[value] = nil
+	return copy
+end
+
 local function compress(tbl)
-	local encoded = encoder.encode(tbl)
-	-- Level 1 is ~3x faster than level 3 with only ~2-5% larger output.
-	-- For real-time replication payloads the speed win matters more.
-	return zstd.compress(encoded, { level = 1 })
+	if not UseWorkers then
+		local encoder = require("./_encoder")
+		local encoded = encoder.encode(tbl)
+		return zune.serde.zstd.compress(encoded, { level = 1 })
+	end
+
+	local w = getNextWorker()
+	reqIdCounter += 1
+	local id = reqIdCounter
+	pendingRequests[id] = coroutine.running()
+	print(`[SerializationService] Sending compress task {id} to worker...`)
+	w:send({ id = id, action = "compress", data = sanitizeForThread(tbl) })
+	local res = coroutine.yield()
+	if res.error then
+		error(res.error)
+	end
+	return res.result
 end
 
 local function decompress(str)
-	local decompressed = zstd.decompress(str)
-	local ok, decoded = pcall(encoder.decode, decompressed)
-	if not ok then
-		print("[SerializationService] Failed to decode serialized payload: " .. tostring(decoded))
+	if not UseWorkers then
+		local encoder = require("./_encoder")
+		local decompressed = zune.serde.zstd.decompress(str)
+		return encoder.decode(decompressed)
 	end
-	return decoded
+
+	local w = getNextWorker()
+	reqIdCounter += 1
+	local id = reqIdCounter
+	pendingRequests[id] = coroutine.running()
+	print(`[SerializationService] Sending decompress task {id} to worker...`)
+	w:send({ id = id, action = "decompress", data = str })
+	local res = coroutine.yield()
+	if res.error then
+		print("[SerializationService] Failed to decode serialized payload: " .. tostring(res.error))
+		return nil
+	end
+	return res.result
 end
 
 -- Shared visited set, reused across properties within the same object
@@ -117,10 +268,14 @@ local function serialize_value(value, visited)
 		return nil, false
 	end
 
+	if isSignalLikeTable(value) then
+		return nil, false
+	end
+
 	-- Instance reference (has ClassName, _props, and UniqueId)
 	if luaType == "table" then
 		local props = rawget(value, "_props")
-		if props and rawget(value, "ClassName") then
+		if props and props.ClassName then
 			local uid = props.UniqueId
 			if uid then
 				return { __ref = uid }, true
@@ -198,6 +353,9 @@ local function serialize_object(object, obj_visited)
 		if SKIP_PROPS[propname] then
 			continue
 		end
+		if type(propname) == "string" and string.sub(propname, 1, 1) == "_" and propname ~= "_parentID" then
+			continue
+		end
 		local propType = type(propname)
 		if propType == "buffer" or type(propvalue) == "buffer" then
 			continue
@@ -236,6 +394,9 @@ local function serialize_object(object, obj_visited)
 	local resultChildren = result.ch
 	local childCount = 0
 	for i = 1, #children do
+		if children[i].ClassName == "Camera" then
+			continue
+		end
 		local serialized_child = serialize_object(children[i], obj_visited)
 		if serialized_child then
 			childCount += 1
@@ -363,9 +524,6 @@ SerializationService.InitRenderer = function(renderer, renderer_signal, datamode
 				end
 			end
 
-			-- Resolve instance references (__ref → actual object)
-			-- Use a stack-based walk instead of GetDescendants() to avoid
-			-- building a large intermediate array.
 			for i = 1, instanceCount do
 				local stack = { instances[i] }
 				local stackSize = 1

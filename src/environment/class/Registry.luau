@@ -1,14 +1,11 @@
 local _filesystem = require("../../modules/filesystem")
-local sandboxer = require("../../modules/sandboxer")
 local Instance = require("../class/Instance")
 local datatypes = require("../datatypes/getDatatypes")
 local zembed = require("@zembed")
 
 local registry = {}
 local listOfClasses = {}
-local created = {}
-
-sandboxer.environment = datatypes
+local created = setmetatable({}, { __mode = "v" })
 
 local entries = {}
 
@@ -69,6 +66,15 @@ function registry.ClassValid(class)
 	end
 end
 
+function registry.GetUnparentedInstances()
+	for _, v in ipairs(created) do
+		if v:IsA("Instance") and v.Parent == nil then
+			return v
+		end
+	end
+	return nil
+end
+
 function registry.new(class, renderer, datamodel, force)
 	local found
 
@@ -89,13 +95,21 @@ function registry.new(class, renderer, datamodel, force)
 
 	local instance = Instance.new(class)
 	local success, result = pcall(function()
-		found.callback(instance, renderer, datamodel)
+		return found.callback(instance, renderer, datamodel)
 	end)
 	if not success then
 		_G.warn(`CLASS: Failed to create {class}: {result}`)
 	end
+	if success and result ~= nil and result ~= instance then
+		-- callback returned an existing singleton instance; do not register the new one
+		return result
+	end
 	table.insert(created, instance)
 	return instance
+end
+
+function registry.GetActiveInstances()
+	return created
 end
 
 return registry

@@ -6,7 +6,7 @@ local Serializer = require("./Serializer")
 Server.ConnectedClients = {}
 local onRecieveCallbacks = {}
 
-local HEARTBEAT_TIMEOUT = 120
+local HEARTBEAT_TIMEOUT = 25
 local MAX_WIRE_MESSAGE_SIZE = 256 * 1024
 local MAX_LOGICAL_MESSAGE_SIZE = 256 * 1024 * 1024
 -- Replay / clock-skew window for inbound messages (seconds). The previous
@@ -18,14 +18,57 @@ local MAX_MESSAGES_PER_CLIENT = 1000
 local RATE_LIMIT_WINDOW_SECONDS = 1
 local MTU_SIZE = 1200
 local ACK_TIMEOUT = 3
-local MAX_RETRIES = 15
+local MAX_RETRIES = 5
 local FRAGMENT_TIMEOUT = 30
 local MAX_FRAGMENT_COUNT = 262144
 local MAX_SEQUENCE_WINDOW = 2048
 local MAX_PROCESSED_RELIABLE_MESSAGES = 2048
+local RELIABLE_BACKLOG_LIMIT = 256
+local RELIABLE_IDLE_DISCONNECT_TIMEOUT = 18
+
+local CONTROL_PACKET_TYPES = {
+	ACK = true,
+	AUTH_SUCCESS = true,
+	AUTH_FAILED = true,
+	DISCONNECT = true,
+	SHUTDOWN = true,
+}
 
 local function clientKey(addr)
 	return addr.address .. ":" .. addr.port
+end
+
+local function isControlPacket(data)
+	return type(data) == "table" and data.type ~= nil and CONTROL_PACKET_TYPES[data.type] == true
+end
+
+local function countConnectedClients()
+	local count = 0
+	for _ in pairs(Server.ConnectedClients) do
+		count += 1
+	end
+	return count
+end
+
+local function countPendingReliable(client, now)
+	local count = 0
+	local oldestAge = 0
+	local highestAttempts = 0
+	now = now or os.clock()
+
+	for _, ackData in pairs(client and client.pendingAcks or {}) do
+		count += 1
+		oldestAge = math.max(oldestAge, now - (ackData.createdAt or ackData.lastSent or now))
+		highestAttempts = math.max(highestAttempts, ackData.attempts or 0)
+	end
+
+	return count, oldestAge, highestAttempts
+end
+
+local function isTransientRecvError(err)
+	err = tostring(err or "")
+	return string.find(err, "ConnectionResetByPeer", 1, true) ~= nil
+		or string.find(err, "ECONNRESET", 1, true) ~= nil
 end
 
 local function createMessageId(prefix, sequence, client)
@@ -434,6 +477,55 @@ function Server:OnPreAuthMessage(callback)
 	self._onPreAuthMessage = callback
 end
 
+function Server:RemoveClient(key, reason, quiet)
+	local client = Server.ConnectedClients[key]
+	if not client then
+		return false
+	end
+
+	Server.ConnectedClients[key] = nil
+	client.authenticated = false
+	client.pendingAcks = {}
+	client.fragmentBuffer = {}
+
+	local message = `[KiNet][Server] Removing client {key}: {reason or "Disconnected"}`
+	if quiet then
+		log(message)
+	else
+		warn(message)
+	end
+
+	if Server._onClientRemoved then
+		Server._onClientRemoved({
+			address = client.address,
+			port = client.port,
+		})
+	end
+
+	return true
+end
+
+function Server:IsClientConnected(client)
+	if not client then
+		return false
+	end
+
+	local key = clientKey(client)
+	return Server.ConnectedClients[key] == client and client.authenticated == true
+end
+
+function Server:GetClientStats(client)
+	local now = os.clock()
+	local pendingReliable, oldestReliableAge, highestReliableAttempts = countPendingReliable(client, now)
+
+	return {
+		connected = self:IsClientConnected(client),
+		pendingReliable = pendingReliable,
+		oldestReliableAge = oldestReliableAge,
+		highestReliableAttempts = highestReliableAttempts,
+	}
+end
+
 function Server:SendAll(data, reliable)
 	local success, err = pcall(function()
 		for key, client in pairs(Server.ConnectedClients) do
@@ -450,7 +542,10 @@ function Server:SendAll(data, reliable)
 
 	if not success then
 		warn(`SendAll error: {err}`)
+		return false
 	end
+
+	return true
 end
 
 -- Send data to a subset of authenticated clients that pass a filter function.
@@ -473,7 +568,10 @@ function Server:SendFiltered(data, reliable, filterFn)
 
 	if not success then
 		warn(`SendFiltered error: {err}`)
+		return false
 	end
+
+	return true
 end
 
 function Server:Shutdown()
@@ -483,9 +581,15 @@ function Server:Shutdown()
 	end
 	Server:SendAll({ type = "SHUTDOWN" })
 	self.Socket:close()
+	self.Socket = nil
+	Server.Socket = nil
 end
 
 function Server:SendReliable(client, data)
+	if not self:IsClientConnected(client) then
+		return false
+	end
+
 	local messageId = data.messageId or createMessageId("reliable", Server.MessageSequence, client)
 	Server.MessageSequence = Server.MessageSequence + 1
 
@@ -496,14 +600,14 @@ function Server:SendReliable(client, data)
 	local ok, serialized = pcall(Serializer.Serialize, data)
 	if not ok then
 		warn(`[KiNet][Server] Failed to serialize reliable message {messageId}: {serialized}`)
-		return
+		return false
 	end
 
 	if buffer.len(serialized) > MAX_LOGICAL_MESSAGE_SIZE then
 		warn(
 			`[KiNet][Server] Reliable message {messageId} is {buffer.len(serialized)} bytes which exceeds the logical limit of {MAX_LOGICAL_MESSAGE_SIZE}`
 		)
-		return
+		return false
 	end
 
 	local fragments = self:FragmentMessage(data, messageId, serialized, true)
@@ -512,10 +616,12 @@ function Server:SendReliable(client, data)
 		client.pendingAcks = {}
 	end
 
+	local now = os.clock()
 	client.pendingAcks[messageId] = {
 		fragments = fragments,
 		attempts = 0,
-		lastSent = os.clock(),
+		createdAt = now,
+		lastSent = now,
 		channel = data.channel,
 		kind = data.kind or data.type,
 		fragmentCount = #fragments,
@@ -523,20 +629,36 @@ function Server:SendReliable(client, data)
 
 	task.spawn(function()
 		for i, fragment in ipairs(fragments) do
-			self:SendRaw(client, fragment)
+			if not self:SendRaw(client, fragment) then
+				break
+			end
 			if i % 200 == 0 then
 				task.wait()
 			end
 		end
 	end)
+
+	return true
 end
 
 function Server:SendRaw(client, data)
+	if not self.Socket or not client or not data then
+		return false
+	end
+
+	if not isControlPacket(data) and not self:IsClientConnected(client) then
+		return false
+	end
+
 	-- Always refresh timestamp at send time so retries cannot become stale.
 	data.timestamp = os.time()
 	data.sessionId = client.sessionId
 
-	local buf = Serializer.Serialize(data)
+	local ok, buf = pcall(Serializer.Serialize, data)
+	if not ok then
+		warn(`[KiNet][Server] Failed to serialize raw packet {data.kind or data.type or "packet"}: {buf}`)
+		return false
+	end
 
 	if buffer.len(buf) > MAX_WIRE_MESSAGE_SIZE then
 		warn(
@@ -545,27 +667,38 @@ function Server:SendRaw(client, data)
 		return false
 	end
 
-	self.Socket:sendMsg(tonumber(client.port), client.address, buf)
+	local sent, sendErr = pcall(function()
+		self.Socket:sendMsg(tonumber(client.port), client.address, buf)
+	end)
+	if not sent then
+		warn(`[KiNet][Server] sendMsg failed for {clientKey(client)}: {sendErr}`)
+		return false
+	end
+
 	return true
 end
 
 function Server:Send(client, data, reliable)
 	if reliable then
-		self:SendReliable(client, data)
+		return self:SendReliable(client, data)
 	else
+		if not self:IsClientConnected(client) then
+			return false
+		end
+
 		data.reliable = false
 
 		local ok, serialized = pcall(Serializer.Serialize, data)
 		if not ok then
 			warn(`[KiNet][Server] Failed to serialize message: {serialized}`)
-			return
+			return false
 		end
 
 		if buffer.len(serialized) > MAX_LOGICAL_MESSAGE_SIZE then
 			warn(
 				`[KiNet][Server] Message is {buffer.len(serialized)} bytes which exceeds the logical limit of {MAX_LOGICAL_MESSAGE_SIZE}`
 			)
-			return
+			return false
 		end
 
 		if buffer.len(serialized) > MTU_SIZE then
@@ -575,21 +708,23 @@ function Server:Send(client, data, reliable)
 			local largeOk, largeSerialized = pcall(Serializer.Serialize, data)
 			if not largeOk then
 				warn(`[KiNet][Server] Failed to serialize large fragmented message {messageId}: {largeSerialized}`)
-				return
+				return false
 			end
 
 			task.spawn(function()
 				for i, fragment in ipairs(self:FragmentMessage(data, messageId, largeSerialized, false)) do
-					self:SendRaw(client, fragment)
+					if not self:SendRaw(client, fragment) then
+						break
+					end
 					if i % 200 == 0 then
 						task.wait()
 					end
 				end
 			end)
-			return
+			return true
 		end
 
-		self:SendRaw(client, data)
+		return self:SendRaw(client, data)
 	end
 end
 
@@ -597,27 +732,46 @@ function Server:ProcessReliableQueue()
 	task.spawn(function()
 		while true do
 			task.wait(0.1)
+			if not self.Socket then
+				break
+			end
 
 			local currentTime = os.clock()
 
 			for key, client in pairs(Server.ConnectedClients) do
 				if client.authenticated and client.pendingAcks then
 					cleanupFragmentBuffer(client.fragmentBuffer, currentTime)
+					local pendingCount, oldestPendingAge = countPendingReliable(client, currentTime)
+					if pendingCount > RELIABLE_BACKLOG_LIMIT then
+						self:RemoveClient(key, `reliable backlog exceeded ({pendingCount} pending messages)`)
+						continue
+					end
+					if
+						oldestPendingAge > RELIABLE_IDLE_DISCONNECT_TIMEOUT
+						and currentTime - (client.lastPacketAt or client.connectedAtClock or currentTime)
+							> RELIABLE_IDLE_DISCONNECT_TIMEOUT
+					then
+						self:RemoveClient(key, `reliable ACK timeout ({pendingCount} pending messages)`)
+						continue
+					end
 					for msgId, ackData in pairs(client.pendingAcks) do
 						local dynamicTimeout = ACK_TIMEOUT + ((ackData.fragmentCount or 1) * 0.05)
 						if currentTime - ackData.lastSent > dynamicTimeout then
 							if ackData.attempts >= MAX_RETRIES then
-								warn(
-									`Message {msgId} to {key} failed after {MAX_RETRIES} retries (channel={ackData.channel or "?"}, kind={ackData.kind or "?"}, fragments={ackData.fragmentCount or 1})`
+								self:RemoveClient(
+									key,
+									`reliable ACK timeout (channel={ackData.channel or "?"}, kind={ackData.kind or "?"}, fragments={ackData.fragmentCount or 1})`
 								)
-								client.pendingAcks[msgId] = nil
+								break
 							else
 								ackData.attempts = ackData.attempts + 1
 								ackData.lastSent = currentTime
 
 								task.spawn(function()
 									for i, fragment in ipairs(ackData.fragments) do
-										self:SendRaw(client, fragment)
+										if not self:SendRaw(client, fragment) then
+											break
+										end
 										if i % 200 == 0 then
 											task.wait()
 										end
@@ -654,7 +808,9 @@ function Server:AuthenticateClient(addr, authToken)
 		sessionId = sessionId,
 		authenticated = true,
 		connectedAt = os.time(),
+		connectedAtClock = os.clock(),
 		lastHeartbeat = os.time(),
+		lastPacketAt = os.clock(),
 		lastSequence = nil,
 		recentSequences = {},
 		recentSequenceRing = nil,
@@ -696,8 +852,12 @@ function Server._middleware(v, addr)
 
 	if type(v) == "table" then
 		if v.type == "ACK" then
-			if client and client.pendingAcks and client.pendingAcks[v.messageId] then
-				client.pendingAcks[v.messageId] = nil
+			if client then
+				client.lastHeartbeat = os.time()
+				client.lastPacketAt = os.clock()
+				if client.pendingAcks and client.pendingAcks[v.messageId] then
+					client.pendingAcks[v.messageId] = nil
+				end
 			end
 			return
 		end
@@ -712,10 +872,11 @@ function Server._middleware(v, addr)
 					sessionId = existingClient.sessionId,
 				})
 				existingClient.lastHeartbeat = os.time()
+				existingClient.lastPacketAt = os.clock()
 				return
 			end
 
-			if #table.pack(Server.ConnectedClients) >= MAX_CLIENTS then
+			if countConnectedClients() >= MAX_CLIENTS then
 				warn(`Max clients reached, rejecting {key}`)
 				return
 			end
@@ -745,7 +906,7 @@ function Server._middleware(v, addr)
 			warn(`Rate limit exceeded for {key}`)
 			Server:BanClient(addr.address, "Rate limit exceeded")
 			Server:SendRaw(client, { type = "DISCONNECT", reason = "Rate limit" })
-			Server.ConnectedClients[key] = nil
+			Server:RemoveClient(key, "rate limit exceeded")
 			return
 		end
 
@@ -760,14 +921,10 @@ function Server._middleware(v, addr)
 		-- when the client is actively sending owned-state or other data
 		-- but a heartbeat UDP packet gets lost.
 		client.lastHeartbeat = os.time()
+		client.lastPacketAt = os.clock()
 
 		if v.type == "DISCONNECT" then
-			Server.ConnectedClients[key] = nil
-			log(`Client ({key}) disconnected`)
-
-			if Server._onClientRemoved then
-				Server._onClientRemoved(addr)
-			end
+			Server:RemoveClient(key, "client requested disconnect", true)
 		end
 	end
 end
@@ -776,22 +933,17 @@ function Server:StartHeartbeatMonitor()
 	task.spawn(function()
 		while true do
 			task.wait(HEARTBEAT_TIMEOUT / 2)
+			if not self.Socket then
+				break
+			end
 
 			local currentTime = os.time()
 			for key, client in pairs(Server.ConnectedClients) do
 				cleanupFragmentBuffer(client.fragmentBuffer, os.clock())
 				if client.authenticated then
 					if currentTime - client.lastHeartbeat > HEARTBEAT_TIMEOUT then
-						log(`Client {key} timed out`)
 						Server:SendRaw(client, { type = "DISCONNECT", reason = "Timeout" })
-						Server.ConnectedClients[key] = nil
-
-						if Server._onClientRemoved then
-							Server._onClientRemoved({
-								address = client.address,
-								port = client.port,
-							})
-						end
+						Server:RemoveClient(key, "heartbeat timeout", true)
 					end
 				end
 			end
@@ -816,8 +968,12 @@ function Server:Listen()
 			end)
 
 			if not success then
-				warn(`[KiNet][Server] recvMsg failed: {addr}`)
-				task.wait()
+				if isTransientRecvError(addr) then
+					task.wait(0.05)
+				else
+					warn(`[KiNet][Server] recvMsg failed: {addr}`)
+					task.wait()
+				end
 				continue
 			end
 

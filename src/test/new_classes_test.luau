@@ -5,29 +5,36 @@ local Registry = require("../environment/class/Registry")
 local test = zune.testing
 
 local rendererMock = {
-    Pool = { new = function() end },
-    Hook = { new = function() end }
+	Pool = { new = function() end },
+	Hook = { new = function() end },
 }
 local datamodelMock = {
-    GetService = function() return { jolt = { lib = {}, physicsSystem = {} }, CreateWeld = function() return {} end } end
+	GetService = function()
+		return {
+			jolt = { lib = {}, physicsSystem = {} },
+			CreateWeld = function()
+				return {}
+			end,
+		}
+	end,
 }
 
 test.test("Weld creation", function()
-    local weld = Registry.new("Weld", rendererMock, datamodelMock)
-    assert(weld.Name == "Weld")
-    assert(weld.Enabled == true)
+	local weld = Registry.new("Weld", rendererMock, datamodelMock)
+	assert(weld.Name == "Weld")
+	assert(weld.Enabled == true)
 end)
 
 test.test("SurfaceLight creation", function()
-    local surfaceLight = Registry.new("SurfaceLight", rendererMock, datamodelMock)
-    assert(surfaceLight.Name == "SurfaceLight")
-    assert(surfaceLight.Angle == 90)
+	local surfaceLight = Registry.new("SurfaceLight", rendererMock, datamodelMock)
+	assert(surfaceLight.Name == "SurfaceLight")
+	assert(surfaceLight.Angle == 90)
 end)
 
 test.test("SpotLight creation", function()
-    local spotLight = Registry.new("SpotLight", rendererMock, datamodelMock)
-    assert(spotLight.Name == "SpotLight")
-    assert(spotLight.Angle == 90)
+	local spotLight = Registry.new("SpotLight", rendererMock, datamodelMock)
+	assert(spotLight.Name == "SpotLight")
+	assert(spotLight.Angle == 90)
 end)
 
 test.test("Can create Configuration", function()

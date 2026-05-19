@@ -58,6 +58,20 @@ return {
 
 			local pos, size = GuiObject.calculatePositions(lib, object, dt, structs, renderer)
 
+			if not badge then
+				badge = gui.badge({
+					x = 0,
+					y = 0,
+					text = instance.Text,
+					fontSize = instance.FontSize,
+					spacing = instance.Spacing,
+					backgroundColor = instance.BackgroundColor3,
+					textColor = instance.TextColor3,
+					minWidth = instance.MinWidth,
+				})
+				instance._badge = badge
+			end
+
 			badge.set("x", pos.X)
 			badge.set("y", pos.Y)
 			badge.setText(tostring(object.Text))

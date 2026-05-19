@@ -23,6 +23,10 @@ return {
 
 	callback = function(instance, renderer)
 		proptble.render = function(lib, instance, dt, structs, datamodel)
+			if not datamodel then
+				return
+			end
+
 			if not instance.Enabled then
 				return
 			end

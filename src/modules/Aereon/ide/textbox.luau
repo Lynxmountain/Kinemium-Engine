@@ -1564,6 +1564,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 		end
 
 		-- Draw current line highlight
+		raylib.BeginScissorMode(math.floor(x), math.floor(y), math.floor(width), math.floor(height - statusBarHeight))
+
 		if self.isFocused and self.multiline and self.lineHighlight then
 			local c = self.buffer.cursor
 			local lineY = y + self.padding + (c.line - 1) * lineHeight - self.scrollY
@@ -1756,6 +1758,8 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 				raylib.DrawRectangle(cx, cy, 2, lineHeight, self.theme.text)
 			end
 		end
+
+		raylib.EndScissorMode()
 
 		-- Draw status bar
 		if statusBarHeight > 0 then
@@ -2596,6 +2600,7 @@ return function(raylib: typeof(rl.lib), theme, aereon, game)
 					self.buffer:deleteSelection()
 				end
 				local text = raylib.GetClipboardText()
+
 				local bufferLength = buffer.len(text:span())
 				local data = buffer.readstring(text:span(), 0, bufferLength - 1)
 				data = string.gsub(data, "\r\n", "\n")

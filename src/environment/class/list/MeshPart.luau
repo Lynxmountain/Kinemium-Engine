@@ -8,10 +8,11 @@ local propTable = {
 	CollisionFidelity = Enum.CollisionFidelity.Default,
 	RenderFidelity = Enum.RenderFidelity.Automatic,
 	CollisionScale = 1,
+	Anchored = true,
 	Name = "MeshPart",
 	BaseClass = "BasePart",
 	MeshScale = 1,
-	Transparency = 1,
+	Transparency = 0,
 	Size = Vector3.new(1, 1, 1),
 }
 

@@ -1,58 +1,34 @@
 local raylib = require("@raylib")
-
 local rect = require("@arect")
-
 local color3 = require("@Color3")
-
 local effects = require("./effects")
-
 local defaultFont = raylib.lib.GetFontDefault()
 
 return function(objects, data)
 	local config = {
-
 		obj_rect = rect.new(data.x or data[1], data.y or data[2], data.width or data[3], data.height or data[4] or 40),
-
 		tabs = data.tabs or { "Tab 1", "Tab 2", "Tab 3" },
-
 		activeIndex = data.activeIndex or 1,
-
 		onTabChange = data.onTabChange,
-
 		font = data.font or defaultFont,
-
-		backgroundColor = data.backgroundColor or color3.new(0.15, 0.15, 0.15),
-
+		backgroundColor = data.backgroundColor or color3.new(1, 1, 1),
 		backgroundTransparency = data.backgroundTransparency or 0,
-
 		activeColor = data.activeColor or color3.new(0.02, 0.5, 1),
-
 		hoverColor = data.hoverColor or color3.new(0.25, 0.25, 0.3),
-
-		textColor = data.textColor or color3.new(1, 1, 1),
-
+		textColor = data.textColor or color3.new(0, 0, 0),
 		fontSize = data.fontSize or 16,
-
 		spacing = data.spacing or 1,
-
 		animX = 0,
-
 		tabEffects = {},
 	}
 
 	for i = 1, #config.tabs do
 		config.tabEffects[i] = effects({
-
 			baseColor = config.backgroundColor,
-
 			hoverColor = config.hoverColor,
-
 			pressColor = config.activeColor,
-
 			enableShadows = false,
-
 			enableGlow = false,
-
 			enablePress = false,
 		})
 	end
