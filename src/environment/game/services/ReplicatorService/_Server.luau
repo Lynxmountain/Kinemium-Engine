@@ -12,7 +12,7 @@ local Enum = require("@EnumMap")
 
 local MAX_TERRAIN_RELIABLE_MESSAGES_PER_TICK = 10
 local OWNERSHIP_REBALANCE_INTERVAL = 0.2
-local REPLICATION_TARGET_BYTES = 1 * 1024 * 1024 -- 1MB per reliable Create message to stay within GNS transport limits
+local REPLICATION_TARGET_BYTES = 384 * 1024 -- keep reliable Create messages small so gameplay remotes are not starved
 local MAX_PATCH_ENTRIES_PER_MESSAGE = 96
 local MAX_SNAPSHOT_STATES_PER_MESSAGE = 16
 local INITIAL_INVENTORY_HANDSHAKE_TIMEOUT = 8
@@ -21,11 +21,12 @@ local SNAPSHOT_IDLE_KEEPALIVE_TICKS = 0
 local SNAPSHOT_MAX_UNACKED_TICKS = 2
 local SNAPSHOT_BACKPRESSURE_RETRY_TICKS = 12
 local MAX_CREATE_PAYLOAD_BYTES = REPLICATION_TARGET_BYTES
-local CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT = 512
-local CREATE_PRE_SERIALIZE_ROOT_SPLIT_COUNT = 256
-local CREATE_PRE_SERIALIZE_MAX_ROOTS_PER_BATCH = 16
-local CREATE_BACKPRESSURE_PENDING_LIMIT = 24
-local CREATE_BACKPRESSURE_FRAGMENT_LIMIT = 512
+local CREATE_PRE_SERIALIZE_TREE_SPLIT_COUNT = 192
+local CREATE_PRE_SERIALIZE_ROOT_SPLIT_COUNT = 96
+local CREATE_PRE_SERIALIZE_MAX_ROOTS_PER_BATCH = 8
+local CREATE_INTER_BATCH_YIELD_SECONDS = 0.03
+local CREATE_BACKPRESSURE_PENDING_LIMIT = 8
+local CREATE_BACKPRESSURE_FRAGMENT_LIMIT = 128
 local CREATE_BACKPRESSURE_LOG_INTERVAL_SECONDS = 10
 local DEBUG_REPLICATION_TRACE = false
 local REPLICATION_DIAGNOSTICS = true
@@ -1043,12 +1044,9 @@ function Server.init(context)
 
 			batchesSent += 1
 			logReplicationDiagnostic(`sendBatch sent reason={reasonLabel} recipient={recipientLabel} roots={#batch} bytes={payloadBytes} totalSeconds={formatSeconds(os.clock() - batchStartedAt)} batchesSent={batchesSent} queued={batchesQueued} pending={#pendingBatches}`)
-			-- Yield every 2 batches to let the network stack flush datagrams
-			-- and process heartbeats -- prevents heartbeat-timeout disconnects
-			-- when replicating large worlds.
-			if batchesSent % 2 == 0 then
-				task.wait()
-			end
+			-- Pace every Create batch so reliable initial-sync traffic does not starve
+			-- gameplay remotes, ACKs, and control messages.
+			task.wait(CREATE_INTER_BATCH_YIELD_SECONDS)
 		end
 
 		if not recipient and not hasLiveCreateRecipients() then
@@ -1058,7 +1056,7 @@ function Server.init(context)
 			return
 		end
 
-		local ROOTS_PER_BATCH = 4 -- Send roots in small batches to avoid oversized reliable messages
+		local ROOTS_PER_BATCH = 2 -- keep initial root batches small; larger trees are pre-split below
 		debugTrace(`sendCreate reason={reason or "unspecified"} queueing {#serializable} roots`)
 		for i = 1, #serializable, ROOTS_PER_BATCH do
 			local batch = {}
