@@ -4,8 +4,8 @@ local UDim2 = require("@UDim2")
 local _Enum = require("@EnumMap")
 local GuiObject = require("@GuiObject")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local lib = raylib.lib
-
 
 local roundedShader
 
@@ -31,7 +31,7 @@ local propTable = {
 
 propTable.render = function(lib, object, dt, structs, renderer)
 	if not roundedShader then
-		roundedShader = lib.LoadShader(nil, "./src/assets/shaders/rounded.fs")
+		roundedShader = lib.LoadShader(nil, zembed.AssetPath("kineasset://shaders/rounded.fs"))
 	end
 	local framePos, frameSize = GuiObject.render(lib, object, dt, structs, renderer)
 	if not framePos or not frameSize then
@@ -151,7 +151,7 @@ return {
 	render = propTable.render,
 	callback = function(instance, renderer)
 		if type(instance.Image) == "string" and not _G.IsHeadless then
-			instance._cached = lib.LoadTexture(instance.Image)
+			instance._cached = lib.LoadTexture(zembed.AssetPath(instance.Image))
 			lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
 			lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
 			lib.GenTextureMipmaps(instance._cached)
@@ -163,7 +163,7 @@ return {
 					if instance._cached then
 						lib.UnloadTexture(instance._cached)
 					end
-					instance._cached = lib.LoadTexture(instance.Image)
+					instance._cached = lib.LoadTexture(zembed.AssetPath(instance.Image))
 					lib.SetTextureFilter(instance._cached, raylib.const.TextureFilter.TEXTURE_FILTER_TRILINEAR)
 					lib.SetTextureWrap(instance._cached, raylib.const.TextureWrap.TEXTURE_WRAP_CLAMP)
 					lib.GenTextureMipmaps(instance._cached)

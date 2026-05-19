@@ -2,6 +2,7 @@
 
 local KinemiumRaylib = game:GetService("KinemiumRaylib")
 local KinemiumFontService = game:GetService("KinemiumFontService")
+local zembed = require("@zembed")
 
 local RunService = game:GetService("RunService")
 if RunService:IsServer() then
@@ -104,6 +105,13 @@ local scrollbarDrag = {
 	offset = 0,
 }
 
+-- Divider drag state
+local dividerDrag = {
+	active = false,
+	startX = 0,
+	startWidth = 0,
+}
+
 local blacklisted = { "Children", "UniqueId" }
 
 -- helpers
@@ -153,6 +161,7 @@ local function getTexture(path)
 	if textureCache[path] then
 		return textureCache[path]
 	end
+	path = zembed.AssetPath(path)
 	local ok, tex = pcall(function()
 		return rl.LoadTexture(path)
 	end)
@@ -166,7 +175,7 @@ end
 local pathIcon = nil
 local function getPathIcon()
 	if not pathIcon then
-		local tex = rl.LoadTexture("./src/assets/images/icons/Folder.png")
+		local tex = rl.LoadTexture(zembed.AssetPath("kineasset://images/icons/Folder.png"))
 		if tex then
 			pathIcon = {
 				texture = tex,
@@ -180,7 +189,7 @@ end
 
 local function getCPIcon()
 	if not colorPickerIcon then
-		local cpTex = rl.LoadTexture("./src/assets/images/icons/ColorPicker.png")
+		local cpTex = rl.LoadTexture(zembed.AssetPath("kineasset://images/icons/ColorPicker.png"))
 		colorPickerIcon = {
 			texture = cpTex,
 			x = buffer.readi32(cpTex, 4),
@@ -1242,14 +1251,35 @@ local function drawPropertyRow(winX, winW, y, i, propName, propValue, selected, 
 	local displayName = entry and entry.displayName or propName
 
 	local function drawName(indent)
-		rl.DrawTextEx(
-			vend,
-			displayName,
-			vector.create(winX + PADDING + (indent or 0), y + (rh - 14) / 2),
-			14,
-			1,
-			TextColor
-		)
+		local textX = winX + PADDING + (indent or 0)
+		local textY = y + (rh - 14) / 2
+		local maxWidth = NAME_COL_WIDTH - PADDING * 2 - (indent or 0)
+
+		-- Measure text to check if it needs clipping
+		local measured = rl.MeasureTextEx(vend, displayName, 14, 1)
+		if measured.x <= maxWidth then
+			-- Text fits, draw normally
+			rl.DrawTextEx(
+					vend,
+					displayName,
+					vector.create(textX, textY),
+					14,
+					1,
+					TextColor
+				)
+			else
+				-- Text is too long, use scissor mode to clip it
+				rl.BeginScissorMode(textX, y, maxWidth, rh)
+				rl.DrawTextEx(
+					vend,
+					displayName,
+					vector.create(textX, textY),
+					14,
+							1,
+					TextColor
+				)
+				rl.EndScissorMode()
+			end
 	end
 
 	if not entry then
@@ -1319,6 +1349,10 @@ renderer.Pool.new("2d", function(data)
 	window.draw(dt, mainTheme.aereon)
 end)
 
+local arect = require("@arect")
+local raylib = require("@raylib")
+local scrollableComp
+
 window.stepped = function(windowData)
 	for _, ov in pairs(overlapping) do
 		ov._framePos = nil
@@ -1330,29 +1364,51 @@ window.stepped = function(windowData)
 	windowObject = windowData
 
 	local winX = windowData.x
-	local winY = windowData.y + 30
+	local titleBarH = windowData._titleBarH or 28
+	local winY = windowData.y + titleBarH
 	local winW = windowData.width
-	local winH = windowData.height - 30
+	local winH = windowData.height - titleBarH
 
+	local dt = rl.GetFrameTime()
 	local mousePos = rl.GetMousePosition()
 	local mouseWheel = rl.GetMouseWheelMove()
 
-	if
-		mouseWheel ~= 0
-		and windowObject
-		and mousePos.x >= winX
-		and mousePos.x <= winX + winW
-		and mousePos.y >= winY
-		and mousePos.y <= winY + winH
-	then
-		scrollTarget = math.clamp(scrollTarget - mouseWheel * 40, 0, math.max(0, maxScrollOffset))
+	-- Divider drag handling
+	local divX = winX + NAME_COL_WIDTH
+	local mousePressed = rl.IsMouseButtonPressed(0) == 1
+	local mouseDown = rl.IsMouseButtonDown(0) == 1
+
+	-- Check if mouse is over divider
+	local isOverDivider = mousePos.x >= divX - 3 and mousePos.x <= divX + 3
+		and mousePos.y >= winY and mousePos.y <= winY + winH
+
+	-- Start drag
+	if mousePressed and isOverDivider and not dividerDrag.active then
+		dividerDrag.active = true
+		dividerDrag.startX = mousePos.x
+		dividerDrag.startWidth = NAME_COL_WIDTH
+	end
+
+	-- Handle dragging
+	if dividerDrag.active and mouseDown then
+		local dx = mousePos.x - dividerDrag.startX
+		NAME_COL_WIDTH = math.clamp(dividerDrag.startWidth + dx, 80, winW - 100)
+	elseif not mouseDown then
+		dividerDrag.active = false
+	end
+
+	-- Change cursor when hovering over divider
+	if isOverDivider then
+		local MouseCursor = require("@Kinemium.MouseCursor")
+		local Enum = require("@EnumMap")
+		MouseCursor.request(Enum.KinemiumMouseCursor.MOUSE_CURSOR_RESIZE_EW.Value)
 	end
 
 	if rl.IsWindowResized() == 1 then
 		windowData.x = frame.AbsolutePosition.X
-		windowData.y = frame.AbsolutePosition.Y
-		windowData.width = frame.AbsoluteSize.X
-		windowData.height = frame.AbsoluteSize.Y
+	windowData.y = frame.AbsolutePosition.Y
+	windowData.width = frame.AbsoluteSize.X
+	windowData.height = frame.AbsoluteSize.Y
 	end
 
 	local selected = Selection.Get()[1]
@@ -1374,67 +1430,93 @@ window.stepped = function(windowData)
 			end
 		end
 	end
-	maxScrollOffset = math.max(0, totalH - winH)
-	scrollTarget = math.clamp(scrollTarget, 0, maxScrollOffset)
 
-	local dt = rl.GetFrameTime()
-	scrollOffset = scrollOffset + (scrollTarget - scrollOffset) * math.min(dt * 18, 1)
-
-	rl.BeginScissorMode(winX, winY, winW, winH)
-
-	local cursorY = winY - scrollOffset
-
-	for _, cat in ipairs(order) do
-		local props = buckets[cat]
-		local isOpen = openCategories[cat] ~= false
-
-		if cursorY + CATEGORY_HEADER_HEIGHT >= winY and cursorY <= winY + winH then
-			if drawCategoryHeader(winX + 1, winW - 1, cursorY, cat, isOpen, mousePos) then
-				openCategories[cat] = not isOpen
-				isOpen = not isOpen
+	local inspectorContent
+	inspectorContent = {
+		get_rect = function()
+			return arect.new(0, 0, winW, totalH)
+		end,
+		set = function(prop, value)
+			if prop == "obj_rect" then
+				inspectorContent.rect = value
 			end
-		end
-		cursorY = cursorY + CATEGORY_HEADER_HEIGHT
+		end,
+		render = function(dt)
+			local r = inspectorContent.rect
+			local cursorY = r.y
 
-		if isOpen then
-			for i, entry in ipairs(props) do
-				local entryH = getEntryHeight(entry)
-				local rowY = cursorY
+			for _, cat in ipairs(order) do
+				local props = buckets[cat]
+				local isOpen = openCategories[cat] ~= false
 
-				if rowY + entryH >= winY and rowY <= winY + winH then
-					drawPropertyRow(
-						winX + 1,
-						winW - 1,
-						rowY,
-						i,
-						entry.propName,
-						entry.propValue,
-						selected,
-						mousePos,
-						winY,
-						winH
-					)
-
-					local ov = overlapping[entry.propName]
-					if ov then
-						local rw = winW - 12
-						local editorX = winX + NAME_COL_WIDTH + PADDING
-						local editorW = rw - NAME_COL_WIDTH - PADDING * 2
-						local editorH = CELL_HEIGHT - 8
-						ov._framePos = {
-							ex = editorX,
-							ey = rowY + (CELL_HEIGHT - editorH) / 2,
-							ew = editorW,
-							eh = editorH,
-						}
+				if cursorY + CATEGORY_HEADER_HEIGHT >= winY and cursorY <= winY + winH then
+					if drawCategoryHeader(winX + 1, winW - 1, cursorY, cat, isOpen, mousePos) then
+						openCategories[cat] = not isOpen
+						isOpen = not isOpen
 					end
 				end
-				cursorY = cursorY + entryH
+				cursorY = cursorY + CATEGORY_HEADER_HEIGHT
+
+				if isOpen then
+					for i, entry in ipairs(props) do
+						local entryH = getEntryHeight(entry)
+						local rowY = cursorY
+
+						if rowY + entryH >= winY and rowY <= winY + winH then
+							drawPropertyRow(
+								winX + 1,
+								winW - 1,
+								rowY,
+								i,
+								entry.propName,
+								entry.propValue,
+								selected,
+								mousePos,
+								winY,
+								winH
+							)
+
+							local ov = overlapping[entry.propName]
+							if ov then
+								local rw = winW - 12
+								local editorX = winX + NAME_COL_WIDTH + PADDING
+								local editorW = rw - NAME_COL_WIDTH - PADDING * 2
+								local editorH = CELL_HEIGHT - 8
+								ov._framePos = {
+									ex = editorX,
+									ey = rowY + (CELL_HEIGHT - editorH) / 2,
+									ew = editorW,
+									eh = editorH,
+								}
+							end
+						end
+						cursorY = cursorY + entryH
+					end
+				end
 			end
-		end
+		end,
+	}
+
+	if not scrollableComp then
+		scrollableComp = gui.scrollable({
+			child = inspectorContent,
+			input = rl,
+			inputButtons = raylib.lib,
+			disableClipping = true,
+			debug = false,
+			scrollbarWidth = 6,
+			scrollbarColor = Color3.new(0.3, 0.3, 0.3),
+			scrollbarHoverColor = Color3.new(0.4, 0.4, 0.4),
+			scrollbarBackgroundTransparency = 1,
+		})
 	end
 
-	rl.EndScissorMode()
+	scrollableComp.set("child", inspectorContent)
+	scrollableComp.set("obj_rect", arect.new(winX, winY, winW, winH))
+	scrollableComp.set("contentHeight", totalH)
+
+	raylib.lib.BeginScissorMode(winX, winY, winW, winH)
+	scrollableComp.render(dt)
 
 	for _, ov in pairs(overlapping) do
 		if ov._framePos then
@@ -1444,73 +1526,7 @@ window.stepped = function(windowData)
 			end
 		end
 	end
-
-	if maxScrollOffset > 0 then
-		local sbW = 5
-		local sbX = winX + winW - sbW - 2
-		local thumbH = math.max(24, (winH / totalH) * winH)
-		local thumbY = winY + (scrollOffset / maxScrollOffset) * (winH - thumbH)
-		local trackY = winY
-		local trackH = winH
-		local thumbRange = winH - thumbH
-
-		local mousePressed = rl.IsMouseButtonPressed(0) == 1
-		local mouseDown = rl.IsMouseButtonDown(0) == 1
-
-		local isThumbHovered = mousePos.x >= sbX
-			and mousePos.x <= sbX + sbW
-			and mousePos.y >= thumbY
-			and mousePos.y <= thumbY + thumbH
-		local isTrackHovered = mousePos.x >= sbX
-			and mousePos.x <= sbX + sbW
-			and mousePos.y >= trackY
-			and mousePos.y <= trackY + trackH
-
-		-- Handle thumb drag start
-		if mousePressed and isThumbHovered then
-			scrollbarDrag.active = true
-			scrollbarDrag.offset = mousePos.y - thumbY
-		end
-
-		-- Handle track click
-		if mousePressed and isTrackHovered and not isThumbHovered then
-			local newThumbY = math.clamp(mousePos.y - thumbH / 2, trackY, trackY + thumbRange)
-			local percent = thumbRange > 0 and ((newThumbY - trackY) / thumbRange) or 0
-			scrollTarget = percent * maxScrollOffset
-			scrollbarDrag.active = true
-			scrollbarDrag.offset = mousePos.y - newThumbY
-		end
-
-		-- Handle dragging
-		if scrollbarDrag.active then
-			if mouseDown then
-				local newThumbY = math.clamp(mousePos.y - scrollbarDrag.offset, trackY, trackY + thumbRange)
-				local percent = thumbRange > 0 and ((newThumbY - trackY) / thumbRange) or 0
-				scrollTarget = percent * maxScrollOffset
-			else
-				scrollbarDrag.active = false
-			end
-		end
-
-		-- Recalculate thumbY after potential drag
-		thumbY = winY + (scrollOffset / maxScrollOffset) * (winH - thumbH)
-
-		rl.DrawRectangle(
-			sbX,
-			winY,
-			sbW,
-			winH,
-			Theme.SecondaryBackgroundColor:ToRaylib(StudioThemeService.SelectedTheme.WindowBackgroundTransparency)
-		)
-		local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.4, 0.4, 0.4)
-			or Color3.new(0.3, 0.3, 0.3)
-		rl.DrawRectangleRounded(
-			structs.Rectangle:new({ x = sbX, y = thumbY, width = sbW, height = thumbH }),
-			0.5,
-			4,
-			thumbColor:ToRaylib(StudioThemeService.SelectedTheme.WindowBackgroundTransparency)
-		)
-	end
+	raylib.lib.EndScissorMode()
 
 	if colorPickerTarget then
 		local cpW, cpH = 240, winH

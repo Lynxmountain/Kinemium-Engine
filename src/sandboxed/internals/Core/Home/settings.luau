@@ -60,8 +60,8 @@ group = aereon.create({
 })
 
 local cells = gui.cellparser({
-	x = 120,
-	y = 150,
+	x = 0,
+	y = 0,
 	width = 800,
 
 	aboutSection = {
@@ -134,6 +134,15 @@ local cells = gui.cellparser({
 	},
 })
 
+local scrollArea = gui.scrollable({
+	child = cells,
+	scrollbarWidth = 8,
+	scrollbarColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+	scrollbarHoverColor = StudioThemeService.SelectedTheme.Accent,
+	scrollbarBackground = StudioThemeService.SelectedTheme.ThirdBackgroundColor,
+	scrollbarBackgroundTransparency = 0.7,
+})
+
 group.frame.setTransparency(1)
 
 repeat
@@ -152,9 +161,12 @@ ishared.Home.pages["Settings"] = function(dt, alpha, slideOffset)
 
 	group.frame.set("obj_rect", arect.new(x, y, screenx, screeny))
 	group.background.set("obj_rect", arect.new(x + 30, y + 30, screenx - 60, screeny - 60))
-	cells.setPosition(120, 150 + slideOffset)
-	cells.setWidth(screenx - 150)
+	group.title.set("obj_rect", arect.new(x + 60, y + 60, 200, 30))
 
 	group.render(dt, { "newProjectPrompt" })
-	cells.render(dt)
+
+	-- Render scroll area
+	scrollArea.set("obj_rect", arect.new(x + 60, y + 100, screenx - 120, screeny - 160))
+	cells.setWidth(screenx - 140)
+	scrollArea.render(dt)
 end

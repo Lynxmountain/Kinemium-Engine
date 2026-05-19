@@ -20,6 +20,8 @@ return function(objects, data)
 		dimTextColor = data.dimTextColor or color3.new(0.6, 0.6, 0.6),
 		accentColor = data.accentColor or color3.new(0.2, 0.6, 1),
 
+		visible = data.visible ~= false,
+		lastSize = { width = data.width or 800, height = data.height or 80 },
 		isHovered = false,
 		onClick = data.onClick,
 		children = {},
@@ -33,6 +35,13 @@ return function(objects, data)
 	end
 
 	wrapper.set = function(prop, value)
+		if prop == "obj_rect" and value then
+			config.obj_rect = value
+			if value.width and value.height and value.width > 0 and value.height > 0 then
+				config.lastSize = { width = value.width, height = value.height }
+			end
+			return wrapper
+		end
 		config[prop] = value
 		return wrapper
 	end
@@ -42,10 +51,19 @@ return function(objects, data)
 	end
 
 	wrapper.get_rect = function()
+		if not config.visible then
+			return rect.new(config.obj_rect.x, config.obj_rect.y, 0, 0)
+		end
+		if (config.obj_rect.width == 0 or config.obj_rect.height == 0) and config.lastSize then
+			return rect.new(config.obj_rect.x, config.obj_rect.y, config.lastSize.width, config.lastSize.height)
+		end
 		return config.obj_rect
 	end
 
 	wrapper.render = function(dt)
+		if not config.visible then
+			return
+		end
 		local r = config.obj_rect
 		config.isHovered = rect.MouseIsInRect(r)
 

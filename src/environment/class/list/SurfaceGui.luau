@@ -3,6 +3,7 @@ local Vector3 = require("@Vector3")
 local UDim2 = require("@UDim2")
 local Enum = require("@EnumMap")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 
 local lib = raylib.lib
 local const = raylib.const
@@ -99,6 +100,7 @@ local function loadTextureFromPath(path)
 	if type(path) ~= "string" or path == "" then
 		return nil
 	end
+	path = zembed.AssetPath(path)
 
 	local ok, data = pcall(zune.fs.readFileSync, path, true)
 	if not ok or not data then

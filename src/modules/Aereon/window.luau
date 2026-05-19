@@ -1,4 +1,6 @@
 return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
+	local gui = require("./component/lib")
+	local arect = require("@arect")
 	local windowRegistry = {}
 	local module = {}
 	local draggedWindow = nil
@@ -8,6 +10,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	local MouseCursor = require("@Kinemium.MouseCursor")
 	local spring = require("@kispring")
 	local KinemiumFontService = game:GetService("KinemiumFontService")
+	local zembed = require("@zembed")
 
 	local resizingWindow = nil
 	local resizeSide = nil
@@ -25,7 +28,7 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 		shadowTexture = buffer.create(16)
 		shadowSize = vector.create(0, 0)
 	else
-		shadowTexture = raylib.LoadTexture("./src/assets/images/shadow.png")
+		shadowTexture = raylib.LoadTexture(zembed.AssetPath("kineasset://images/shadow.png"))
 		shadowSize = vector.create(buffer.readi32(shadowTexture, 4), buffer.readi32(shadowTexture, 8))
 	end
 
@@ -125,22 +128,36 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 	end
 
 	local function getResizeSide(window, mousePos)
-		if window.Minimized then
-			return nil
-		end
-		local sides = {}
-		local t = resizeThreshold
-		if math.abs(mousePos.x - window.x) <= t then
-			table.insert(sides, "left")
-		elseif math.abs(mousePos.x - (window.x + window.width)) <= t then
-			table.insert(sides, "right")
-		end
-		if math.abs(mousePos.y - window.y) <= t then
-			table.insert(sides, "top")
-		elseif math.abs(mousePos.y - (window.y + window.height)) <= t then
-			table.insert(sides, "bottom")
-		end
-		return #sides > 0 and sides or nil
+				if window.Minimized then
+					return nil
+				end
+				local sides = {}
+				local t = resizeThreshold
+
+				-- Check horizontal position
+				local isLeft = math.abs(mousePos.x - window.x) <= t
+				local isRight = math.abs(mousePos.x - (window.x + window.width)) <= t
+
+				-- Check vertical position
+				local isTop = math.abs(mousePos.y - window.y) <= t
+				local isBottom = math.abs(mousePos.y - (window.y + window.height)) <= t
+
+				-- Only allow resizing at corners (must be on both horizontal and vertical edges)
+				if isLeft and isTop then
+					table.insert(sides, "left")
+					table.insert(sides, "top")
+				elseif isLeft and isBottom then
+					table.insert(sides, "left")
+					table.insert(sides, "bottom")
+				elseif isRight and isTop then
+					table.insert(sides, "right")
+					table.insert(sides, "top")
+				elseif isRight and isBottom then
+					table.insert(sides, "right")
+				table.insert(sides, "bottom")
+			end
+
+	return #sides > 0 and sides or nil
 	end
 
 	local function setCursorForResize(sides)
@@ -957,14 +974,46 @@ return function(raylib: typeof(require("@raylib").lib), structs, game, theme)
 						raylib.BeginScissorMode(wx, wy + contentOffsetY, ww, contentH)
 					end
 
-					if hasTabs and wd.activeTab then
-						local activeTab = wd.tabs[wd.activeTab]
-						if activeTab and activeTab.render then
-							activeTab.render(wd)
+					if wd.Scrollable then
+						if not wd._scrollArea then
+							wd._scrollArea = gui.scrollable({
+								scrollbarWidth = 6,
+								scrollbarColor = Color3.new(0.3, 0.3, 0.3),
+								scrollbarHoverColor = Color3.new(0.5, 0.5, 0.5),
+								scrollbarBackgroundTransparency = 1,
+								child = {
+									get_rect = function()
+										return arect.new(0, 0, ww, wd._contentHeight or 0)
+									end,
+									set = function(self, prop, value)
+										if prop == "obj_rect" then
+											self.rect = value
+										end
+									end,
+									render = function(self, dt)
+										if hasTabs and wd.activeTab then
+											local activeTab = wd.tabs[wd.activeTab]
+											if activeTab and activeTab.render then
+												activeTab.render(wd)
+											end
+										end
+										module.stepped(wd, dt)
+									end,
+								},
+							})
 						end
-					end
+						wd._scrollArea.set("obj_rect", arect.new(wx, wy + contentOffsetY, ww, contentH))
+						wd._scrollArea.render(dt)
+					else
+						if hasTabs and wd.activeTab then
+							local activeTab = wd.tabs[wd.activeTab]
+							if activeTab and activeTab.render then
+								activeTab.render(wd)
+							end
+						end
 
-					module.stepped(wd, dt)
+						module.stepped(wd, dt)
+					end
 
 					if not wd.DisableClipping then
 						raylib.EndScissorMode()

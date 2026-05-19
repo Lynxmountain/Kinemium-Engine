@@ -2,6 +2,7 @@
 --!native
 
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local lib = raylib.lib
 local const = raylib.const
 local structs = raylib.structs
@@ -50,7 +51,10 @@ local function ensureResources()
 
 	shadowSize = chooseShadowSize()
 
-	depthShader = lib.LoadShader("./src/assets/shaders/depth.vs", "./src/assets/shaders/depth.fs")
+	depthShader = lib.LoadShader(
+		zembed.AssetPath("kineasset://shaders/depth.vs"),
+		zembed.AssetPath("kineasset://shaders/depth.fs")
+	)
 	if lib.IsShaderValid(depthShader) == 0 then
 		warn("depth shader invalid")
 	end

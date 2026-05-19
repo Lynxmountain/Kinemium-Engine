@@ -219,6 +219,9 @@ local searchBox = textbox.new({
 	padding = 5,
 })
 
+KinemiumIconLoader.new("Filter", "./src/assets/images/icons/Configuration.png")
+local filterIcon = KinemiumIconLoader.ToTexture(KinemiumIconLoader.Get("Filter"))
+
 local addMenuSearchBox = textbox.new({
 	multiline = false,
 	placeholder = "Search classes..",
@@ -235,12 +238,112 @@ local addMenuSearchBox = textbox.new({
 local searchQuery = searchBox:getText() or ""
 local isSearching = #searchQuery > 0
 
-local function matchesSearch(instance, query)
-	if instance.Name:lower():find(query:lower(), 1, true) then
+local searchFilterOptions = { "Name", "ClassName", "Property", "Tags", "Attributes", "All" }
+local searchFilterMode = "Name"
+local searchFilterButton
+local searchFilterMenu
+local searchFilterMenuVisible = false
+
+local function getTagsForInstance(instance)
+	local ok, tags = pcall(function()
+		if instance.GetTags then
+			return instance:GetTags()
+		end
+		local CollectionService = game:GetService("CollectionService")
+		return CollectionService:GetTags(instance)
+	end)
+	if ok and type(tags) == "table" then
+		return tags
+	end
+	return {}
+end
+
+local function getAttributesForInstance(instance)
+	local ok, attrs = pcall(function()
+		return instance:GetAttributes()
+	end)
+	if ok and type(attrs) == "table" then
+		return attrs
+	end
+	return {}
+end
+
+local function instanceMatches(instance, query, mode)
+	local q = string.lower(query or "")
+	if q == "" then
+		return true
+	end
+
+	if mode == "Name" then
+		return string.find(instance.Name:lower(), q, 1, true) ~= nil
+	elseif mode == "ClassName" then
+		return string.find((instance.ClassName or ""):lower(), q, 1, true) ~= nil
+	elseif mode == "Property" then
+		local propName, propValue = q:match("^%s*([^:]+)%s*:%s*(.+)%s*$")
+		if not propName then
+			propName = q
+		end
+		local ok, value = pcall(function()
+			return instance[propName]
+		end)
+		if ok then
+			if propValue then
+				return string.find(tostring(value):lower(), propValue, 1, true) ~= nil
+			end
+			return true
+		end
+		return false
+	elseif mode == "Tags" then
+		for _, tag in ipairs(getTagsForInstance(instance)) do
+			if string.find(string.lower(tag), q, 1, true) then
+				return true
+			end
+		end
+		return false
+	elseif mode == "Attributes" then
+		local attrName, attrValue = q:match("^%s*([^:]+)%s*:%s*(.+)%s*$")
+		local attrs = getAttributesForInstance(instance)
+		if attrName then
+			local value = attrs[attrName]
+			if value == nil then
+				return false
+			end
+			return string.find(tostring(value):lower(), attrValue, 1, true) ~= nil
+		end
+		for key, value in pairs(attrs) do
+			if string.find(string.lower(key), q, 1, true) or string.find(tostring(value):lower(), q, 1, true) then
+				return true
+			end
+		end
+		return false
+	elseif mode == "All" then
+		if string.find(instance.Name:lower(), q, 1, true) then
+			return true
+		end
+		if string.find((instance.ClassName or ""):lower(), q, 1, true) then
+			return true
+		end
+		if instanceMatches(instance, query, "Property") then
+			return true
+		end
+		if instanceMatches(instance, query, "Tags") then
+			return true
+		end
+		if instanceMatches(instance, query, "Attributes") then
+			return true
+		end
+		return false
+	end
+
+	return string.find(instance.Name:lower(), q, 1, true) ~= nil
+end
+
+local function matchesSearch(instance, query, mode)
+	if instanceMatches(instance, query, mode) then
 		return true
 	end
 	for _, child in ipairs(instance:GetChildren()) do
-		if matchesSearch(child, query) then
+		if matchesSearch(child, query, mode) then
 			return true
 		end
 	end
@@ -910,7 +1013,7 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 	if instance.Destroyed or instance.ExplorerHidden then
 		return
 	end
-	if isSearching and not matchesSearch(instance, searchQuery) then
+	if isSearching and not matchesSearch(instance, searchQuery, searchFilterMode) then
 		return
 	end
 
@@ -1059,7 +1162,7 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 	yOffset = yOffset + NODE_HEIGHT + 2
 
 	local shouldExpand = expanded[instance]
-		or (isSearching and matchesSearch(instance, searchQuery))
+		or (isSearching and matchesSearch(instance, searchQuery, searchFilterMode))
 		or hasSelectedDescendant(instance)
 
 	if hasChildren and shouldExpand then
@@ -1068,87 +1171,6 @@ local function DrawTree(instance, indent, winX, winY, winWidth, isLastChild)
 			DrawTree(child, indent + 1, winX, winY, winWidth, isLastChild)
 		end
 	end
-end
-
-local function drawScrollbar(windowData)
-	local scrollbarX = windowData.x + windowData.width - SCROLLBAR_WIDTH - 4
-	local scrollbarY = windowData.y + 30
-	local scrollbarHeight = windowData.height - 40
-	local trackHeight = scrollbarHeight - 8
-
-	local thumbHeight = math.max(30, (scrollbarHeight * scrollbarHeight) / contentHeight)
-	local thumbY = scrollbarY + 4 + (scrollOffset / maxScroll) * (trackHeight - thumbHeight)
-
-	local mousePos = rl.GetMousePosition()
-	local mousePressed = rl.IsMouseButtonPressed(0) == 1
-	local mouseDown = rl.IsMouseButtonDown(0) == 1
-
-	local scrollbarRect = { x = scrollbarX, y = thumbY, width = SCROLLBAR_WIDTH, height = thumbHeight }
-	local trackRect = { x = scrollbarX, y = scrollbarY + 4, width = SCROLLBAR_WIDTH, height = trackHeight }
-	local isThumbHovered = isMouseInRect(scrollbarRect, mousePos)
-	local isTrackHovered = isMouseInRect(trackRect, mousePos)
-
-	-- Handle thumb drag start
-	if mousePressed and isThumbHovered then
-		scrollbarDrag.active = true
-		scrollbarDrag.offset = mousePos.y - thumbY
-	end
-
-	-- Handle track click
-	if mousePressed and isTrackHovered and not isThumbHovered then
-		local newThumbY =
-			math.clamp(mousePos.y - thumbHeight / 2, scrollbarY + 4, scrollbarY + 4 + trackHeight - thumbHeight)
-		local percent = (newThumbY - (scrollbarY + 4)) / (trackHeight - thumbHeight)
-		scrollTarget = percent * maxScroll
-		scrollbarDrag.active = true
-		scrollbarDrag.offset = mousePos.y - newThumbY
-	end
-
-	-- Handle dragging
-	if scrollbarDrag.active then
-		if mouseDown then
-			local newThumbY = math.clamp(
-				mousePos.y - scrollbarDrag.offset,
-				scrollbarY + 4,
-				scrollbarY + 4 + trackHeight - thumbHeight
-			)
-			local percent = (newThumbY - (scrollbarY + 4)) / (trackHeight - thumbHeight)
-			scrollTarget = percent * maxScroll
-		else
-			scrollbarDrag.active = false
-		end
-	end
-
-	-- Recalculate thumbY after potential drag
-	thumbY = scrollbarY + 4 + (scrollOffset / maxScroll) * (trackHeight - thumbHeight)
-
-	-- Track
-	rl.DrawRectangleRounded(
-		structs.Rectangle:new({
-			x = scrollbarX,
-			y = scrollbarY + 4,
-			width = SCROLLBAR_WIDTH,
-			height = trackHeight,
-		}),
-		0.5,
-		4,
-		Color3.new(0.1, 0.1, 0.1):ToRaylib(0)
-	)
-
-	-- Thumb
-	local thumbColor = (isThumbHovered or scrollbarDrag.active) and Color3.new(0.5, 0.5, 0.5)
-		or Color3.new(0.4, 0.4, 0.4)
-	rl.DrawRectangleRounded(
-		structs.Rectangle:new({
-			x = scrollbarX,
-			y = thumbY,
-			width = SCROLLBAR_WIDTH,
-			height = thumbHeight,
-		}),
-		0.5,
-		4,
-		thumbColor:ToRaylib(0)
-	)
 end
 
 local screenGui = Instance.new("ScreenGui")
@@ -1174,6 +1196,8 @@ local explorerWindow = window.create({
 	width = frame.AbsoluteSize.X,
 	height = frame.AbsoluteSize.Y,
 })
+explorerWindow.Scrollable = true
+explorerWindow._contentHeight = 0
 
 local renderer = KinemiumRaylib.GetRenderer()
 local StudioThemeService = game:GetService("StudioThemeService")
@@ -1204,6 +1228,11 @@ explorerWindow.stepped = function(windowData)
 
 	windowObject = windowData
 	yOffset = 0
+	if windowData._scrollArea and windowData._scrollArea.get then
+		scrollOffset = windowData._scrollArea.get("scrollOffset") or 0
+	else
+		scrollOffset = 0
+	end
 
 	if rl.IsWindowResized() == 1 then
 		windowData.x = frame.AbsolutePosition.X
@@ -1213,6 +1242,7 @@ explorerWindow.stepped = function(windowData)
 	end
 
 	local mousePos = rl.GetMousePosition()
+	local titleBarH = windowData._titleBarH or 28
 	local windowRect = {
 		x = windowData.x,
 		y = windowData.y,
@@ -1222,22 +1252,72 @@ explorerWindow.stepped = function(windowData)
 
 	local boxWidth = windowRect.width * 0.95
 	local boxX = windowRect.x + (windowRect.width - boxWidth) * 0.5
+	local filterBtnSize = 30
+	local filterGap = 8
+	local searchWidth = boxWidth - filterBtnSize - filterGap
 
-	searchBox:drawWithExtras(boxX, windowRect.y + 35, boxWidth, 30)
+	local contentY = windowData.y + titleBarH
+	rl.BeginScissorMode(windowData.x, contentY, windowData.width, windowData.height - titleBarH)
 
-	if isMouseInRect(windowRect, mousePos) and not activeAddMenu then
-		local mouseWheel = rl.GetMouseWheelMove()
-		if math.abs(mouseWheel) > 0.01 then
-			scrollTarget -= mouseWheel * NODE_HEIGHT * SCROLL_SPEED
+	searchBox:drawWithExtras(boxX, windowRect.y + 35, searchWidth, 30)
+	if not searchFilterButton then
+		searchFilterButton = gui.imageButton({
+			image = filterIcon,
+			imageScale = 0.7,
+			backgroundColor = Theme.SecondaryBackgroundColor,
+			hoverColor = Theme.BackgroundColor,
+			pressColor = Theme.BackgroundColor,
+			onClick = function()
+				searchFilterMenuVisible = not searchFilterMenuVisible
+				if searchFilterMenuVisible then
+					local menuW = 180
+					local itemH = 24
+					local menuH = (#searchFilterOptions * itemH) + 8
+					local menuX = boxX + searchWidth + filterGap
+					local menuY = windowRect.y + 35 + filterBtnSize + 6
+					local maxX = windowRect.x + windowRect.width - menuW - 4
+					local maxY = windowRect.y + windowRect.height - menuH - 4
+					menuX = math.max(windowRect.x + 4, math.min(menuX, maxX))
+					menuY = math.max(windowRect.y + 4, math.min(menuY, maxY))
+					searchFilterMenu.set("obj_rect", arect.new(menuX, menuY, menuW, 0))
+					searchFilterMenu:show()
+				else
+					searchFilterMenu:hide()
+				end
+			end,
+		})
+	end
+	searchFilterButton.set(
+		"obj_rect",
+		arect.new(boxX + searchWidth + filterGap, windowRect.y + 35, filterBtnSize, filterBtnSize)
+	)
+	searchFilterButton.render(dt)
+
+	if not searchFilterMenu then
+		local items = {}
+		for _, opt in ipairs(searchFilterOptions) do
+			table.insert(items, {
+				label = opt,
+				onClick = function()
+					searchFilterMode = opt
+					searchFilterMenuVisible = false
+					searchFilterMenu:hide()
+				end,
+			})
 		end
+		searchFilterMenu = gui.menu({
+			x = 0,
+			y = 0,
+			width = 180,
+			Font = vend,
+			backgroundColor = Theme.SecondaryBackgroundColor,
+			textColor = Theme.TextColor,
+			hoverColor = Theme.BackgroundColor,
+			items = items,
+		})
+		searchFilterMenu:hide()
 	end
 
-	rl.BeginScissorMode(
-		math.floor(windowData.x),
-		math.floor(windowData.y + 70),
-		math.floor(windowData.width),
-		math.floor(windowData.height - 70)
-	)
 
 	local services = getServicesInOrder()
 	for _, child in ipairs(services) do
@@ -1246,13 +1326,7 @@ explorerWindow.stepped = function(windowData)
 
 	rl.EndScissorMode()
 
-	contentHeight = yOffset
-	maxScroll = math.max(0, contentHeight - (windowData.height - 40))
-
-	scrollTarget = math.clamp(scrollTarget, 0, maxScroll)
-	scrollOffset = scrollOffset + (scrollTarget - scrollOffset) * math.min(dt * 18, 1)
-
-	drawScrollbar(windowData)
+	windowData._contentHeight = yOffset + 100
 
 	if activeAddMenu then
 		drawAdditionMenu(activeAddMenu.instance, rl.GetMousePosition(), activeAddMenu.btnY, activeAddMenu.toggleX)
@@ -1279,5 +1353,9 @@ explorerWindow.stepped = function(windowData)
 				clone.Parent = v.Parent
 			end
 		end
+	end
+
+	if searchFilterMenuVisible then
+		searchFilterMenu.render(dt)
 	end
 end

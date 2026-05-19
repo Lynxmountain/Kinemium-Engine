@@ -1,6 +1,7 @@
 local GuiObject = require("@GuiObject")
 
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local Vector2 = require("@Vector2")
 local Color3 = require("@Color3")
 
@@ -16,7 +17,7 @@ local propTable = {
 
 local function generateCursorImages(object)
 	object._cache = {}
-	local iconpack_path = object.IconPack
+	local iconpack_path = zembed.AssetPath(object.IconPack)
 
 	local entries = fs.entries(iconpack_path)
 
@@ -37,7 +38,7 @@ local function generateCursorImages(object)
 				end
                 --]]
 			elseif string.find(name, ".png") and not _G.IsHeadless then
-				local filePath = iconpack_path .. "/" .. name
+				local filePath = fs.path.join(iconpack_path, name)
 				object._cache[string.gsub(name, ".png", "")] = raylib.lib.LoadTexture(filePath)
 			end
 		end

@@ -153,6 +153,10 @@ comps.projectCard = function(data)
 	return create("./objects/projectCard", data)
 end
 
+comps.scrollable = function(data)
+	return create("./objects/scrollable", data)
+end
+
 comps.engineUIContainer = function(data)
 	return create("./objects/engineUIContainer", data)
 end

@@ -1,6 +1,7 @@
 local Instance = require("@Instance")
 local Vector3 = require("@Vector3")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local const = raylib.const
 local lib = raylib.lib
 local Lighting = Instance.new("Lighting")
@@ -74,6 +75,7 @@ local function setSkyObject(r3d_sky)
 end
 
 local function loadSky(cubemapPath)
+	cubemapPath = zembed.AssetPath(cubemapPath)
 	local r3d_sky = rlib.R3D_LoadCubemap(cubemapPath, 5)
 	setSkyObject(r3d_sky)
 	return function()
@@ -108,7 +110,7 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 		end,
 	})
 
-	local unload = loadSky("./src/assets/sky/test/images/sky.png")
+	local unload = loadSky("kineasset://sky/test/images/sky.png")
 	setAllEnvironmentEffects()
 
 	local light = rlib.R3D_CreateLight(0) -- R3D_LIGHT_DIR
@@ -216,13 +218,13 @@ Lighting.InitRenderer = function(renderer, renderer_signal, datamodel)
 			return
 		end
 		local shader = shaderobject._shader
-		
+
 		if currentCustomSky then
 			-- Update the existing cubemap instead of reallocating
 			rlib.R3D_UpdateCustomSky(currentCustomSky, shader)
 			return
 		end
-		
+
 		local sky = rlib.R3D_GenCustomSky(512, shader)
 		unload()
 		unload = function()

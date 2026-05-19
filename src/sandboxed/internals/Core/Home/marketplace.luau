@@ -10,6 +10,7 @@ local gui = aereon.gui
 
 local KinemiumFontService = game:GetService("KinemiumFontService")
 local HttpService = game:GetService("HttpService")
+local Color3 = require("@Color3")
 
 local vend = KinemiumFontService.GetDefaultFont()
 local KinemiumIconLoader = game:GetService("KinemiumIconLoader")
@@ -17,17 +18,63 @@ local logoPath = "./src/assets/images/icons/vanilla3/kinemium/KinemiumWhite.png"
 local kilLogo = KinemiumIconLoader.ToTexture(logoPath)
 
 local activePluginPage = nil
-local scrollY = 0
 
 local StudioThemeService = game:GetService("StudioThemeService")
 
 local boldFont = KinemiumFontService.GetBoldFont()
+local TextBoxClass = aereon.textbox(StudioThemeService.SelectedTheme, game)
+local marketplaceSearchBox
+local marketplaceFilterDropdown
+local marketplaceSearchText = ""
+local marketplaceFilter = "All"
+local marketplaceEntries = {}
+local marketplaceFilterOptions = { "All" }
+
+local function rebuildMarketplaceFilterOptions()
+	local options = { "All" }
+	local seen = {}
+	for _, entry in ipairs(marketplaceEntries) do
+		local manifest = entry.plugin.manifest or {}
+		local keywords = manifest.keywords or {}
+		local category = keywords[1] or "Plugin"
+		if not seen[category] then
+			seen[category] = true
+			table.insert(options, category)
+		end
+	end
+	marketplaceFilterOptions = options
+	if marketplaceFilterDropdown then
+		marketplaceFilterDropdown.set("options", options)
+		local idx = 1
+		for i, opt in ipairs(options) do
+			if opt == marketplaceFilter then
+				idx = i
+				break
+			end
+		end
+		marketplaceFilterDropdown.set("selectedIndex", idx)
+	end
+end
+
+local function applyMarketplaceFilter()
+	local query = string.lower(marketplaceSearchText or "")
+	for _, entry in ipairs(marketplaceEntries) do
+		local manifest = entry.plugin.manifest or {}
+		local name = string.lower(manifest.name or "")
+		local desc = string.lower(manifest.description or "")
+		local keywords = manifest.keywords or {}
+		local category = keywords[1] or "Plugin"
+		local matchesFilter = marketplaceFilter == "All" or category == marketplaceFilter
+		local matchesSearch = query == "" or string.find(name, query, 1, true) or string.find(desc, query, 1, true)
+		entry.card.set("visible", matchesFilter and matchesSearch)
+	end
+end
 
 local function createCard(plugin, textureData, thumbnailData)
 	local manifest = plugin.manifest
 	local card = gui.itemcard({
-		x = 100,
-		y = 100,
+		x = 0,
+		y = 0,
 		width = 320,
 		height = 360,
 		rounded = { 0.05, 12 },
@@ -115,7 +162,6 @@ local function createPage(plugin, textureData, thumbnailData)
 	return modcard
 end
 
-local cards = {}
 local pages = {}
 
 local plugins
@@ -141,6 +187,25 @@ local function fetchRemoteTexture(url, ext)
 	end
 	return KinemiumIconLoader.ToTextureBuffer(buffer.fromstring(body), ext or getImageExt(url))
 end
+
+local marketplaceFlex = gui.flex({
+	direction = "row",
+	flexWrap = "wrap",
+	gap = 24,
+	padding = { left = 0, right = 0, top = 0, bottom = 0 },
+	autoHeight = true,
+	backgroundColor = Color3.new(0, 0, 0),
+	backgroundTransparency = 1,
+})
+
+local scrollArea = gui.scrollable({
+	child = marketplaceFlex,
+	scrollbarWidth = 8,
+	scrollbarColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+	scrollbarHoverColor = StudioThemeService.SelectedTheme.Accent,
+	scrollbarBackground = StudioThemeService.SelectedTheme.ThirdBackgroundColor,
+	scrollbarBackgroundTransparency = 0.7,
+})
 
 repeat
 	task.wait()
@@ -178,8 +243,11 @@ ishared.Home.pages["Marketplace"] = function(dt, alpha, slideOffset)
 
 				local card = createCard(plugin, textureData, thumbnailData)
 				local page = createPage(plugin, textureData, thumbnailData)
-				table.insert(cards, card)
+				marketplaceFlex.add(card)
 				pages[plugin.manifest.id] = page
+				table.insert(marketplaceEntries, { plugin = plugin, card = card })
+				rebuildMarketplaceFilterOptions()
+				applyMarketplaceFilter()
 
 				if not plugin.icon and plugin.iconUrl then
 					task.spawn(function()
@@ -207,13 +275,15 @@ ishared.Home.pages["Marketplace"] = function(dt, alpha, slideOffset)
 
 				task.wait()
 			end
+			rebuildMarketplaceFilterOptions()
+			applyMarketplaceFilter()
 			isLoadingPlugins = false
 		end)
 	end
 
 	local screenx, screeny = lib.GetRenderWidth(), lib.GetScreenHeight()
 
-	if not plugins and #cards == 0 then
+	if not plugins and marketplaceFlex.get("children") and #marketplaceFlex.get("children") == 0 then
 		if vend then
 			raylib.lib.DrawTextEx(
 				boldFont,
@@ -249,26 +319,13 @@ ishared.Home.pages["Marketplace"] = function(dt, alpha, slideOffset)
 		return
 	end
 
-	-- Handle scrolling
-	local wheel = lib.GetMouseWheelMove()
-	if wheel ~= 0 then
-		scrollY = scrollY - wheel * 40
-		if scrollY < 0 then
-			scrollY = 0
-		end
-	end
-
-	local headerHeight = 120
 	local startX = 100
-	local startY = headerHeight - scrollY + slideOffset
-	local x = startX
-	local y = startY + 30
-	local padding = 24
-	local cardWidth = 320
-	local cardHeight = 360
-
 	local headerY = 80 + slideOffset
 	local headerDesc = 120 + slideOffset
+	local controlsY = headerDesc + 24
+	local searchHeight = 32
+	local dropdownWidth = 180
+	local gap = 12
 
 	if vend then
 		raylib.lib.DrawTextEx(
@@ -289,20 +346,65 @@ ishared.Home.pages["Marketplace"] = function(dt, alpha, slideOffset)
 		)
 	end
 
-	for _, card in ipairs(cards) do
-		card.set("obj_rect", arect.new(x, y, cardWidth, cardHeight))
-		card.render(dt)
-
-		x = x + cardWidth + padding
-		if x + cardWidth > screenx - 100 then
-			x = startX
-			y = y + cardHeight + padding
-		end
+	-- Search + Filter
+	if not marketplaceSearchBox then
+		marketplaceSearchBox = TextBoxClass.new({
+			padding = 8,
+			backgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+			textColor = StudioThemeService.SelectedTheme.TextColor,
+			placeholderColor = StudioThemeService.SelectedTheme.SecondaryTextColor,
+			cornerRadius = 0.2,
+			BackgroundTransparency = 0,
+			BorderTransparency = 1,
+			placeholder = "Search plugins...",
+			fontSize = 14,
+			escapeBlurs = false,
+			blurOnSubmit = false,
+			onChange = function(text)
+				marketplaceSearchText = text or ""
+				applyMarketplaceFilter()
+			end,
+		})
 	end
 
-	local contentHeight = y + cardHeight - (startY + 40) + padding
-	local maxScroll = math.max(0, contentHeight - screeny + 100)
-	if scrollY > maxScroll then
-		scrollY = maxScroll
+	local searchWidth = screenx - 170 - dropdownWidth - gap
+	marketplaceSearchBox:drawWithExtras(startX, controlsY, searchWidth, searchHeight)
+	local currentSearch = marketplaceSearchBox:getText() or ""
+	if currentSearch ~= marketplaceSearchText then
+		marketplaceSearchText = currentSearch
+		applyMarketplaceFilter()
 	end
+
+	if not marketplaceFilterDropdown then
+		marketplaceFilterDropdown = gui.dropdown({
+			x = startX + searchWidth + gap,
+			y = controlsY,
+			width = dropdownWidth,
+			height = searchHeight,
+			options = marketplaceFilterOptions,
+			font = vend,
+			selectedIndex = 1,
+			backgroundColor = StudioThemeService.SelectedTheme.SecondaryBackgroundColor,
+			hoverColor = StudioThemeService.SelectedTheme.ThirdBackgroundColor,
+			textColor = StudioThemeService.SelectedTheme.TextColor,
+			borderTransparency = 1,
+			onSelect = function(index, value)
+				marketplaceFilter = value or "All"
+				applyMarketplaceFilter()
+			end,
+		})
+	end
+	marketplaceFilterDropdown.set(
+		"obj_rect",
+		arect.new(startX + searchWidth + gap, controlsY, dropdownWidth, searchHeight)
+	)
+
+	-- Render scroll area
+	local scrollY = controlsY + searchHeight + 16
+	local scrollRect = arect.new(startX, scrollY, screenx - 170, screeny - (scrollY + 50))
+	scrollArea.set("obj_rect", scrollRect)
+	marketplaceFlex.set("width", screenx - 180)
+	scrollArea.render(dt)
+
+	marketplaceFilterDropdown.render(dt)
 end

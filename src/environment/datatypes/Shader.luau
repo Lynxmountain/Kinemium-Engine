@@ -2,6 +2,7 @@ local Shader = {}
 Shader.__index = Shader
 
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local util = require("@kineshader")
 local r3d = require("@r3d")
 
@@ -56,7 +57,9 @@ function Shader.new(source)
 	if source._shader then
 		self._shader = source._shader
 	elseif self._type == "raylib" then
-		self._shader = raylib.lib.LoadShader(source.vertex, source.fragment)
+		local vertex = source.vertex and zembed.AssetPath(source.vertex) or nil
+		local fragment = source.fragment and zembed.AssetPath(source.fragment) or nil
+		self._shader = raylib.lib.LoadShader(vertex, fragment)
 	elseif self._type == "surface" then
 		if source.glsl then
 			self._shader = r3d.lib.R3D_LoadSurfaceShaderFromMemory(source.glsl)

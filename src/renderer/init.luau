@@ -2,6 +2,7 @@
 --!native
 
 local raylib = require("./external/raylib")
+local zembed = require("@zembed")
 local task = zune.task
 local KiRend = {}
 --local raygui = require("@raygui")
@@ -233,6 +234,7 @@ function KiRend.new(config: KiRendConf)
 		Max3DRenderPixels = max3DRenderPixels,
 
 		LoadImageAsTex = function(path)
+			path = zembed.AssetPath(path)
 			local ok, image = pcall(lib.LoadImage, path)
 			if not ok or not image then
 				error("Failed to load image: " .. tostring(path))
@@ -528,6 +530,7 @@ function KiRend.new(config: KiRendConf)
 
 		Audio = {
 			new = function(audioPath, volume, pitch)
+				audioPath = zembed.AssetPath(audioPath)
 				local sound = lib.LoadSound(audioPath)
 				if volume then
 					lib.SetSoundVolume(sound, volume)
@@ -705,7 +708,7 @@ function KiRend.new(config: KiRendConf)
 	end
 
 	function rendererObject:SetIcon(Texture)
-		local engineIcon = lib.LoadImage(Texture)
+		local engineIcon = lib.LoadImage(zembed.AssetPath(Texture))
 		lib.SetWindowIcon(engineIcon)
 	end
 

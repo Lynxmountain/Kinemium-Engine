@@ -19,8 +19,14 @@ local filesystem = require("@filesystem")
 
 filesystem.createFolder(".", ".temp")
 filesystem.createFolder(".", "plugins")
-filesystem.createFolder("./src", "projects")
-filesystem.createFile("./src", "projects.toml", "")
+
+if zembed.IsEmbedded() then
+	filesystem.createFolder(".", "projects")
+	filesystem.createFile(".", "projects.toml", "")
+else
+	filesystem.createFolder("./src", "projects")
+	filesystem.createFile("./src", "projects.toml", "")
+end
 
 _G.ENGINE_PROFILER = require("@profiler")
 _G.ENGINE_VERSION = "1.10.7"

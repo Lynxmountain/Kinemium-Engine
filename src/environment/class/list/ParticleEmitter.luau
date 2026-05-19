@@ -10,6 +10,7 @@ local NumberRange = require("@NumberRange")
 local ColorSequenceKeypoint = require("@ColorSequenceKeypoint")
 local r3d = require("@r3d")
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 
 local rlib = r3d.lib
 local r3dstructs = r3d.structs
@@ -229,6 +230,7 @@ local function createMaterial(texturePath)
 	buffer.copy(material, 0, baseMaterial, 0, r3dstructs.R3D_Material:size())
 
 	if type(texturePath) == "string" and texturePath ~= "" then
+		texturePath = zembed.AssetPath(texturePath)
 		local ok, data = pcall(zune.fs.readFileSync, texturePath, true)
 		if ok and data then
 			local ext = lib.GetFileExtension(texturePath)
@@ -472,9 +474,10 @@ return {
 			albedoMap = map
 
 			if type(instance.EmissionTexture) == "string" and instance.EmissionTexture ~= "" then
-				local ok, data = pcall(zune.fs.readFileSync, instance.EmissionTexture, true)
+				local emissionTexture = zembed.AssetPath(instance.EmissionTexture)
+				local ok, data = pcall(zune.fs.readFileSync, emissionTexture, true)
 				if ok and data then
-					local ext = lib.GetFileExtension(instance.EmissionTexture)
+					local ext = lib.GetFileExtension(emissionTexture)
 					local okLoad, map2 =
 						pcall(rlib.R3D_LoadEmissionMapFromMemory, ext, data, buffer.len(data), raylib.const.WHITE, 1)
 					if okLoad then

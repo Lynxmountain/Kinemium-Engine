@@ -2,6 +2,7 @@
 --!native
 local blurmod = {}
 local raylib = require("@raylib")
+local zembed = require("@zembed")
 local lib, structs, const = raylib.lib, raylib.structs, raylib.const
 
 local function extract_texture(v)
@@ -23,7 +24,7 @@ function blurmod.Init(width, height)
 	width = width or lib.GetRenderWidth()
 	height = height or lib.GetRenderHeight()
 
-	local blurShader = lib.LoadShader(nil, "./src/assets/shaders/blur3d.frag")
+	local blurShader = lib.LoadShader(nil, zembed.AssetPath("kineasset://shaders/blur3d.frag"))
 	local resolutionLoc = lib.GetShaderLocation(blurShader, "resolution")
 	local directionLoc = lib.GetShaderLocation(blurShader, "direction")
 	local radiusLoc = lib.GetShaderLocation(blurShader, "blurRadius")

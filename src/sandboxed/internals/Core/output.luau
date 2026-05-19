@@ -16,6 +16,7 @@ local structs = KinemiumRaylib.GetStructs()
 local vend = KinemiumFontService.GetDefaultFont()
 local Theme = game:GetService("StudioThemeService").SelectedTheme
 local arectlib = require("@arect")
+local scrollableComp
 local scrollOffset = 0
 local scrollTarget = 0
 local repr = require("@repr")
@@ -244,77 +245,90 @@ local function create_window(title, frame)
 						end
 					end
 
+					local consoleContent
+					consoleContent = {
+						get_rect = function()
+							return arectlib.new(0, 0, listRect.width, totalHeight)
+						end,
+						set = function(prop, value)
+							if prop == "obj_rect" then
+								consoleContent.rect = value
+							end
+						end,
+						render = function(dt)
+							local r = consoleContent.rect
+							local currentY = r.y
+							for i, log in ipairs(logs) do
+								if log then
+									local cacheKey = log.id or i
+									local cacheEntry = logLayoutCache[cacheKey]
+									if cacheEntry then
+										local logRect =
+											arectlib.new(winX + 5, currentY, winWidth - 10, cacheEntry.height)
+
+										if
+											currentY + cacheEntry.height >= listRect.y
+											and currentY <= listRect.y + listRect.height
+										then
+											for lineIndex, lineText in ipairs(cacheEntry.lines) do
+												local textY = logRect.y + 4 + (lineIndex - 1) * lineHeight
+												rl.DrawTextEx(
+													vend,
+													lineText,
+													vector.create(logRect.x + 8, textY),
+													LOG_FONT_SIZE,
+													LOG_FONT_SPACING,
+													cacheEntry.color
+												)
+											end
+
+											if arectlib.MouseIsInRect(logRect) then
+												rl.DrawLineEx(
+													vector.create(logRect.x, logRect.y + cacheEntry.height),
+													vector.create(
+														logRect.x + logRect.width,
+														logRect.y + cacheEntry.height
+													),
+													1,
+													Theme.Accent:ToRaylib(0)
+												)
+											end
+										end
+
+										currentY = currentY + cacheEntry.height + padding
+									end
+								end
+							end
+						end,
+					}
+
+					if not scrollableComp then
+						scrollableComp = aereon.gui.scrollable({
+							child = consoleContent,
+							scrollbarWidth = 6,
+							scrollbarColor = Theme.SecondaryBackgroundColor,
+							scrollbarHoverColor = Theme.Accent,
+							scrollbarBackgroundTransparency = 1,
+						})
+					end
+
 					local maxScroll = math.max(0, totalHeight - listRect.height)
 					local wasAtBottom = math.abs(scrollTarget - lastMaxScroll) < 2
-						or math.abs(scrollOffset - lastMaxScroll) < 2
 
 					if logCount ~= lastLogCount then
 						lastLogCount = logCount
 						if wasAtBottom then
-							scrollTarget = maxScroll
+							scrollableComp.set("scrollTarget", maxScroll)
 						end
 					end
 
-					local mousePos = rl.GetMousePosition()
-					if isMouseInRect(listRect, mousePos) then
-						local wheel = rl.GetMouseWheelMove()
-						if math.abs(wheel) > 0.01 then
-							scrollTarget = scrollTarget - (wheel * lineHeight * SCROLL_SPEED)
-						end
-					end
-
-					scrollTarget = math.clamp(scrollTarget, 0, maxScroll)
-					scrollOffset = scrollOffset + (scrollTarget - scrollOffset) * math.min(dt * SCROLL_SMOOTHNESS, 1)
-					scrollOffset = math.clamp(scrollOffset, 0, maxScroll)
 					lastMaxScroll = maxScroll
-
-					rl.BeginScissorMode(
-						math.floor(listRect.x),
-						math.floor(listRect.y),
-						math.floor(listRect.width),
-						math.floor(listRect.height)
+					scrollableComp.set(
+						"obj_rect",
+						arectlib.new(listRect.x, listRect.y, listRect.width, listRect.height)
 					)
-
-					local currentY = winY - scrollOffset
-					for i, log in ipairs(logs) do
-						if log then
-							local cacheKey = log.id or i
-							local cacheEntry = logLayoutCache[cacheKey]
-							if cacheEntry then
-								local rect = arectlib.new(winX + 5, currentY, winWidth - 10, cacheEntry.height)
-
-								if
-									currentY + cacheEntry.height >= listRect.y
-									and currentY <= listRect.y + listRect.height
-								then
-									for lineIndex, lineText in ipairs(cacheEntry.lines) do
-										local textY = rect.y + 4 + (lineIndex - 1) * lineHeight
-										rl.DrawTextEx(
-											vend,
-											lineText,
-											vector.create(rect.x + 8, textY),
-											LOG_FONT_SIZE,
-											LOG_FONT_SPACING,
-											cacheEntry.color
-										)
-									end
-
-									if arectlib.MouseIsInRect(rect) then
-										rl.DrawLineEx(
-											vector.create(rect.x, rect.y + cacheEntry.height),
-											vector.create(rect.x + rect.width, rect.y + cacheEntry.height),
-											1,
-											Theme.Accent:ToRaylib(0)
-										)
-									end
-								end
-
-								currentY = currentY + cacheEntry.height + padding
-							end
-						end
-					end
-
-					rl.EndScissorMode()
+					scrollableComp.set("contentHeight", totalHeight)
+					scrollableComp.render(dt)
 
 					box:drawWithExtras(
 						windowData.x + padding,

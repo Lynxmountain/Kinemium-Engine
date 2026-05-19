@@ -11,7 +11,7 @@ local raylib = require("@raylib")
 local lib = raylib.lib
 
 local zembed = require("@zembed")
-local general = zembed.IsEmbedded() and "./assets/images/icons" or "./src/assets/images/icons"
+local general = zembed.AssetPath("kineasset://images/icons")
 
 KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 	if IsHeadless then
@@ -51,6 +51,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 	KinemiumIconLoader:SetProperties({
 		Reload = reload,
 		LoadImageCustom = function(path: string)
+			path = zembed.AssetPath(path)
 			if true then
 				local image = raylib.lib.LoadImage(path)
 
@@ -138,16 +139,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			return nil
 		end,
 		ToTexture = function(path: string)
-			if zembed.IsEmbedded() then
-				if not path:match("^%a:") then -- ignore C:\ style paths
-					if path:match("^%.%./") then
-					elseif path:match("^%./") then
-						path = "../" .. path:sub(3)
-					else
-						path = "../" .. path
-					end
-				end
-			end
+			path = zembed.AssetPath(path)
 
 			if textures[path] then
 				return textures[path]
@@ -192,6 +184,7 @@ KinemiumIconLoader.InitRenderer = function(renderer, renderer_signal)
 			registry[name] = newPath
 		end,
 		LoadAutoTexture = function(name, path)
+			path = zembed.AssetPath(path)
 			if textures[path] then
 				return textures[path].texture
 			end

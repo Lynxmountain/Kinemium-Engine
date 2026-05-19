@@ -21,6 +21,8 @@ local Vector2 = require("../../../datatypes/Vector2")
 local Vector3 = require("../../../datatypes/Vector3")
 local Vector3int16 = require("../../../datatypes/Vector3int16")
 
+local fs = zune.fs
+
 local RBXModelImporter = Instance.new("RBXModelImporter")
 RBXModelImporter.ExplorerHidden = true
 
@@ -563,6 +565,27 @@ RBXModelImporter.InitRenderer = function(renderer, renderer_signal, datamodel)
 			end
 			return results
 		end,
+
+		ImportPlaceFile = function(path)
+			local file = fs.readFile(path, true) -- return buffer
+			if file then
+			    local decoded = rbxImport.deserializePlace(file)
+				local converted = {}
+
+				for _, service in pairs(decoded:GetChildren()) do
+					converted[service.Name] = {}
+
+					for _, child in pairs(service:GetChildren()) do
+						local inst = decodeObject(child)
+				        if inst then
+							table.insert(converted[service.Name], inst)
+						end
+					end
+				end
+				return converted
+			end
+			return false
+		end
 	})
 end
 return RBXModelImporter

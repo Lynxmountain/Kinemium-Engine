@@ -6,7 +6,7 @@ local zembed = require("@zembed")
 local entries
 
 if zembed.IsEmbedded() then
-	entries = zembed.GetScriptsThatHas("datatypes")
+	entries = zembed.GetScriptsThatHas([[environment\datatypes]])
 else
 	entries = fs.entries("./src/environment/datatypes")
 end

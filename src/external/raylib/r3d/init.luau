@@ -40,7 +40,7 @@ end
 local dll = "./src/external/raylib/native/bin/"
 local zembed = require("@zembed")
 if zembed.IsEmbedded() then
-	dll = "./"
+	dll = zembed.ExecutableDir()
 end
 local ffi = zune.ffi
 
@@ -52,9 +52,11 @@ local libname = "r3d." .. ffi.suffix
 local assimpname = "assimp-vc143-mt." .. ffi.suffix
 local raylibname = "raylib." .. ffi.suffix
 
-local asmpPath = dll .. assimpname
+local asmpPath = zembed.IsEmbedded() and zune.fs.path.join(dll, assimpname) or (dll .. assimpname)
+local raylibPath = zembed.IsEmbedded() and zune.fs.path.join(dll, raylibname) or (dll .. raylibname)
+local r3dPath = zembed.IsEmbedded() and zune.fs.path.join(dll, libname) or (dll .. libname)
 
-local stat = zune.fs.stat(dll .. assimpname)
+local stat = zune.fs.stat(asmpPath)
 
 if stat.kind == "none" then
 	print("Did not find assimp LIB, Listing all files in searching directory")
@@ -64,10 +66,10 @@ if stat.kind == "none" then
 end
 
 ffi.dlopen(asmpPath, {})
-ffi.dlopen(dll .. raylibname, {})
+ffi.dlopen(raylibPath, {})
 
-print(dll .. libname)
-local r3d: typeof(funcs) = ffi.dlopen(dll .. libname, funcs)
+print(r3dPath)
+local r3d: typeof(funcs) = ffi.dlopen(r3dPath, funcs)
 
 return {
 	lib = r3d,

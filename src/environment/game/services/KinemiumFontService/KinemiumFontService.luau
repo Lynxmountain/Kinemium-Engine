@@ -94,10 +94,7 @@ local zembed = require("@zembed")
 local fontCount = 0
 
 local function resolveFontPath(path: string)
-	if zembed.IsEmbedded() then
-		return "." .. path
-	end
-	return path
+	return zembed.AssetPath(path)
 end
 
 KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
@@ -138,6 +135,7 @@ KinemiumFontService.InitRenderer = function(renderer, renderer_signal)
 
 			FontAdded:Fire(name, fontPath)
 
+			fontPath = resolveFontPath(fontPath)
 			fontInstance.Font = renderer.Font.new(name, fontPath, 64)
 			loadedFonts[name] = fontInstance.Font
 			fontInstance.Unload = function()

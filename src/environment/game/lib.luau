@@ -42,7 +42,14 @@ function DataModel.new(RENDERER, ...)
 
 	local services
 	if zembed.IsEmbedded() then
-		services = zembed.GetScriptsThatHas([[game\services]])
+		services = {}
+		for _, servicePath in pairs(zembed.GetScriptsThatHas([[environment\game\services]])) do
+			local normalized = servicePath:gsub([[\]], "/")
+			local folderName, fileName = normalized:match("/services/([^/]+)/([^/]+)%.luau$")
+			if folderName and fileName == folderName then
+				table.insert(services, servicePath)
+			end
+		end
 	else
 		services = fs.entries("./src/environment/game/services")
 	end
