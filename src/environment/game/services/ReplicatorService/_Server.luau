@@ -1,6 +1,6 @@
 local Server = {}
 
-local KiNet = require("@KiNet")
+local GNS = require("@GNS")
 local Protocol = require("../NetworkService/Protocol")
 local Shared = require("./Shared")
 local OwnedStateAntiCheat = require("./OwnedStateAntiCheat")
@@ -12,7 +12,7 @@ local Enum = require("@EnumMap")
 
 local MAX_TERRAIN_RELIABLE_MESSAGES_PER_TICK = 10
 local OWNERSHIP_REBALANCE_INTERVAL = 0.2
-local REPLICATION_TARGET_BYTES = 50 * 1024
+local REPLICATION_TARGET_BYTES = 1 * 1024 * 1024 -- 1MB per reliable Create message to stay within GNS transport limits
 local MAX_PATCH_ENTRIES_PER_MESSAGE = 96
 local MAX_SNAPSHOT_STATES_PER_MESSAGE = 16
 local INITIAL_INVENTORY_HANDSHAKE_TIMEOUT = 8
@@ -20,7 +20,10 @@ local SNAPSHOT_MIN_SEND_INTERVAL_TICKS = 6
 local SNAPSHOT_IDLE_KEEPALIVE_TICKS = 0
 local SNAPSHOT_MAX_UNACKED_TICKS = 2
 local SNAPSHOT_BACKPRESSURE_RETRY_TICKS = 12
-local MAX_CREATE_PAYLOAD_BYTES = 32 * 1024
+local MAX_CREATE_PAYLOAD_BYTES = REPLICATION_TARGET_BYTES
+local CREATE_BACKPRESSURE_PENDING_LIMIT = 24
+local CREATE_BACKPRESSURE_FRAGMENT_LIMIT = 512
+local CREATE_BACKPRESSURE_LOG_INTERVAL_SECONDS = 10
 local DEBUG_REPLICATION_TRACE = false
 
 local function packArgs(...)
@@ -31,7 +34,7 @@ function Server.init(context)
 	local game = context.game
 	local serializationService = context.SerializationService
 	local networkService = context.NetworkService
-	local transportSerializer = KiNet.Serializer
+	local transportSerializer = GNS.Serializer
 	local stateRegistry = context.StateRegistry
 	local networkOwnership = context.NetworkOwnership
 	local userdata = serializationService.userdata
@@ -39,7 +42,7 @@ function Server.init(context)
 
 	-- Register custom serializer adapters with error handling
 	local ok, SerializerAdapters = pcall(function()
-		return KiNet.SerializerAdapters
+		return GNS.SerializerAdapters
 	end)
 	if ok and SerializerAdapters and SerializerAdapters.EnsureRegistered then
 		SerializerAdapters.EnsureRegistered()
@@ -539,6 +542,10 @@ function Server.init(context)
 				return
 			end
 
+			if type(object._props) ~= "table" then
+				return
+			end
+
 			local updates = {}
 			for prop, value in pairs(object._props) do
 				if prop ~= "Parent" and Shared.IsInstanceReference(value) then
@@ -566,31 +573,6 @@ function Server.init(context)
 			and object.ClassName == "Model"
 			and object.GetAttribute ~= nil
 			and type(object:GetAttribute("__characterUserId")) == "number"
-	end
-
-	local function isCharacterEntity(object)
-		local current = object
-		while current do
-			if isCharacterModel(current) then
-				return true
-			end
-			if current.ClassName == "Workspace" or current.ClassName == "DataModel" then
-				return false
-			end
-			current = current.Parent
-		end
-
-		return false
-	end
-
-	local function listHasCharacterEntity(objects)
-		for _, object in ipairs(objects or {}) do
-			if isCharacterEntity(object) then
-				return true
-			end
-		end
-
-		return false
 	end
 
 	local function sendPatchEntries(recipient, entries)
@@ -668,6 +650,59 @@ function Server.init(context)
 			or "broadcast"
 
 		local batchesSent = 0
+		local pendingBatches = {}
+
+		local function queueBatch(batch)
+			table.insert(pendingBatches, batch)
+		end
+
+		local function waitForCreateBackpressure(sessions)
+			local startedAt = os.clock()
+			local lastWarningAt = startedAt
+
+			while true do
+				local highestPendingMessages = 0
+				local highestPendingFragments = 0
+				local anyConnected = false
+
+				for _, session in ipairs(sessions or {}) do
+					local client = session and session.client
+					if client and GNS.Server:IsClientConnected(client) then
+						anyConnected = true
+						local stats = GNS.Server:GetClientStats(client)
+						highestPendingMessages = math.max(highestPendingMessages, stats.pendingReliable or 0)
+						highestPendingFragments = math.max(
+							highestPendingFragments,
+							stats.pendingReliableFragments or 0
+						)
+					end
+				end
+
+				if not anyConnected then
+					return false
+				end
+
+				if
+					highestPendingMessages < CREATE_BACKPRESSURE_PENDING_LIMIT
+					and highestPendingFragments < CREATE_BACKPRESSURE_FRAGMENT_LIMIT
+				then
+					return true
+				end
+
+				local now = os.clock()
+				if now - lastWarningAt > CREATE_BACKPRESSURE_LOG_INTERVAL_SECONDS then
+					lastWarningAt = now
+					warn(
+						`[Replicator][Server] Create backpressure waiting {string.format(
+							"%.1f",
+							now - startedAt
+						)}s with {highestPendingMessages} unacked reliable messages ({highestPendingFragments} wire fragments)`
+					)
+				end
+
+				task.wait(0.05)
+			end
+		end
 
 		local function sendBatch(batch)
 			if #batch == 0 then
@@ -680,10 +715,9 @@ function Server.init(context)
 				-- this creation will be covered by that client's initial/inventory
 				-- sync.  Avoid serializing huge blobs into a reliable queue that
 				-- cannot help anyone yet.
-				local hasCharacterEntity = listHasCharacterEntity(batch)
 				relevantSessions = {}
 				for _, session in ipairs(networkService:GetSessions()) do
-					if isSessionEligibleForLiveCreate(session) or hasCharacterEntity then
+					if isSessionEligibleForLiveCreate(session) then
 						local inRange = false
 						for _, obj in ipairs(batch) do
 							if
@@ -723,8 +757,9 @@ function Server.init(context)
 						`[Replicator][Server] sendCreate: batch serialization failed for {#batch} objects, retrying individually`
 					)
 					for _, root in ipairs(batch) do
-						sendBatch({ root })
+						queueBatch({ root })
 					end
+					return
 				else
 					-- Single root failed — try its children.
 					local root = batch[1]
@@ -735,9 +770,10 @@ function Server.init(context)
 						)
 						for _, child in ipairs(children) do
 							if child.CanReplicate ~= false and child.NetworkId ~= nil then
-								sendBatch({ child })
+								queueBatch({ child })
 							end
 						end
+						return
 					else
 						warn(
 							`[Replicator][Server] sendCreate: leaf object {root.ClassName}:{root.Name} failed to serialize, dropping`
@@ -768,8 +804,8 @@ function Server.init(context)
 					for i = midpoint + 1, #batch do
 						table.insert(right, batch[i])
 					end
-					sendBatch(left)
-					sendBatch(right)
+					queueBatch(left)
+					queueBatch(right)
 					return
 				else
 					local root = batch[1]
@@ -785,7 +821,7 @@ function Server.init(context)
 							debugTrace(
 								`sendBatch reason={reason or "unspecified"} split root {root.ClassName}:{root.Name} into {#splitChildren} children`
 							)
-							sendBatch(splitChildren)
+							queueBatch(splitChildren)
 							return
 						end
 					end
@@ -806,6 +842,9 @@ function Server.init(context)
 
 			local payload = { objects = serialized }
 			if recipient then
+				if not waitForCreateBackpressure({ recipient }) then
+					return
+				end
 				networkService:SendToClient(
 					recipient,
 					Protocol.Channels.Replication,
@@ -814,6 +853,9 @@ function Server.init(context)
 					true
 				)
 			else
+				if not waitForCreateBackpressure(relevantSessions) then
+					return
+				end
 				networkService:SendToMultipleClients(
 					relevantSessions,
 					Protocol.Channels.Replication,
@@ -824,50 +866,36 @@ function Server.init(context)
 			end
 
 			batchesSent += 1
-			-- Yield every 4 batches to let the network stack flush datagrams
-			-- and process heartbeats — prevents heartbeat-timeout disconnects
+			-- Yield every 2 batches to let the network stack flush datagrams
+			-- and process heartbeats -- prevents heartbeat-timeout disconnects
 			-- when replicating large worlds.
-			if batchesSent % 4 == 0 then
+			if batchesSent % 2 == 0 then
 				task.wait()
 			end
 		end
 
-		if recipient then
-			-- Initial world state: avoid giant reliable payloads that fragment into
-			-- hundreds of packets and can starve ACK traffic on lossy links.
-			local ROOTS_PER_BATCH = 2
-			debugTrace(`sendCreate reason={reason or "unspecified"} recipient batching roots={#serializable}`)
-			for i = 1, #serializable, ROOTS_PER_BATCH do
-				local batch = {}
-				for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
-					table.insert(batch, serializable[j])
-				end
-				sendBatch(batch)
-			end
-			debugTrace(`sendCreate reason={reason or "unspecified"} recipient batching done`)
-		else
-			if not hasLiveCreateRecipients() then
-				if not listHasCharacterEntity(serializable) then
-					debugTrace(
-						`sendCreate reason={reason or "unspecified"} broadcast skipped; no initial-sync-complete recipients`
-					)
-					return
-				end
-			end
-
-			-- Runtime broadcast (new objects spawned during gameplay): use small
-			-- batches so each packet stays lightweight.
-			local ROOTS_PER_BATCH = 8
-			debugTrace(`sendCreate reason={reason or "unspecified"} broadcast batching roots={#serializable}`)
-			for i = 1, #serializable, ROOTS_PER_BATCH do
-				local batch = {}
-				for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
-					table.insert(batch, serializable[j])
-				end
-				sendBatch(batch)
-			end
-			debugTrace(`sendCreate reason={reason or "unspecified"} broadcast batching done`)
+		if not recipient and not hasLiveCreateRecipients() then
+			debugTrace(
+				`sendCreate reason={reason or "unspecified"} broadcast skipped; no initial-sync-complete recipients`
+			)
+			return
 		end
+
+		local ROOTS_PER_BATCH = 4 -- Send roots in small batches to avoid oversized reliable messages
+		debugTrace(`sendCreate reason={reason or "unspecified"} queueing {#serializable} roots`)
+		for i = 1, #serializable, ROOTS_PER_BATCH do
+			local batch = {}
+			for j = i, math.min(i + ROOTS_PER_BATCH - 1, #serializable) do
+				table.insert(batch, serializable[j])
+			end
+			queueBatch(batch)
+		end
+
+		while #pendingBatches > 0 do
+			local batch = table.remove(pendingBatches, 1)
+			sendBatch(batch)
+		end
+		debugTrace(`sendCreate reason={reason or "unspecified"} batching done`)
 
 		sendPatchEntries(recipient, collectReferencePatchEntries(serializable))
 	end
@@ -946,6 +974,33 @@ function Server.init(context)
 				addRoot(object)
 			end
 		end
+
+		table.sort(roots, function(a, b)
+			local function parentPriority(object)
+				local parent = object.Parent
+				local parentNetId = parent and parent.NetworkId
+				if parentNetId == 1 then
+					if object.Name == "Baseplate" then
+						return 0
+					end
+					return 1
+				end
+				if parentNetId == 2 then
+					return 2
+				end
+				if parentNetId == 3 then
+					return 4
+				end
+				return 3
+			end
+
+			local pa = parentPriority(a)
+			local pb = parentPriority(b)
+			if pa ~= pb then
+				return pa < pb
+			end
+			return (a.Name or "") < (b.Name or "")
+		end)
 
 		print(`[Replicator][Server] collectInitialRoots: found {#roots} root(s) to replicate`)
 		return roots
@@ -1465,7 +1520,9 @@ function Server.init(context)
 			if clientBlobFingerprint ~= serverBlobFingerprint then
 				clientBlobFingerprint = nil
 			end
-			sendInitialStateForSession(session, clientNetIds, clientBlobFingerprint)
+			task.spawn(function()
+				sendInitialStateForSession(session, clientNetIds, clientBlobFingerprint)
+			end)
 		end
 	)
 
@@ -1750,7 +1807,9 @@ function Server.init(context)
 					state,
 					`sequence={payload.sequence or 0}`
 				)
-				stateRegistry.Apply(object, state)
+				withMutedObject(object, function()
+					stateRegistry.Apply(object, state)
+				end)
 				logHumanoidRootState(
 					"apply-owned-after",
 					session.key,
@@ -2019,15 +2078,20 @@ function Server.init(context)
 	end
 
 	networkService.Tick:Connect(function(tick)
-		if tick % math.max(math.floor((networkService.TickRate or 30) * OWNERSHIP_REBALANCE_INTERVAL), 1) == 0 then
-			rebalanceOwnership(os.clock())
+		local tickOk, tickErr = pcall(function()
+			if tick % math.max(math.floor((networkService.TickRate or 30) * OWNERSHIP_REBALANCE_INTERVAL), 1) == 0 then
+				rebalanceOwnership(os.clock())
+			end
+			updateAoIPositions()
+			applyPendingOwnedStateBatches()
+			flushDirtyPatches()
+			flushTerrainChunkUpdates()
+			flushTerrainQueues()
+			flushSnapshots(tick)
+		end)
+		if not tickOk then
+			warn("[SERVER] Tick handler error (recovered): " .. tostring(tickErr))
 		end
-		updateAoIPositions()
-		applyPendingOwnedStateBatches()
-		flushDirtyPatches()
-		flushTerrainChunkUpdates()
-		flushTerrainQueues()
-		flushSnapshots(tick)
 	end)
 
 	--  Race-condition catch-up
